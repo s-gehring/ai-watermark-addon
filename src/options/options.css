@@ -1,0 +1,16 @@
+main { max-width: 560px; padding: 16px; }
+h1 { font-size: 18px; margin: 0 0 16px; }
+form { display: grid; gap: 16px; }
+.field { display: grid; gap: 6px; }
+.range { display: flex; gap: 12px; align-items: center; }
+.range input { flex: 1; accent-color: var(--accent); }
+output { min-width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; }
+input[type="number"], textarea {
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+}
+input[type="number"] { width: 8em; }

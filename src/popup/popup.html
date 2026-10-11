@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="ui.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <section class="stats">
+        <div class="count" id="flagged">0</div>
+        <div data-i18n="popupFlagged"></div>
+        <div class="muted"><span id="checked">0</span> <span data-i18n="popupChecked"></span></div>
+        <p class="muted status" id="status" hidden></p>
+      </section>
+      <label class="check"><input type="checkbox" id="enabled" /><span data-i18n="popupEnabled"></span></label>
+      <label class="check" id="siteRow"><input type="checkbox" id="site" /><span id="siteLabel"></span></label>
+      <button id="options" data-i18n="popupOptions"></button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

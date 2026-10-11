@@ -1,0 +1,4 @@
+main { width: 260px; padding: 16px; display: grid; gap: 12px; }
+.stats { display: grid; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.count { font-size: 32px; font-weight: 700; line-height: 1.1; color: var(--accent); }
+.status { margin: 6px 0 0; }

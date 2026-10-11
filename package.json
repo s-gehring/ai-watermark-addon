@@ -1,0 +1,33 @@
+{
+  "name": "ai-watermark-addon",
+  "version": "0.1.0",
+  "description": "Firefox add-on that checks larger images on web pages locally for AI generation and marks hits with an AI badge.",
+  "scripts": {
+    "fetch-model": "node scripts/fetch-model.mjs",
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "start": "web-ext run --source-dir dist",
+    "typecheck": "tsc",
+    "test": "vitest run test/unit",
+    "test:e2e": "npm run build && vitest run test/e2e",
+    "lint": "web-ext lint --source-dir dist",
+    "package": "npm run build && web-ext build --source-dir dist --overwrite-dest",
+    "eval": "node tools/eval/eval-models.mjs"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@huggingface/transformers": "^4.3.1",
+    "@types/firefox-webext-browser": "^143.0.1",
+    "@types/node": "^26.6.5",
+    "@types/selenium-webdriver": "^4.35.7",
+    "esbuild": "^0.28.2",
+    "geckodriver": "^8.0.0",
+    "selenium-webdriver": "^4.51.0",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "web-ext": "^10.7.0"
+  },
+  "private": true,
+  "type": "module"
+}
