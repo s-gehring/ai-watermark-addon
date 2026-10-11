@@ -11,7 +11,6 @@
   "reason_novelai": { "message": "Laut Bild-Metadaten mit NovelAI erstellt." },
   "reason_invokeai": { "message": "Laut Bild-Metadaten mit InvokeAI erstellt." },
   "popupFlagged": { "message": "AI-Bilder auf dieser Seite" },
-  "popupChecked": { "message": "Bilder geprüft" },
   "popupInactive": { "message": "Auf dieser Seite nicht aktiv." },
   "popupUnavailable": { "message": "Diese Seite kann nicht geprüft werden." },
   "popupEnabled": { "message": "Aktiv" },
@@ -26,5 +25,14 @@
   "optionsShowScore": { "message": "Wahrscheinlichkeit im Badge anzeigen" },
   "optionsDisabledHosts": { "message": "Deaktivierte Seiten (eine pro Zeile)" },
   "optionsSaved": { "message": "Gespeichert" },
-  "optionsAbout": { "message": "Alle Prüfungen laufen lokal im Browser, Bilder werden nirgends hochgeladen. Das Modell kann sich in beide Richtungen irren: Das Badge ist ein Hinweis, kein Beweis." }
+  "optionsAbout": { "message": "Alle Prüfungen laufen lokal im Browser, Bilder werden nirgends hochgeladen. Das Modell kann sich in beide Richtungen irren: Das Badge ist ein Hinweis, kein Beweis." },
+  "tooltipPending": { "message": "Wird geprüft …" },
+  "tooltipClean": { "message": "Geprüft: Wahrscheinlich nicht AI-generiert ($1 % laut lokalem Modell)", "placeholders": { "1": { "content": "$1" } } },
+  "tooltipFailed": { "message": "Konnte nicht geprüft werden." },
+  "popupProgress": { "message": "Prüfe Bilder: $1 von $2", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
+  "popupDone": { "message": "$1 Bilder geprüft", "placeholders": { "1": { "content": "$1" } } },
+  "popupClean": { "message": "$1 unauffällig", "placeholders": { "1": { "content": "$1" } } },
+  "popupFailed": { "message": "$1 nicht prüfbar", "placeholders": { "1": { "content": "$1" } } },
+  "popupNone": { "message": "Noch keine großen Bilder gefunden." },
+  "optionsShowChecked": { "message": "Auch geprüfte unauffällige Bilder und laufende Prüfungen am Bild markieren" }
 }

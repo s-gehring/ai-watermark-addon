@@ -7,6 +7,7 @@ export interface Settings {
   checkMetadata: boolean;
   includeBackgrounds: boolean;
   showScore: boolean;
+  showChecked: boolean;
   disabledHosts: string[];
 }
 
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   checkMetadata: true,
   includeBackgrounds: true,
   showScore: true,
+  showChecked: true,
   disabledHosts: [],
 };
 
@@ -24,7 +26,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 export function normalizeSettings(raw: unknown): Settings {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof Settings, unknown>>;
-  const bool = (key: 'enabled' | 'checkMetadata' | 'includeBackgrounds' | 'showScore') =>
+  const bool = (key: 'enabled' | 'checkMetadata' | 'includeBackgrounds' | 'showScore' | 'showChecked') =>
     typeof input[key] === 'boolean' ? (input[key] as boolean) : DEFAULT_SETTINGS[key];
   const num = (key: 'minSize' | 'threshold', min: number, max: number) => {
     const value = Number(input[key]);
@@ -40,6 +42,7 @@ export function normalizeSettings(raw: unknown): Settings {
     checkMetadata: bool('checkMetadata'),
     includeBackgrounds: bool('includeBackgrounds'),
     showScore: bool('showScore'),
+    showChecked: bool('showChecked'),
     disabledHosts: hosts,
   };
 }

@@ -11,7 +11,6 @@
   "reason_novelai": { "message": "Created with NovelAI according to the image metadata." },
   "reason_invokeai": { "message": "Created with InvokeAI according to the image metadata." },
   "popupFlagged": { "message": "AI images on this page" },
-  "popupChecked": { "message": "images checked" },
   "popupInactive": { "message": "Not active on this page." },
   "popupUnavailable": { "message": "This page cannot be checked." },
   "popupEnabled": { "message": "Enabled" },
@@ -26,5 +25,14 @@
   "optionsShowScore": { "message": "Show the probability in the badge" },
   "optionsDisabledHosts": { "message": "Disabled sites (one per line)" },
   "optionsSaved": { "message": "Saved" },
-  "optionsAbout": { "message": "All checks run locally in the browser. Images are never uploaded. The model can be wrong in both directions; treat the badge as a hint, not proof." }
+  "optionsAbout": { "message": "All checks run locally in the browser. Images are never uploaded. The model can be wrong in both directions; treat the badge as a hint, not proof." },
+  "tooltipPending": { "message": "Checking …" },
+  "tooltipClean": { "message": "Checked: Probably not AI-generated ($1 % according to the local model)", "placeholders": { "1": { "content": "$1" } } },
+  "tooltipFailed": { "message": "Could not be checked." },
+  "popupProgress": { "message": "Checking images: $1 of $2", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
+  "popupDone": { "message": "$1 images checked", "placeholders": { "1": { "content": "$1" } } },
+  "popupClean": { "message": "$1 unremarkable", "placeholders": { "1": { "content": "$1" } } },
+  "popupFailed": { "message": "$1 not checkable", "placeholders": { "1": { "content": "$1" } } },
+  "popupNone": { "message": "No large images found yet." },
+  "optionsShowChecked": { "message": "Also mark checked unremarkable images and running checks" }
 }

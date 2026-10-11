@@ -28,7 +28,12 @@ const common = {
   logLevel: 'info',
 };
 const configs = [
-  { ...common, entryPoints: { background: 'src/background/index.ts' }, format: 'esm', outdir: out },
+  {
+    ...common,
+    entryPoints: { background: 'src/background/index.ts', worker: 'src/background/worker.ts' },
+    format: 'esm',
+    outdir: out,
+  },
   {
     ...common,
     entryPoints: {

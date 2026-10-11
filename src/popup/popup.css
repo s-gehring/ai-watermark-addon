@@ -1,4 +1,10 @@
-main { width: 260px; padding: 16px; display: grid; gap: 12px; }
-.stats { display: grid; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+main { width: 280px; padding: 16px; display: grid; gap: 12px; }
+.stats { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .count { font-size: 32px; font-weight: 700; line-height: 1.1; color: var(--accent); }
+.progress { display: grid; gap: 6px; margin-top: 8px; }
+.progress[hidden] { display: none; }
+.progress-label { font-variant-numeric: tabular-nums; }
+.bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.fill { height: 100%; width: 0; border-radius: 3px; background: var(--progress); transition: width 0.3s ease; }
+#summary { margin-top: 4px; font-variant-numeric: tabular-nums; }
 .status { margin: 6px 0 0; }

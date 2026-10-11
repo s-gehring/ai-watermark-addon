@@ -1,4 +1,4 @@
-import { isFlagged, type BackgroundRequest, type Verdict } from '../shared/messages';
+import { isFlagged, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
 import type { Settings } from '../shared/settings';
 import { hasBackgroundImage, imageUrlOf, isLargeEnough } from './candidates';
 import { BadgeLayer } from './overlay';
@@ -15,22 +15,18 @@ export class Scanner {
   private readonly mo: MutationObserver;
   private pendingRoots: Element[] = [];
   private discovering = false;
-  private checked = 0;
 
   constructor(
     private settings: Settings,
-    private readonly onStats: (flagged: number) => void,
+    private readonly onStats: (stats: FrameStats) => void,
   ) {
-    this.layer = new BadgeLayer(() => this.onStats(this.layer.count));
+    this.layer = new BadgeLayer(() => this.onStats(this.layer.stats));
     this.io = new IntersectionObserver((entries) => this.onIntersect(entries), { rootMargin: '300px' });
     this.mo = new MutationObserver((records) => this.onMutations(records));
   }
 
-  get stats() {
-    return { flagged: this.layer.count, checked: this.checked };
-  }
-
   start(): void {
+    this.layer.setOptions({ showScore: this.settings.showScore, showChecked: this.settings.showChecked });
     this.mo.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -136,16 +132,20 @@ export class Scanner {
     const url = imageUrlOf(element, this.settings.includeBackgrounds);
     if (!url || !isLargeEnough(element.getBoundingClientRect(), this.settings.minSize)) {
       this.checkedUrl.delete(element);
-      this.layer.hide(element);
+      this.layer.remove(element);
       return;
     }
     if (this.checkedUrl.get(element) === url) return;
     this.checkedUrl.set(element, url);
-    this.layer.hide(element);
+    this.layer.set(element, { kind: 'pending' });
     void this.verdictFor(url, element).then((verdict) => {
       if (this.checkedUrl.get(element) !== url) return;
-      if (isFlagged(verdict, this.settings.threshold)) {
-        this.layer.show(element, verdict, this.settings.showScore);
+      if (verdict.ok && isFlagged(verdict, this.settings.threshold)) {
+        this.layer.set(element, { kind: 'ai', verdict });
+      } else if (verdict.ok && verdict.source === 'model') {
+        this.layer.set(element, { kind: 'clean', verdict });
+      } else {
+        this.layer.set(element, { kind: 'failed' });
       }
     });
   }
@@ -154,8 +154,7 @@ export class Scanner {
     let verdict = this.verdicts.get(url);
     if (!verdict) {
       verdict = requestVerdict(url, element).then((result) => {
-        if (result.ok) this.checked++;
-        else if (result.error === 'fetch') this.verdicts.delete(url);
+        if (!result.ok && result.error !== 'unsupported' && result.error !== 'decode') this.verdicts.delete(url);
         return result;
       });
       this.verdicts.set(url, verdict);

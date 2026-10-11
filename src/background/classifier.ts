@@ -5,16 +5,18 @@ import { aiLogit, calibratedProbability, type OutputSpec } from './score';
 
 let loading: Promise<PreTrainedModel> | null = null;
 
+const assetUrl = (path: string) => new URL(path, self.location.href).href;
+
 function configureRuntime(): void {
   env.allowRemoteModels = false;
   env.allowLocalModels = true;
-  env.localModelPath = browser.runtime.getURL('models/');
+  env.localModelPath = assetUrl('models/');
   env.useBrowserCache = false;
   env.useWasmCache = false;
   const wasm = env.backends.onnx.wasm!;
   wasm.wasmPaths = {
-    mjs: browser.runtime.getURL('ort/ort-wasm-simd-threaded.asyncify.mjs'),
-    wasm: browser.runtime.getURL('ort/ort-wasm-simd-threaded.asyncify.wasm'),
+    mjs: assetUrl('ort/ort-wasm-simd-threaded.asyncify.mjs'),
+    wasm: assetUrl('ort/ort-wasm-simd-threaded.asyncify.wasm'),
   };
   wasm.numThreads = 1;
 }

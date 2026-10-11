@@ -10,7 +10,11 @@
       <section class="stats">
         <div class="count" id="flagged">0</div>
         <div data-i18n="popupFlagged"></div>
-        <div class="muted"><span id="checked">0</span> <span data-i18n="popupChecked"></span></div>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-label" id="progressLabel"></div>
+          <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="bar"><div class="fill" id="fill"></div></div>
+        </div>
+        <div class="muted" id="summary"></div>
         <p class="muted status" id="status" hidden></p>
       </section>
       <label class="check"><input type="checkbox" id="enabled" /><span data-i18n="popupEnabled"></span></label>
