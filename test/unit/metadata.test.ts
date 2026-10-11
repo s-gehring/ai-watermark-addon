@@ -46,6 +46,19 @@ describe('detectAiMetadata', () => {
     expect(detectAiMetadata(pngWith('invokeai_metadata', '{"model": "sdxl"}'))).toBe('invokeai');
   });
 
+  it('detects the GB 45438 AIGC label in PNG text chunks, XMP and EXIF user comments', () => {
+    const label = '{"Label":"1","ContentProducer":"kling","ProduceID":"SGP_PROD_ai_web_300000000123456"}';
+    expect(detectAiMetadata(pngWith('AIGC', label))).toBe('aigc-label');
+    const xmp = `<rdf:Description xmlns:TC260="http://www.tc260.org.cn/ns/AIGC/1.0/"><TC260:AIGC>${label.replaceAll('"', '&quot;')}</TC260:AIGC>`;
+    expect(detectAiMetadata(jpegWith(xmp))).toBe('aigc-label');
+    const comment = Buffer.from(`{"AIGC":${label}}`, 'utf16le').toString('latin1');
+    expect(detectAiMetadata(jpegWith(`Exif\x00\x00UNICODE\x00${comment}`))).toBe('aigc-label');
+  });
+
+  it('does not treat captions that mention AIGC as a label', () => {
+    expect(detectAiMetadata(jpegWith('<dc:description>AIGC art, label: "1st place"</dc:description>'))).toBeNull();
+  });
+
   it('does not treat ordinary prose about sampling as generator parameters', () => {
     expect(detectAiMetadata(pngWith('Description', 'Steps to take when sampling soil'))).toBeNull();
   });

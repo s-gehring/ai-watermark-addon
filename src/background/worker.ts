@@ -1,10 +1,10 @@
 import synthIdConfig from '../../synthid.json';
-import type { Verdict } from '../shared/messages';
+import type { SynthIdProvider, Verdict } from '../shared/messages';
 import { decodeImage, scoreImage } from './classifier';
 import { detectAiMetadata } from './metadata';
 import { isScorable, type PixelImage } from './preprocess';
 import { SerialQueue } from './queue';
-import { synthIdScore, type SynthIdTemplate } from './synthid';
+import { detectSynthId, type SynthIdDetector } from './synthid';
 
 export interface Checks {
   checkMetadata: boolean;
@@ -27,34 +27,38 @@ const scope = self as unknown as {
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
 };
 const queue = new SerialQueue();
-let template: Promise<SynthIdTemplate> | null = null;
+let detectors: Promise<SynthIdDetector[]> | null = null;
 
-function loadTemplate(): Promise<SynthIdTemplate> {
-  template ??= fetch(new URL('synthid-template.bin', self.location.href))
-    .then(async (res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      const count = bytes.length / 2;
-      return {
-        size: synthIdConfig.size,
-        weightScale: synthIdConfig.weightScale,
-        weights: bytes.subarray(0, count),
-        phases: bytes.subarray(count),
-      };
-    })
-    .catch((error) => {
-      template = null;
-      throw error;
-    });
-  return template;
+async function loadDetector(entry: (typeof synthIdConfig.templates)[number]): Promise<SynthIdDetector> {
+  const res = await fetch(new URL(`synthid-templates/${entry.file}`, self.location.href));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const count = bytes.length / 2;
+  return {
+    provider: entry.provider as SynthIdProvider,
+    threshold: entry.threshold,
+    aspect: entry.outputSize && entry.outputSize[0] / entry.outputSize[1],
+    size: entry.size,
+    weightScale: entry.weightScale,
+    weights: bytes.subarray(0, count),
+    phases: bytes.subarray(count),
+  };
 }
 
-async function hasSynthId(image: PixelImage): Promise<boolean> {
+function loadDetectors(): Promise<SynthIdDetector[]> {
+  detectors ??= Promise.all(synthIdConfig.templates.map(loadDetector)).catch((error) => {
+    detectors = null;
+    throw error;
+  });
+  return detectors;
+}
+
+async function findSynthId(image: PixelImage): Promise<SynthIdProvider | null> {
   try {
-    return synthIdScore(image, await loadTemplate()) >= synthIdConfig.threshold;
+    return detectSynthId(image, await loadDetectors());
   } catch (error) {
     console.error('[ai-watermark] SynthID check failed', error);
-    return false;
+    return null;
   }
 }
 
@@ -65,7 +69,8 @@ async function score(bytes: Uint8Array, type: string, checkWatermark: boolean): 
   } catch {
     return { ok: false, error: 'decode' };
   }
-  if (checkWatermark && (await hasSynthId(image))) return { ok: true, score: 1, source: 'synthid' };
+  const provider = checkWatermark ? await findSynthId(image) : null;
+  if (provider) return { ok: true, score: 1, source: 'synthid', provider };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   try {
     return { ok: true, score: await scoreImage(image), source: 'model' };

@@ -1,15 +1,140 @@
 {
-  "size": 512,
-  "weightScale": 0.003337023910302207,
-  "source": {
-    "dataset": "aoxo/reverse-synthid",
-    "revision": "7a4fbc2ba0277b0a73a9d6e9a1ebcfa36deb15bf",
-    "folders": [
-      "nano-banana-pro-preview/diverse",
-      "gemini-3.1-flash-image-preview/diverse",
-      "gemini_random"
-    ],
-    "images": 288
-  },
-  "threshold": 12
+  "templates": [
+    {
+      "provider": "google",
+      "file": "google.bin",
+      "size": 512,
+      "weightScale": 0.003337023910302207,
+      "threshold": 12,
+      "source": {
+        "datasets": [
+          {
+            "dataset": "aoxo/reverse-synthid",
+            "revision": "7a4fbc2ba0277b0a73a9d6e9a1ebcfa36deb15bf",
+            "folders": [
+              "nano-banana-pro-preview/diverse",
+              "gemini-3.1-flash-image-preview/diverse",
+              "gemini_random"
+            ],
+            "images": 288
+          }
+        ],
+        "images": 288
+      }
+    },
+    {
+      "provider": "openai",
+      "file": "openai-1254x1254.bin",
+      "size": 512,
+      "outputSize": [
+        1254,
+        1254
+      ],
+      "weightScale": 0.003208867638495871,
+      "threshold": 8,
+      "source": {
+        "datasets": [
+          {
+            "dataset": "bigdatamark/synthid-research",
+            "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
+            "folders": [
+              "gpt-image-2",
+              "gpt-image-2.5-flare",
+              "gpt-image-2.5-sunburst"
+            ],
+            "images": 420
+          },
+          {
+            "dataset": "winrisef/gpt-generated-image-collection",
+            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
+            "folders": [
+              "images/batch-0001",
+              "images/batch-0002",
+              "images/batch-0003"
+            ],
+            "images": 4
+          }
+        ],
+        "images": 424
+      }
+    },
+    {
+      "provider": "openai",
+      "file": "openai-1448x1086.bin",
+      "size": 1024,
+      "outputSize": [
+        1448,
+        1086
+      ],
+      "weightScale": 0.003208434244027142,
+      "threshold": 8,
+      "source": {
+        "datasets": [
+          {
+            "dataset": "winrisef/gpt-generated-image-collection",
+            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
+            "folders": [
+              "images/batch-0001",
+              "images/batch-0002",
+              "images/batch-0003"
+            ],
+            "images": 219
+          }
+        ],
+        "images": 219
+      }
+    },
+    {
+      "provider": "openai",
+      "file": "openai-1672x941.bin",
+      "size": 1024,
+      "outputSize": [
+        1672,
+        941
+      ],
+      "weightScale": 0.003147064873651133,
+      "threshold": 8,
+      "source": {
+        "datasets": [
+          {
+            "dataset": "winrisef/gpt-generated-image-collection",
+            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
+            "folders": [
+              "images/batch-0001",
+              "images/batch-0002",
+              "images/batch-0003"
+            ],
+            "images": 123
+          }
+        ],
+        "images": 123
+      }
+    },
+    {
+      "provider": "openai",
+      "file": "openai-1122x1402.bin",
+      "size": 1024,
+      "outputSize": [
+        1122,
+        1402
+      ],
+      "weightScale": 0.0031209500505969706,
+      "threshold": 8,
+      "source": {
+        "datasets": [
+          {
+            "dataset": "winrisef/gpt-generated-image-collection",
+            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
+            "folders": [
+              "images/batch-0001",
+              "images/batch-0002",
+              "images/batch-0003"
+            ],
+            "images": 193
+          }
+        ],
+        "images": 193
+      }
+    }
+  ]
 }

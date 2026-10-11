@@ -56,7 +56,7 @@ const copies = [
   ['src/_locales', '_locales'],
   ['src/icons', 'icons'],
   ['src/shared/ui.css', 'ui.css'],
-  ['src/background/synthid-template.bin', 'synthid-template.bin'],
+  ['src/background/synthid-templates', 'synthid-templates'],
   ['src/popup/popup.html', 'popup.html'],
   ['src/popup/popup.css', 'popup.css'],
   ['src/options/options.html', 'options.html'],

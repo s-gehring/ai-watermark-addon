@@ -5,6 +5,9 @@ const HEAD_BYTES = 4 * 1024 * 1024;
 const TAIL_BYTES = 1024 * 1024;
 const EXIF_REGION = 512 * 1024;
 
+const QUOTE = '(?:"|&quot;)';
+const AIGC_LABEL = new RegExp(`AIGC[\\s\\S]{0,256}?${QUOTE}Label${QUOTE}\\s*:\\s*${QUOTE}?[123]\\b`);
+
 const PATTERNS: ReadonlyArray<[MetadataReason, RegExp]> = [
   ['synthid', /c2pa\.\w+[\s\S]{0,80}?\bSynthID\b/],
   ['ai-edited', /compositeWithTrainedAlgorithmicMedia/],
@@ -13,6 +16,7 @@ const PATTERNS: ReadonlyArray<[MetadataReason, RegExp]> = [
   ['comfyui', /"class_type"\s*:\s*"(?:KSampler\w*|SamplerCustom\w*)"/],
   ['novelai', /Software\x00NovelAI/],
   ['invokeai', /(?:invokeai_metadata|invokeai_graph|sd-metadata)\x00/],
+  ['aigc-label', AIGC_LABEL],
 ];
 
 function latin1(bytes: Uint8Array): string {
@@ -31,5 +35,6 @@ export function detectAiMetadata(bytes: Uint8Array): MetadataReason | null {
   }
   const exifText = text.slice(0, EXIF_REGION).replaceAll('\x00', '');
   if (/Steps: \d+,\s*Sampler: /.test(exifText)) return 'stable-diffusion';
+  if (AIGC_LABEL.test(exifText)) return 'aigc-label';
   return null;
 }

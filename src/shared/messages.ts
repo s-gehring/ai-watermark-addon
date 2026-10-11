@@ -5,12 +5,15 @@ export type MetadataReason =
   | 'stable-diffusion'
   | 'comfyui'
   | 'novelai'
-  | 'invokeai';
+  | 'invokeai'
+  | 'aigc-label';
+
+export type SynthIdProvider = 'google' | 'openai';
 
 export type Verdict =
   | { ok: true; score: number; source: 'model' }
   | { ok: true; score: 1; source: 'metadata'; reason: MetadataReason }
-  | { ok: true; score: 1; source: 'synthid' }
+  | { ok: true; score: 1; source: 'synthid'; provider: SynthIdProvider }
   | { ok: false; error: 'fetch' | 'decode' | 'model' | 'unsupported' };
 
 export interface FrameStats {

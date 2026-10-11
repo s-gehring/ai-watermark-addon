@@ -1,3 +1,4 @@
+import type { SynthIdProvider } from '../shared/messages';
 import type { PixelImage } from './preprocess';
 
 export interface SynthIdTemplate {
@@ -7,10 +8,17 @@ export interface SynthIdTemplate {
   phases: Uint8Array;
 }
 
+export interface SynthIdDetector extends SynthIdTemplate {
+  provider: SynthIdProvider;
+  threshold: number;
+  aspect?: number;
+}
+
 const MIN_SIDE = 64;
 const NYQUIST_MARGIN = 0.45;
 const GRID_PERIODS = [8, 16];
 const GRID_TOLERANCE = 1.5;
+const ASPECT_TOLERANCE = 0.02;
 const YCBCR = [
   [0.299, 0.587, 0.114],
   [-0.168736, -0.331264, 0.5],
@@ -170,16 +178,45 @@ function usableFrequencies(imageSize: number, count: number, size: number, signe
   return usable;
 }
 
-export function synthIdScore(image: PixelImage, template: SynthIdTemplate): number {
-  if (Math.min(image.width, image.height) < MIN_SIDE) return 0;
-  const { size, weightScale, weights, phases } = template;
+interface UnitSpectrum {
+  size: number;
+  rows: Uint8Array;
+  cols: Uint8Array;
+  re: Float64Array[];
+  im: Float64Array[];
+}
+
+function unitSpectrum(image: PixelImage, size: number): UnitSpectrum {
+  const channels = resampledPlanes(image, size).map((plane) => {
+    const { re, im } = rfft2(plane, size);
+    for (let i = 0; i < re.length; i++) {
+      const norm = Math.hypot(re[i], im[i]) + 1e-6;
+      re[i] /= norm;
+      im[i] /= norm;
+    }
+    return { re, im };
+  });
+  return {
+    size,
+    rows: usableFrequencies(image.height, size, size, true),
+    cols: usableFrequencies(image.width, size / 2 + 1, size, false),
+    re: channels.map((c) => c.re),
+    im: channels.map((c) => c.im),
+  };
+}
+
+const COS = Float64Array.from({ length: 256 }, (_, p) => Math.cos((p * 2 * Math.PI) / 256));
+const SIN = Float64Array.from({ length: 256 }, (_, p) => Math.sin((p * 2 * Math.PI) / 256));
+
+function templateScore(spectrum: UnitSpectrum, template: SynthIdTemplate): number {
+  const { size, rows, cols } = spectrum;
+  const { weightScale, weights, phases } = template;
   const half = size / 2 + 1;
-  const rows = usableFrequencies(image.height, size, size, true);
-  const cols = usableFrequencies(image.width, half, size, false);
   let signal = 0;
   let energy = 0;
-  resampledPlanes(image, size).forEach((plane, c) => {
-    const { re, im } = rfft2(plane, size);
+  for (let c = 0; c < 3; c++) {
+    const re = spectrum.re[c];
+    const im = spectrum.im[c];
     for (let y = 0; y < size; y++) {
       if (!rows[y]) continue;
       for (let x = 0; x < half; x++) {
@@ -187,11 +224,30 @@ export function synthIdScore(image: PixelImage, template: SynthIdTemplate): numb
         if (!cols[x] || !weights[t]) continue;
         const i = y * half + x;
         const w = weights[t] * weightScale;
-        const phase = (phases[t] * 2 * Math.PI) / 256;
-        signal += (w * (re[i] * Math.cos(phase) + im[i] * Math.sin(phase))) / (Math.hypot(re[i], im[i]) + 1e-6);
+        signal += w * (re[i] * COS[phases[t]] + im[i] * SIN[phases[t]]);
         energy += w * w;
       }
     }
-  });
+  }
   return energy > 0 ? signal / Math.sqrt(energy / 2) : 0;
+}
+
+export function synthIdScore(image: PixelImage, template: SynthIdTemplate): number {
+  if (Math.min(image.width, image.height) < MIN_SIDE) return 0;
+  return templateScore(unitSpectrum(image, template.size), template);
+}
+
+export function detectSynthId(image: PixelImage, detectors: readonly SynthIdDetector[]): SynthIdProvider | null {
+  if (Math.min(image.width, image.height) < MIN_SIDE) return null;
+  const spectra = new Map<number, UnitSpectrum>();
+  for (const detector of detectors) {
+    if (detector.aspect && Math.abs(Math.log(image.width / image.height / detector.aspect)) > ASPECT_TOLERANCE) continue;
+    let spectrum = spectra.get(detector.size);
+    if (!spectrum) {
+      spectrum = unitSpectrum(image, detector.size);
+      spectra.set(detector.size, spectrum);
+    }
+    if (templateScore(spectrum, detector) >= detector.threshold) return detector.provider;
+  }
+  return null;
 }

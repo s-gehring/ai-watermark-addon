@@ -276,7 +276,9 @@ function tooltip(state: BadgeState): string {
     case 'clean':
       return `${browser.i18n.getMessage('tooltipClean', [String(Math.round(state.verdict.score * 100))])}\n${hint}`;
     case 'ai':
-      if (state.verdict.source === 'synthid') return `${browser.i18n.getMessage('tooltipSynthId')}\n${hint}`;
+      if (state.verdict.source === 'synthid') {
+        return `${browser.i18n.getMessage(state.verdict.provider === 'openai' ? 'tooltipSynthIdOpenai' : 'tooltipSynthIdGoogle')}\n${hint}`;
+      }
       if (state.verdict.source === 'metadata') {
         return `${browser.i18n.getMessage(`reason_${state.verdict.reason.replace('-', '_')}`)}\n${hint}`;
       }
