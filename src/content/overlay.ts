@@ -433,9 +433,14 @@ function modelTable(verdict: ModelVerdict, threshold: number): HTMLElement {
     bar.append(fill);
     table.append(text('span', 'name', model.models[i].label), bar, text('span', 'value', percent(score)));
   });
-  const total = model.calibration.weights.reduce((sum, w) => sum + w, 0);
-  const weights = model.calibration.weights.map((w) => Math.round((w / total) * 100)).join(' : ');
-  table.append(text('div', 'note', browser.i18n.getMessage('detailsModelNote', [percent(threshold), weights])));
+  const { weights } = model.calibration;
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  const shares = weights.map((w) => Math.round((w / total) * 100)).join(' : ');
+  const note =
+    weights.length > 1
+      ? browser.i18n.getMessage('detailsModelNote', [percent(threshold), shares])
+      : browser.i18n.getMessage('detailsThreshold', [percent(threshold)]);
+  table.append(text('div', 'note', note));
   return table;
 }
 

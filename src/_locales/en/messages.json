@@ -46,10 +46,11 @@
   "detailsNoWatermark": { "message": "Not found" },
   "detailsModels": { "message": "AI score" },
   "detailsModelNote": { "message": "Threshold $1 · weights $2", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
+  "detailsThreshold": { "message": "Threshold $1", "placeholders": { "1": { "content": "$1" } } },
   "detailsSkipped": { "message": "Skipped" },
   "detailsOff": { "message": "Disabled" },
   "error_fetch": { "message": "The image could not be loaded." },
   "error_decode": { "message": "The image could not be decoded." },
   "error_unsupported": { "message": "Image format or aspect ratio is not supported." },
-  "error_model": { "message": "The models could not process the image." }
+  "error_model": { "message": "The model could not process the image." }
 }

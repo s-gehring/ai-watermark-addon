@@ -19,27 +19,8 @@
         "config.json": null,
         "onnx/model_quantized.onnx": "968f113f1107d58bfc73444b6e87020e2d541780ad43b7a1ac3e3b18b86c2bbd"
       }
-    },
-    {
-      "name": "ai-vs-human-SigLIP-ONNX",
-      "label": "SigLIP AI vs. Human",
-      "repo": "neilxxx/ai-vs-human-SigLIP-ONNX",
-      "revision": "dd89749ee94a9e78ef6d80c7c856e0d8d1f1c46c",
-      "license": "Apache-2.0",
-      "dtype": "q8",
-      "output": { "softmaxLabels": ["ai"] },
-      "input": {
-        "size": [224, 224],
-        "resample": "bilinear",
-        "mean": [0.5, 0.5, 0.5],
-        "std": [0.5, 0.5, 0.5]
-      },
-      "files": {
-        "config.json": null,
-        "onnx/model_quantized.onnx": "04b8b2e450d979d961bbe99cf60491643b897b0714f3baea01c28b540e28fef2"
-      }
     }
   ],
-  "calibration": { "weights": [0.2561, 0.2561], "bias": 3.5385 },
-  "threshold": 0.98
+  "calibration": { "weights": [0.4501], "bias": 3.2742 },
+  "threshold": 0.95
 }
