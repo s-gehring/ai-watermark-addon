@@ -44,7 +44,7 @@
   "detailsWatermark": { "message": "SynthID-Wasserzeichen" },
   "detailsWatermarkFound": { "message": "Gefunden ($1)", "placeholders": { "1": { "content": "$1" } } },
   "detailsNoWatermark": { "message": "Nicht gefunden" },
-  "detailsModels": { "message": "Modelle" },
+  "detailsModels": { "message": "AI-Score" },
   "detailsModelNote": { "message": "Schwelle $1 · Gewichtung $2", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "detailsSkipped": { "message": "Übersprungen" },
   "detailsOff": { "message": "Deaktiviert" },
