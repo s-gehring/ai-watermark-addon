@@ -77,7 +77,7 @@ beforeAll(async () => {
 
   const options = new firefox.Options()
     .addArguments('-headless')
-    .windowSize({ width: 1200, height: 900 })
+    .windowSize({ width: 1200, height: 1400 })
     .setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: ADDON_UUID }));
   driver = (await new Builder()
     .forBrowser('firefox')
@@ -93,8 +93,17 @@ afterAll(async () => {
 });
 
 interface BadgeInfo {
+  kind: string;
   text: string;
   owner: string | null;
+}
+
+interface TabStats {
+  flagged: number;
+  clean: number;
+  pending: number;
+  failed: number;
+  badgeText: string;
 }
 
 async function openExtensionPage(path: string): Promise<void> {
@@ -127,39 +136,81 @@ async function visibleBadges(): Promise<BadgeInfo[]> {
         const r = el.getBoundingClientRect();
         return b.left >= r.left && b.right <= r.right && b.top >= r.top && b.bottom <= r.bottom;
       });
-      return { text: badge.textContent ?? '', owner: owner?.id ?? null };
+      const kind = ['ai', 'clean', 'pending', 'failed'].find((k) => badge.classList.contains(k)) ?? '';
+      return { kind, text: badge.textContent ?? '', owner: owner?.id ?? null };
     });
   });
 }
 
-async function waitForOwners(expected: string[]): Promise<BadgeInfo[]> {
+async function pendingCount(): Promise<number> {
+  return driver.executeScript<number>(
+    () => document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelectorAll('.badge.pending').length ?? 0,
+  );
+}
+
+async function waitForBadges(expected: Record<string, string[]>): Promise<BadgeInfo[]> {
   let last: BadgeInfo[] = [];
   await driver.wait(async () => {
     last = await visibleBadges();
-    const owners = new Set(last.map((b) => b.owner));
-    return expected.every((id) => owners.has(id));
+    const matched = Object.entries(expected).every(([owner, kinds]) =>
+      last.some((b) => b.owner === owner && kinds.includes(b.kind)),
+    );
+    return matched && (await pendingCount()) === 0;
   }, 30_000).catch(() => {});
   return last;
 }
 
+const kindOf = (badges: BadgeInfo[], owner: string) => badges.find((b) => b.owner === owner)?.kind;
+
 describe('content script', () => {
   it('marks images with AI metadata, including CSS backgrounds and late additions', async () => {
     await driver.get(`${origin}/`);
-    const badges = await waitForOwners(['meta', 'bg', 'late']);
-    const owners = badges.map((b) => b.owner);
-    expect(owners).toEqual(expect.arrayContaining(['meta', 'bg', 'late']));
-    expect(owners).not.toContain('small');
+    const badges = await waitForBadges({ meta: ['ai'], bg: ['ai'], late: ['ai'], plain: ['ai', 'clean'] });
+    expect(kindOf(badges, 'meta')).toBe('ai');
+    expect(kindOf(badges, 'bg')).toBe('ai');
+    expect(kindOf(badges, 'late')).toBe('ai');
     expect(badges.find((b) => b.owner === 'meta')?.text).toMatch(/^AI/);
+    expect(['ai', 'clean']).toContain(kindOf(badges, 'plain'));
+    expect(kindOf(badges, 'small')).toBeUndefined();
   }, 60_000);
 
   it('checks images that scroll into view', async () => {
     await driver.executeScript(() => document.getElementById('far')!.scrollIntoView());
-    const owners = (await waitForOwners(['far'])).map((b) => b.owner);
-    expect(owners).toContain('far');
+    const badges = await waitForBadges({ far: ['ai'] });
+    expect(kindOf(badges, 'far')).toBe('ai');
   }, 60_000);
 });
 
-describe('background classifier', () => {
+describe('background', () => {
+  it('aggregates the page progress for the popup and the toolbar badge', async () => {
+    const pageHandle = await driver.getWindowHandle();
+    await openExtensionPage('options.html');
+    await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
+    let stats: TabStats | null = null;
+    await driver.wait(async () => {
+      stats = await driver.executeAsyncScript<TabStats | null>((done: (v: unknown) => void) => {
+        void (async () => {
+          const all = await browser.storage.session.get(null);
+          const entry = Object.entries(all).find(([key]) => key.startsWith('tab:'));
+          if (!entry) return done(null);
+          const total = { flagged: 0, clean: 0, pending: 0, failed: 0 };
+          for (const frame of Object.values(entry[1] as Record<string, typeof total>)) {
+            for (const key of Object.keys(total) as (keyof typeof total)[]) total[key] += frame[key];
+          }
+          const badgeText = await browser.action.getBadgeText({ tabId: Number(entry[0].slice(4)) });
+          done({ ...total, badgeText });
+        })();
+      });
+      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 5;
+    }, 20_000).catch(() => {});
+    expect(stats).toMatchObject({ pending: 0, failed: 0 });
+    expect(stats!.flagged).toBeGreaterThanOrEqual(4);
+    expect(stats!.flagged + stats!.clean).toBe(5);
+    expect(stats!.badgeText).toBe(String(stats!.flagged));
+    await driver.close();
+    await driver.switchTo().window(pageHandle);
+  }, 60_000);
+
   it('scores an image without metadata with the bundled model', async () => {
     await openExtensionPage('options.html');
     await driver.wait(until.elementLocated({ css: 'form' }), 10_000);

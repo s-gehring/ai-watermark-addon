@@ -13,7 +13,7 @@ Prüft größere Bilder auf Webseiten auf AI-Generierung und markiert Treffer mi
 1. **Metadaten** (sicherer Treffer, Badge „AI · Metadaten“): IPTC Digital Source Type `trainedAlgorithmicMedia` bzw. `compositeWithTrainedAlgorithmicMedia` in XMP oder C2PA-Manifesten (OpenAI, Google, Adobe Firefly, Midjourney u. a.), Stable-Diffusion-Parameter (A1111/Forge), ComfyUI-Workflows, NovelAI, InvokeAI. Viele Plattformen entfernen Metadaten beim Upload, dann greift nur Schritt 2.
 2. **Modell** (Badge „AI 87 %“): [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT) (ViT-S, CVPR 2025, MIT-Lizenz), int8-quantisiert (23 MB), ausgeführt mit ONNX Runtime Web (WASM) im Background-Script. Die Vorverarbeitung (Bicubic-Resize auf 440 px, Center-Crop 384 px) ist in `src/background/preprocess.ts` nachgebaut und rechnet bitgenau wie Pillow in der Referenz-Pipeline des Modells. Der Rohwert wird per Platt-Scaling kalibriert (`model.json`).
 
-Das Background-Script lädt das Bild selbst noch einmal (meist aus dem HTTP-Cache), damit auch Bilder fremder Domains ohne CORS-Freigabe geprüft werden können. Ergebnisse werden pro URL zwischengespeichert. Ein Bild braucht in Firefox ca. 0,7 s; Bilder werden nacheinander geprüft, sichtbare zuerst.
+Das Background-Script lädt das Bild selbst noch einmal (meist aus dem HTTP-Cache), damit auch Bilder fremder Domains ohne CORS-Freigabe geprüft werden können. Metadaten-Scan, Dekodierung und Inferenz laufen in einem Web Worker, damit Popup und Background-Script reaktionsfähig bleiben. Ergebnisse werden pro URL zwischengespeichert. Ein Bild braucht in Firefox ca. 0,7 s; Bilder werden nacheinander geprüft, sichtbare zuerst.
 
 ## Genauigkeit
 
@@ -37,9 +37,19 @@ Einschränkungen:
 
 ## Bedienung
 
-- Toolbar-Button: Anzahl markierter Bilder auf der Seite, Addon global oder pro Seite an- und ausschalten
-- Klick auf ein Badge blendet es aus
-- Einstellungen (`about:addons` → AI Watermark → Einstellungen): Mindestgröße, Schwelle, Metadaten-Prüfung, CSS-Hintergründe, Prozentanzeige, deaktivierte Seiten
+Jedes geprüfte Bild bekommt oben rechts ein Symbol:
+
+| Symbol | Bedeutung |
+|---|---|
+| dunkler Kreis mit Spinner | wird geprüft |
+| violettes „AI 87 %“ bzw. „AI · Metadaten“ | wahrscheinlich bzw. laut Metadaten AI-generiert |
+| grüner Haken | geprüft, unauffällig |
+| graues „?“ | konnte nicht geprüft werden (Download, Format oder Seitenverhältnis) |
+
+- Toolbar-Button: Zahl der AI-Bilder auf der Seite; solange noch geprüft wird, ist das Icon gedimmt und zeigt einen Fortschrittsbalken
+- Popup: Fortschritt („Prüfe Bilder: 12 von 30“), Zähler für unauffällige und nicht prüfbare Bilder, Addon global oder pro Seite an- und ausschalten
+- Klick auf ein Symbol blendet es aus
+- Einstellungen (`about:addons` → AI Watermark → Einstellungen): Mindestgröße, Schwelle, Metadaten-Prüfung, CSS-Hintergründe, Prozentanzeige, Symbole für unauffällige Bilder und laufende Prüfungen, deaktivierte Seiten
 
 ## Entwicklung
 
@@ -88,7 +98,7 @@ npm run eval -- all
 ## Aufbau
 
 ```
-src/background/   Modell, Vorverarbeitung, Metadaten-Scan, Queue und Cache
+src/background/   Bild-Download, Cache, Tab-Statistik und Toolbar-Icon; Worker mit Metadaten-Scan, Vorverarbeitung und Modell
 src/content/      Bildsuche (IntersectionObserver, MutationObserver) und Badge-Overlay im Shadow DOM
 src/popup/        Toolbar-Popup
 src/options/      Einstellungen

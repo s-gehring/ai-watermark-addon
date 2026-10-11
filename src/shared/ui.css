@@ -6,6 +6,7 @@
   --border: #e3e0ea;
   --accent: #5b21b6;
   --accent-fg: #ffffff;
+  --progress: #d97706;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -15,6 +16,7 @@
     --border: #3a3742;
     --accent: #a78bfa;
     --accent-fg: #1c1b22;
+    --progress: #fbbf24;
   }
 }
 * { box-sizing: border-box; }
