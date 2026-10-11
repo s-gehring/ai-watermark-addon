@@ -4,3 +4,5 @@ web-ext-artifacts/
 tools/eval/.cache/
 vendor/models/
 .venv/
+tools/synthid/.cache/
+__pycache__/

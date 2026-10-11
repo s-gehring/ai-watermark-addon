@@ -12,9 +12,9 @@ const inflight = new Map<string, Promise<Verdict>>();
 let settings: Settings | null = null;
 const settingsReady = loadSettings().then((s) => (settings = s));
 onSettingsChanged((s) => {
-  const metadataToggled = settings && settings.checkMetadata !== s.checkMetadata;
+  const checksToggled = settings && (settings.checkMetadata !== s.checkMetadata || settings.checkWatermark !== s.checkWatermark);
   settings = s;
-  if (metadataToggled) cache.clear();
+  if (checksToggled) cache.clear();
 });
 
 async function fetchBytes(url: string): Promise<{ bytes: ArrayBuffer; type: string } | null> {
@@ -34,7 +34,8 @@ async function classify(url: string, provided?: ArrayBuffer): Promise<Verdict> {
   const fetched = provided ? { bytes: provided, type: '' } : await fetchBytes(url);
   if (!fetched) return { ok: false, error: 'fetch' };
   if (fetched.type.includes('svg')) return { ok: false, error: 'unsupported' };
-  return evaluate(fetched.bytes, fetched.type, settings!.checkMetadata);
+  const { checkMetadata, checkWatermark } = settings!;
+  return evaluate(fetched.bytes, fetched.type, { checkMetadata, checkWatermark });
 }
 
 function classifyCached(url: string, bytes?: ArrayBuffer): Promise<Verdict> {

@@ -1,0 +1,15 @@
+{
+  "size": 512,
+  "weightScale": 0.003337023910302207,
+  "source": {
+    "dataset": "aoxo/reverse-synthid",
+    "revision": "7a4fbc2ba0277b0a73a9d6e9a1ebcfa36deb15bf",
+    "folders": [
+      "nano-banana-pro-preview/diverse",
+      "gemini-3.1-flash-image-preview/diverse",
+      "gemini_random"
+    ],
+    "images": 288
+  },
+  "threshold": 12
+}
