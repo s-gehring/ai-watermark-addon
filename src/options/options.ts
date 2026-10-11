@@ -11,7 +11,7 @@ function render(settings: Settings): void {
   field<HTMLInputElement>('minSize').value = String(settings.minSize);
   field<HTMLInputElement>('threshold').value = String(Math.round(settings.threshold * 100));
   thresholdValue.value = `${Math.round(settings.threshold * 100)} %`;
-  for (const key of ['checkMetadata', 'includeBackgrounds', 'showScore', 'showChecked'] as const) {
+  for (const key of ['checkMetadata', 'checkWatermark', 'includeBackgrounds', 'showScore', 'showChecked'] as const) {
     field<HTMLInputElement>(key).checked = settings[key];
   }
   field<HTMLTextAreaElement>('disabledHosts').value = settings.disabledHosts.join('\n');
@@ -22,6 +22,7 @@ async function save(): Promise<void> {
     minSize: Number(field<HTMLInputElement>('minSize').value),
     threshold: Number(field<HTMLInputElement>('threshold').value) / 100,
     checkMetadata: field<HTMLInputElement>('checkMetadata').checked,
+    checkWatermark: field<HTMLInputElement>('checkWatermark').checked,
     includeBackgrounds: field<HTMLInputElement>('includeBackgrounds').checked,
     showScore: field<HTMLInputElement>('showScore').checked,
     showChecked: field<HTMLInputElement>('showChecked').checked,

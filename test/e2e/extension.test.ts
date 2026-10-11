@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,8 @@ import sharp from 'sharp';
 import { Builder, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import synthIdConfig from '../../synthid.json';
+import { fft } from '../../src/background/synthid';
 
 const ADDON_ID = 'ai-watermark-addon@s-gehring.github.io';
 const ADDON_UUID = '6f0c3a52-9a51-4c1e-8f7e-2f6f5d1b7a10';
@@ -26,6 +29,59 @@ async function photoLikeJpeg(): Promise<Buffer> {
     }
   }
   return sharp(pixels, { raw: { width, height, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
+}
+
+async function synthIdPng(): Promise<Buffer> {
+  const n = synthIdConfig.size;
+  const half = n / 2 + 1;
+  const template = readFileSync(new URL('../../src/background/synthid-template.bin', import.meta.url));
+  const planes = [0, 1, 2].map((c) => {
+    const re = new Float64Array(n * n);
+    const im = new Float64Array(n * n);
+    for (let y = 0; y < n; y++) {
+      for (let x = 1; x < n / 2; x++) {
+        const t = (c * n + y) * half + x;
+        const phase = (template[template.length / 2 + t] * 2 * Math.PI) / 256;
+        re[y * n + x] = template[t] * Math.cos(phase);
+        im[y * n + x] = template[t] * Math.sin(phase);
+      }
+    }
+    const rowRe = new Float64Array(n);
+    const rowIm = new Float64Array(n);
+    for (const [stride, step] of [[n, 1], [1, n]]) {
+      for (let line = 0; line < n; line++) {
+        for (let i = 0; i < n; i++) {
+          rowRe[i] = re[line * stride + i * step];
+          rowIm[i] = -im[line * stride + i * step];
+        }
+        fft(rowRe, rowIm);
+        for (let i = 0; i < n; i++) {
+          re[line * stride + i * step] = rowRe[i];
+          im[line * stride + i * step] = -rowIm[i];
+        }
+      }
+    }
+    const peak = re.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+    return re.map((v) => (v / peak) * 24);
+  });
+  const pixels = Buffer.alloc(n * n * 3);
+  for (let i = 0; i < n * n; i++) {
+    const [luma, cb, cr] = [128 + (i % n) / 16 + planes[0][i], planes[1][i], planes[2][i]];
+    pixels[i * 3] = Math.round(luma + 1.402 * cr);
+    pixels[i * 3 + 1] = Math.round(luma - 0.344136 * cb - 0.714136 * cr);
+    pixels[i * 3 + 2] = Math.round(luma + 1.772 * cb);
+  }
+  return sharp(pixels, { raw: { width: n, height: n, channels: 3 } }).resize(480, 360, { fit: 'fill' }).png().toBuffer();
+}
+
+function withC2paSynthId(png: Buffer): Buffer {
+  const action = 'factionkc2pa.editedkdescriptionx(Applied imperceptible SynthID watermark.';
+  const data = Buffer.from(`jumb\x00\x00\x00\x1ejumdc2pa\x00${action}`, 'latin1');
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  chunk.write('caBX', 4, 'latin1');
+  data.copy(chunk, 8);
+  return Buffer.concat([png.subarray(0, 33), chunk, png.subarray(33)]);
 }
 
 function withXmp(jpeg: Buffer, xmp: string): Buffer {
@@ -72,11 +128,15 @@ let driver: firefox.Driver;
 beforeAll(async () => {
   const plain = await photoLikeJpeg();
   const ai = withXmp(plain, XMP_AI);
+  const synthId = await synthIdPng();
+  const synthIdC2pa = withC2paSynthId(await sharp(await photoLikeJpeg()).png().toBuffer());
   server = createServer((req, res) => {
     const path = new URL(req.url!, 'http://x').pathname;
     if (path === '/') res.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
     else if (path === '/ai.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(ai);
     else if (path === '/plain.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
+    else if (path === '/synthid.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthId);
+    else if (path === '/synthid-c2pa.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdC2pa);
     else res.writeHead(404).end();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -232,19 +292,31 @@ describe('background', () => {
     await driver.switchTo().window(pageHandle);
   }, 60_000);
 
-  it('scores an image without metadata with the bundled model', async () => {
-    await openExtensionPage('options.html');
-    await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
-    const verdict = await driver.executeAsyncScript<Record<string, unknown>>(
+  async function classify(path: string): Promise<Record<string, unknown>> {
+    return driver.executeAsyncScript<Record<string, unknown>>(
       (url: string, done: (v: unknown) => void) => {
         browser.runtime
           .sendMessage({ type: 'classify', url })
           .then(done, (e: Error) => done({ thrown: String(e) }));
       },
-      `${origin}/plain.jpg`,
+      `${origin}${path}`,
     );
+  }
+
+  it('scores an image without metadata with the bundled model', async () => {
+    await openExtensionPage('options.html');
+    await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
+    const verdict = await classify('/plain.jpg');
     expect(verdict).toMatchObject({ ok: true, source: 'model' });
     expect(verdict.score).toBeGreaterThanOrEqual(0);
     expect(verdict.score).toBeLessThanOrEqual(1);
   }, 120_000);
+
+  it('finds the SynthID pattern in the pixels of a rescaled image', async () => {
+    expect(await classify('/synthid.png')).toEqual({ ok: true, score: 1, source: 'synthid' });
+  }, 60_000);
+
+  it('reads a SynthID declaration from the C2PA manifest', async () => {
+    expect(await classify('/synthid-c2pa.png')).toEqual({ ok: true, score: 1, source: 'metadata', reason: 'synthid' });
+  }, 60_000);
 });
