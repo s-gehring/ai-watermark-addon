@@ -13,9 +13,14 @@ describe('aiLogit', () => {
 });
 
 describe('calibratedProbability', () => {
-  it('applies Platt scaling', () => {
-    expect(calibratedProbability(0, { scale: 1, bias: 0 })).toBe(0.5);
-    expect(calibratedProbability(-2, { scale: 0.5, bias: 1 })).toBe(0.5);
-    expect(calibratedProbability(10, { scale: 1, bias: 0 })).toBeGreaterThan(0.9999);
+  it('applies Platt scaling to a single model', () => {
+    expect(calibratedProbability([0], { weights: [1], bias: 0 })).toBe(0.5);
+    expect(calibratedProbability([-2], { weights: [0.5], bias: 1 })).toBe(0.5);
+    expect(calibratedProbability([10], { weights: [1], bias: 0 })).toBeGreaterThan(0.9999);
+  });
+
+  it('combines several models with one weight each', () => {
+    expect(calibratedProbability([2, -4], { weights: [1, 0.5], bias: 0 })).toBe(0.5);
+    expect(calibratedProbability([2, 4], { weights: [1, 0.5], bias: -4 })).toBe(0.5);
   });
 });

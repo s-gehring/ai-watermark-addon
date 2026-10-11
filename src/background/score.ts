@@ -1,7 +1,7 @@
 export type OutputSpec = 'sigmoid' | { softmaxLabels: string[] };
 
 export interface Calibration {
-  scale: number;
+  weights: number[];
   bias: number;
 }
 
@@ -18,6 +18,6 @@ export function aiLogit(logits: ArrayLike<number>, spec: OutputSpec, id2label: R
   return Math.log(clamped / (1 - clamped));
 }
 
-export function calibratedProbability(logit: number, calibration: Calibration): number {
-  return sigmoid(calibration.scale * logit + calibration.bias);
+export function calibratedProbability(logits: number[], calibration: Calibration): number {
+  return sigmoid(logits.reduce((sum, z, i) => sum + calibration.weights[i] * z, calibration.bias));
 }

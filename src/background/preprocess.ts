@@ -5,15 +5,18 @@ export interface PixelImage {
   data: ArrayLike<number>;
 }
 
-export interface InputSpec {
-  shortestEdge: number;
-  crop: number;
+export type InputSpec = (
+  | { shortestEdge: number; crop: number }
+  | { size: [number, number] }
+) & {
+  resample?: Resample;
   mean: [number, number, number];
   std: [number, number, number];
-}
+};
+
+export type Resample = 'bicubic' | 'bilinear';
 
 const PRECISION_BITS = 22;
-const SUPPORT = 2;
 
 function bicubic(x: number): number {
   const a = -0.5;
@@ -23,16 +26,27 @@ function bicubic(x: number): number {
   return 0;
 }
 
+function bilinear(x: number): number {
+  x = Math.abs(x);
+  return x < 1 ? 1 - x : 0;
+}
+
+const FILTERS: Record<Resample, { support: number; weight: (x: number) => number }> = {
+  bicubic: { support: 2, weight: bicubic },
+  bilinear: { support: 1, weight: bilinear },
+};
+
 interface Coefficients {
   ksize: number;
   bounds: Int32Array;
   weights: Int32Array;
 }
 
-function coefficients(inSize: number, outSize: number): Coefficients {
+function coefficients(inSize: number, outSize: number, resample: Resample): Coefficients {
+  const filter = FILTERS[resample];
   const scale = inSize / outSize;
   const filterScale = Math.max(scale, 1);
-  const support = SUPPORT * filterScale;
+  const support = filter.support * filterScale;
   const ksize = Math.ceil(support) * 2 + 1;
   const bounds = new Int32Array(outSize * 2);
   const weights = new Int32Array(outSize * ksize);
@@ -43,7 +57,7 @@ function coefficients(inSize: number, outSize: number): Coefficients {
     const xmax = Math.min(Math.trunc(center + support + 0.5), inSize) - xmin;
     let sum = 0;
     for (let x = 0; x < xmax; x++) {
-      k[x] = bicubic((x + xmin - center + 0.5) / filterScale);
+      k[x] = filter.weight((x + xmin - center + 0.5) / filterScale);
       sum += k[x];
     }
     for (let x = 0; x < ksize; x++) {
@@ -72,23 +86,28 @@ export function resizedSize(width: number, height: number, shortestEdge: number)
   return [Math.trunc(width * scale), Math.trunc(height * scale)];
 }
 
+export function inputShape(spec: InputSpec): [width: number, height: number] {
+  return 'size' in spec ? spec.size : [spec.crop, spec.crop];
+}
+
 export function toModelInput(image: PixelImage, spec: InputSpec): Float32Array {
   const { width, height, channels, data } = image;
-  const [outW, outH] = resizedSize(width, height, spec.shortestEdge);
-  const crop = spec.crop;
-  const left = Math.floor((outW - crop) / 2);
-  const top = Math.floor((outH - crop) / 2);
+  const [outW, outH] = 'size' in spec ? spec.size : resizedSize(width, height, spec.shortestEdge);
+  const [cropW, cropH] = inputShape(spec);
+  const left = Math.floor((outW - cropW) / 2);
+  const top = Math.floor((outH - cropH) / 2);
 
-  const horizontal = coefficients(width, outW);
-  const vertical = coefficients(height, outH);
+  const resample = spec.resample ?? 'bicubic';
+  const horizontal = coefficients(width, outW, resample);
+  const vertical = coefficients(height, outH, resample);
   const firstRow = vertical.bounds[top * 2];
-  const lastRow = vertical.bounds[(top + crop - 1) * 2] + vertical.bounds[(top + crop - 1) * 2 + 1];
+  const lastRow = vertical.bounds[(top + cropH - 1) * 2] + vertical.bounds[(top + cropH - 1) * 2 + 1];
 
   const rows = lastRow - firstRow;
-  const temp = new Uint8Array(rows * crop * 3);
+  const temp = new Uint8Array(rows * cropW * 3);
   for (let y = 0; y < rows; y++) {
     const rowOffset = (y + firstRow) * width;
-    for (let xx = 0; xx < crop; xx++) {
+    for (let xx = 0; xx < cropW; xx++) {
       const ox = xx + left;
       const xmin = horizontal.bounds[ox * 2];
       const xmax = horizontal.bounds[ox * 2 + 1];
@@ -103,32 +122,32 @@ export function toModelInput(image: PixelImage, spec: InputSpec): Float32Array {
         g += data[p + 1] * w;
         b += data[p + 2] * w;
       }
-      const t = (y * crop + xx) * 3;
+      const t = (y * cropW + xx) * 3;
       temp[t] = clip8(r);
       temp[t + 1] = clip8(g);
       temp[t + 2] = clip8(b);
     }
   }
 
-  const plane = crop * crop;
+  const plane = cropW * cropH;
   const out = new Float32Array(3 * plane);
-  for (let yy = 0; yy < crop; yy++) {
+  for (let yy = 0; yy < cropH; yy++) {
     const oy = yy + top;
     const ymin = vertical.bounds[oy * 2] - firstRow;
     const ymax = vertical.bounds[oy * 2 + 1];
     const kOffset = oy * vertical.ksize;
-    for (let xx = 0; xx < crop; xx++) {
+    for (let xx = 0; xx < cropW; xx++) {
       let r = 0;
       let g = 0;
       let b = 0;
       for (let y = 0; y < ymax; y++) {
         const w = vertical.weights[kOffset + y];
-        const t = ((ymin + y) * crop + xx) * 3;
+        const t = ((ymin + y) * cropW + xx) * 3;
         r += temp[t] * w;
         g += temp[t + 1] * w;
         b += temp[t + 2] * w;
       }
-      const i = yy * crop + xx;
+      const i = yy * cropW + xx;
       out[i] = (clip8(r) / 255 - spec.mean[0]) / spec.std[0];
       out[plane + i] = (clip8(g) / 255 - spec.mean[1]) / spec.std[1];
       out[2 * plane + i] = (clip8(b) / 255 - spec.mean[2]) / spec.std[2];

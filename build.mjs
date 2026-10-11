@@ -6,14 +6,16 @@ const root = new URL('.', import.meta.url).pathname;
 const out = join(root, 'dist');
 const watch = process.argv.includes('--watch');
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-const model = JSON.parse(await readFile(join(root, 'model.json'), 'utf8'));
-const modelDir = join(root, 'vendor', 'models', model.name);
+const { models } = JSON.parse(await readFile(join(root, 'model.json'), 'utf8'));
+const modelFiles = models.flatMap((model) => Object.keys(model.files).map((file) => join(model.name, file)));
 
 const exists = (path) => stat(path).then(() => true, () => false);
 
-if (!(await exists(join(modelDir, Object.keys(model.files).at(-1))))) {
-  console.error('Model files missing. Run `npm run fetch-model` first.');
-  process.exit(1);
+for (const file of modelFiles) {
+  if (!(await exists(join(root, 'vendor', 'models', file)))) {
+    console.error('Model files missing. Run `npm run fetch-model` first.');
+    process.exit(1);
+  }
 }
 
 await rm(out, { recursive: true, force: true });
@@ -65,8 +67,8 @@ const copies = [
 for (const [from, to] of copies) {
   await cp(join(root, from), join(out, to), { recursive: true });
 }
-for (const file of Object.keys(model.files)) {
-  await cp(join(modelDir, file), join(out, 'models', model.name, file));
+for (const file of modelFiles) {
+  await cp(join(root, 'vendor', 'models', file), join(out, 'models', file));
 }
 
 if (watch) {

@@ -1,9 +1,9 @@
 import { AutoModelForImageClassification, Tensor, env, type PreTrainedModel } from '@huggingface/transformers';
-import model from '../../model.json';
-import { toModelInput, type InputSpec, type PixelImage } from './preprocess';
+import config from '../../model.json';
+import { inputShape, toModelInput, type InputSpec, type PixelImage } from './preprocess';
 import { aiLogit, calibratedProbability, type OutputSpec } from './score';
 
-let loading: Promise<PreTrainedModel> | null = null;
+let loading: Promise<PreTrainedModel[]> | null = null;
 
 const assetUrl = (path: string) => new URL(path, self.location.href).href;
 
@@ -21,13 +21,14 @@ function configureRuntime(): void {
   wasm.numThreads = 1;
 }
 
-function load(): Promise<PreTrainedModel> {
+function load(): Promise<PreTrainedModel[]> {
   loading ??= (async () => {
     configureRuntime();
-    return AutoModelForImageClassification.from_pretrained(model.name, {
-      dtype: model.dtype as 'q8',
-      device: 'wasm',
-    });
+    return Promise.all(
+      config.models.map((model) =>
+        AutoModelForImageClassification.from_pretrained(model.name, { dtype: model.dtype as 'q8', device: 'wasm' }),
+      ),
+    );
   })().catch((error) => {
     loading = null;
     throw error;
@@ -49,10 +50,15 @@ export async function decodeImage(blob: Blob): Promise<PixelImage> {
 }
 
 export async function scoreImage(image: PixelImage): Promise<number> {
-  const classifier = await load();
-  const spec = model.input as InputSpec;
-  const pixels = toModelInput(image, spec);
-  const { logits } = await classifier({ pixel_values: new Tensor('float32', pixels, [1, 3, spec.crop, spec.crop]) });
-  const id2label = (classifier.config as { id2label?: Record<string, string> }).id2label;
-  return calibratedProbability(aiLogit(logits.data as Float32Array, model.output as OutputSpec, id2label), model.calibration);
+  const classifiers = await load();
+  const logits: number[] = [];
+  for (const [i, model] of config.models.entries()) {
+    const spec = model.input as InputSpec;
+    const [width, height] = inputShape(spec);
+    const pixels = toModelInput(image, spec);
+    const output = await classifiers[i]({ pixel_values: new Tensor('float32', pixels, [1, 3, height, width]) });
+    const id2label = (classifiers[i].config as { id2label?: Record<string, string> }).id2label;
+    logits.push(aiLogit(output.logits.data as Float32Array, model.output as OutputSpec, id2label));
+  }
+  return calibratedProbability(logits, config.calibration);
 }

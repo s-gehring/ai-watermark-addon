@@ -1,6 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import sharp from 'sharp';
 import {
   AutoModelForImageClassification,
@@ -9,22 +10,35 @@ import {
   Tensor,
   env,
 } from '@huggingface/transformers';
-import { toModelInput } from '../../src/background/preprocess.ts';
+import { inputShape, toModelInput } from '../../src/background/preprocess.ts';
 import { aiLogit, calibratedProbability } from '../../src/background/score.ts';
 
 const root = new URL('../../', import.meta.url).pathname;
-const CACHE = new URL('./.cache/', import.meta.url).pathname;
+
+function mainCheckout() {
+  try {
+    return dirname(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root, encoding: 'utf8' }).trim());
+  } catch {
+    return root;
+  }
+}
+
+const CACHE = join(mainCheckout(), 'tools', 'eval', '.cache');
 const SAMPLES = join(CACHE, 'samples');
 const SCORES = join(CACHE, 'scores');
-const bundled = JSON.parse(await readFile(join(root, 'model.json'), 'utf8'));
+const config = JSON.parse(await readFile(join(root, 'model.json'), 'utf8'));
 env.cacheDir = join(CACHE, 'models');
 
-const CANDIDATES = [
-  { id: 'bundled', label: `${bundled.name} [bundled ${bundled.dtype}]` },
+const BUNDLED = config.models.map((m) => ({ ...m, id: m.name, local: true }));
+const HUB = [
   { id: 'buildborderless/CommunityForensics-DeepfakeDet-ViT', dtype: 'fp32', output: 'sigmoid' },
   { id: 'onnx-community/SMOGY-Ai-images-detector-ONNX', dtype: 'q8', output: { softmaxLabels: ['artificial'] } },
-  { id: 'neilxxx/ai-vs-human-SigLIP-ONNX', dtype: 'q8', output: { softmaxLabels: ['ai'] } },
   { id: 'prithivMLmods/AI-vs-Deepfake-vs-Real-ONNX', dtype: 'q8', output: { softmaxLabels: ['Artificial', 'Deepfake'] } },
+];
+const CANDIDATES = [
+  { id: 'bundled', label: `bundled: ${BUNDLED.map((m) => `${m.name} [${m.dtype}]`).join(' + ')}`, members: BUNDLED, config },
+  ...(BUNDLED.length > 1 ? BUNDLED.map((m) => ({ id: `bundled/${m.name}`, label: `${m.name} [${m.dtype}] alone`, members: [m] })) : []),
+  ...HUB.map((h) => ({ id: h.id, label: `${h.id} [${h.dtype}]`, members: [h] })),
 ];
 
 const CONDITIONS = {
@@ -35,6 +49,7 @@ const CONDITIONS = {
 const CALIBRATION_CONDITIONS = ['web1280', 'web800'];
 const PHOTO_GROUPS = ['core', 'reddit', 'coco'];
 const TARGET_FPR = 0.01;
+const ART_LIMIT = 0.05;
 
 const args = process.argv.slice(2);
 const only = args.find((a) => !a.startsWith('--')) ?? 'bundled';
@@ -73,75 +88,79 @@ async function loadPixels(path, condition) {
   return { width: info.width, height: info.height, channels: 3, data };
 }
 
-async function bundledScorer() {
+async function localScorer(m) {
   env.allowRemoteModels = false;
   env.localModelPath = join(root, 'vendor', 'models') + '/';
-  const model = await AutoModelForImageClassification.from_pretrained(bundled.name, { dtype: bundled.dtype });
-  const { crop } = bundled.input;
+  const model = await AutoModelForImageClassification.from_pretrained(m.name, { dtype: m.dtype });
+  const [width, height] = inputShape(m.input);
   return {
     model,
     async logit(image) {
-      const pixels = toModelInput(image, bundled.input);
-      const { logits } = await model({ pixel_values: new Tensor('float32', pixels, [1, 3, crop, crop]) });
-      return aiLogit(logits.data, bundled.output);
+      const pixels = toModelInput(image, m.input);
+      const { logits } = await model({ pixel_values: new Tensor('float32', pixels, [1, 3, height, width]) });
+      return aiLogit(logits.data, m.output, model.config.id2label);
     },
   };
 }
 
-async function hubScorer(c) {
+async function hubScorer(m) {
   env.allowRemoteModels = true;
-  const processor = await AutoProcessor.from_pretrained(c.id);
-  const model = await AutoModelForImageClassification.from_pretrained(c.id, { dtype: c.dtype });
+  const processor = await AutoProcessor.from_pretrained(m.id);
+  const model = await AutoModelForImageClassification.from_pretrained(m.id, { dtype: m.dtype });
   return {
     model,
     async logit(image) {
       const { logits } = await model(await processor(new RawImage(image.data, image.width, image.height, 3)));
-      return aiLogit(logits.data, c.output, model.config.id2label);
+      return aiLogit(logits.data, m.output, model.config.id2label);
     },
   };
 }
 
-function cacheName(c) {
-  const identity = c.id === 'bundled' ? { revision: bundled.revision, dtype: bundled.dtype, input: bundled.input } : c;
+function cacheName(m) {
+  const identity = m.local ? { repo: m.repo, revision: m.revision, dtype: m.dtype, input: m.input, output: m.output } : m;
   const hash = createHash('sha1').update(JSON.stringify(identity)).digest('hex').slice(0, 10);
-  return `${c.id.replace(/\W+/g, '_')}-${hash}.json`;
+  return `${m.id.replace(/\W+/g, '_')}-${hash}.json`;
+}
+
+async function scoreMember(m, samples) {
+  const file = join(SCORES, cacheName(m));
+  const cached = JSON.parse(await readFile(file, 'utf8').catch(() => '{}'));
+  const missing = samples.flatMap((s) => Object.keys(CONDITIONS).filter((k) => cached[`${s.key}|${k}`] === undefined).map((k) => [s, k]));
+  if (!missing.length) return { cached, ms: null };
+  const scorer = m.local ? await localScorer(m) : await hubScorer(m);
+  const t0 = performance.now();
+  let done = 0;
+  for (const [s, k] of missing) {
+    try {
+      cached[`${s.key}|${k}`] = await scorer.logit(await loadPixels(s.path, CONDITIONS[k]));
+    } catch (e) {
+      console.warn(`skip ${s.key} (${k}): ${e.message}`);
+      cached[`${s.key}|${k}`] = null;
+    }
+    if (++done % 500 === 0) {
+      console.log(`  ${m.id}: scored ${done}/${missing.length}`);
+      await mkdir(SCORES, { recursive: true });
+      await writeFile(file, JSON.stringify(cached));
+    }
+  }
+  await mkdir(SCORES, { recursive: true });
+  await writeFile(file, JSON.stringify(cached));
+  await scorer.model.dispose();
+  return { cached, ms: (performance.now() - t0) / missing.length };
 }
 
 async function scoreAll(c, samples) {
-  const file = join(SCORES, cacheName(c));
-  const cached = JSON.parse(await readFile(file, 'utf8').catch(() => '{}'));
-  const missing = samples.flatMap((s) => Object.keys(CONDITIONS).filter((k) => cached[`${s.key}|${k}`] === undefined).map((k) => [s, k]));
-  let ms = null;
-  if (missing.length) {
-    const scorer = c.id === 'bundled' ? await bundledScorer() : await hubScorer(c);
-    const t0 = performance.now();
-    let done = 0;
-    for (const [s, k] of missing) {
-      try {
-        cached[`${s.key}|${k}`] = await scorer.logit(await loadPixels(s.path, CONDITIONS[k]));
-      } catch (e) {
-        console.warn(`skip ${s.key} (${k}): ${e.message}`);
-        cached[`${s.key}|${k}`] = null;
-      }
-      if (++done % 500 === 0) {
-        console.log(`  scored ${done}/${missing.length}`);
-        await mkdir(SCORES, { recursive: true });
-        await writeFile(file, JSON.stringify(cached));
-      }
-    }
-    ms = (performance.now() - t0) / missing.length;
-    await mkdir(SCORES, { recursive: true });
-    await writeFile(file, JSON.stringify(cached));
-    await scorer.model.dispose();
-  }
+  const results = [];
+  for (const m of c.members) results.push(await scoreMember(m, samples));
   const scored = [];
   for (const s of samples) {
     for (const condition of Object.keys(CONDITIONS)) {
-      const z = cached[`${s.key}|${condition}`];
-      if (z !== null) scored.push({ ...s, condition, z });
+      const zs = results.map((r) => r.cached[`${s.key}|${condition}`]);
+      if (!zs.includes(null)) scored.push({ ...s, condition, zs });
     }
   }
-  return { scored, ms };
+  const timed = results.filter((r) => r.ms !== null);
+  return { scored, ms: timed.length === results.length ? timed.reduce((sum, r) => sum + r.ms, 0) : null };
 }
 
 function auc(pos, neg) {
@@ -175,42 +194,84 @@ function wilson(k, n) {
   return [Math.max(0, center - half), Math.min(1, center + half)];
 }
 
-function plattLoss(points, a, b, pos, neg) {
+function logisticLoss(points, theta, weightOf) {
   let loss = 0;
-  for (const { z, fake } of points) {
-    const t = a * z + b;
-    loss += (fake ? 0.5 / pos : 0.5 / neg) * (fake ? Math.log1p(Math.exp(-t)) : Math.log1p(Math.exp(t)));
+  for (const { zs, fake } of points) {
+    const t = zs.reduce((sum, z, i) => sum + theta[i] * z, theta[zs.length]);
+    loss += weightOf(fake) * (fake ? Math.log1p(Math.exp(-t)) : Math.log1p(Math.exp(t)));
   }
   return loss;
 }
 
-function fitPlatt(points) {
-  const pos = points.filter((p) => p.fake).length;
-  const neg = points.length - pos;
-  let a = 1;
-  let b = 0;
-  let loss = plattLoss(points, a, b, pos, neg);
-  for (let iter = 0; iter < 200; iter++) {
-    let ga = 0, gb = 0, haa = 1e-9, hab = 0, hbb = 1e-9;
-    for (const { z, fake } of points) {
-      const w = fake ? 0.5 / pos : 0.5 / neg;
-      const p = 1 / (1 + Math.exp(-(a * z + b)));
-      const r = w * (p - (fake ? 1 : 0));
-      const h = w * p * (1 - p);
-      ga += r * z; gb += r; haa += h * z * z; hab += h * z; hbb += h;
+function solve(matrix, vector) {
+  const n = vector.length;
+  const a = matrix.map((row, i) => [...row, vector[i]]);
+  for (let col = 0; col < n; col++) {
+    const pivot = a.slice(col).reduce((best, row, i) => (Math.abs(row[col]) > Math.abs(a[best][col]) ? col + i : best), col);
+    [a[col], a[pivot]] = [a[pivot], a[col]];
+    for (let row = col + 1; row < n; row++) {
+      const f = a[row][col] / a[col][col];
+      for (let k = col; k <= n; k++) a[row][k] -= f * a[col][k];
     }
-    const det = haa * hbb - hab * hab;
-    const da = (hbb * ga - hab * gb) / det;
-    const db = (haa * gb - hab * ga) / det;
+  }
+  const x = new Array(n).fill(0);
+  for (let row = n - 1; row >= 0; row--) {
+    x[row] = (a[row][n] - a[row].slice(row + 1, n).reduce((sum, v, i) => sum + v * x[row + 1 + i], 0)) / a[row][row];
+  }
+  return x;
+}
+
+function fitLogistic(points) {
+  const k = points[0].zs.length;
+  const pos = points.filter((p) => p.fake).length;
+  const weightOf = (fake) => (fake ? 0.5 / pos : 0.5 / (points.length - pos));
+  let theta = new Array(k + 1).fill(0);
+  let loss = logisticLoss(points, theta, weightOf);
+  for (let iter = 0; iter < 200; iter++) {
+    const grad = new Array(k + 1).fill(0);
+    const hess = Array.from({ length: k + 1 }, (_, i) => Array.from({ length: k + 1 }, (_, j) => (i === j ? 1e-9 : 0)));
+    for (const { zs, fake } of points) {
+      const x = [...zs, 1];
+      const p = 1 / (1 + Math.exp(-x.reduce((sum, v, i) => sum + theta[i] * v, 0)));
+      const w = weightOf(fake);
+      for (let i = 0; i <= k; i++) {
+        grad[i] += w * (p - (fake ? 1 : 0)) * x[i];
+        for (let j = 0; j <= k; j++) hess[i][j] += w * p * (1 - p) * x[i] * x[j];
+      }
+    }
+    const delta = solve(hess, grad);
     let step = 1;
-    while (step > 1e-6 && plattLoss(points, a - step * da, b - step * db, pos, neg) > loss) step /= 2;
-    a -= step * da;
-    b -= step * db;
-    const next = plattLoss(points, a, b, pos, neg);
+    const at = (st) => theta.map((t, i) => t - st * delta[i]);
+    while (step > 1e-6 && logisticLoss(points, at(step), weightOf) > loss) step /= 2;
+    theta = at(step);
+    const next = logisticLoss(points, theta, weightOf);
     if (loss - next < 1e-12) break;
     loss = next;
   }
-  return { scale: Number(a.toFixed(4)), bias: Number(b.toFixed(4)) };
+  return { weights: theta.slice(0, k).map((w) => Number(w.toFixed(4))), bias: Number(theta[k].toFixed(4)) };
+}
+
+function rankThreshold(realScores, fpr) {
+  return [...realScores].sort((a, b) => b - a)[Math.floor(fpr * realScores.length)];
+}
+
+function fitEnsemble(calibrationSet) {
+  const k = calibrationSet[0].zs.length;
+  const withoutArt = calibrationSet.filter((s) => s.group !== 'art');
+  if (k === 1) return fitLogistic(withoutArt);
+  if (k > 2) throw new Error('weight search supports at most two models');
+  let best = null;
+  for (let step = 0; step <= 60; step++) {
+    const ratio = step / 20;
+    const combined = (s) => s.zs[0] + ratio * s.zs[1];
+    const threshold = rankThreshold(withoutArt.filter((s) => !s.fake).map(combined), TARGET_FPR);
+    const share = (rows) => rows.filter((s) => combined(s) > threshold).length / rows.length;
+    const detected = share(calibrationSet.filter((s) => s.fake));
+    if (share(calibrationSet.filter((s) => s.group === 'art')) <= ART_LIMIT && (!best || detected > best.detected)) best = { ratio, detected };
+  }
+  const platt = fitLogistic(withoutArt.map((s) => ({ ...s, zs: [s.zs[0] + best.ratio * s.zs[1]] })));
+  const [scale] = platt.weights;
+  return { weights: [scale, Number((scale * best.ratio).toFixed(4))], bias: platt.bias };
 }
 
 function thresholdForFpr(realProbabilities, fpr) {
@@ -227,9 +288,9 @@ function report(test, threshold) {
   const line = (name, values) => console.log(cell(name, 30) + values.map((v) => cell(v)).join(''));
   line('', conditions);
 
-  const photos = by((s) => PHOTO_GROUPS.includes(s.group));
-  const zs = (rows, fake) => rows.filter((s) => s.fake === fake).map((s) => s.z);
-  line('AUC (photos)', conditions.map((k) => auc(zs(photos[k], true), zs(photos[k], false)).toFixed(3)));
+  const photos = by(isRelevant);
+  const zs = (rows, fake) => rows.filter((s) => s.fake === fake).map((s) => s.p);
+  line('AUC (AI vs photos)', conditions.map((k) => auc(zs(photos[k], true), zs(photos[k], false)).toFixed(3)));
   for (const fpr of [0.005, 0.01, 0.02]) {
     line(`detected @ ${pct(fpr)} flagged`, conditions.map((k) => pct(tprAtFpr(zs(photos[k], true), zs(photos[k], false), fpr))));
   }
@@ -267,24 +328,24 @@ function report(test, threshold) {
   }
 }
 
+const isRelevant = (s) => s.fake || PHOTO_GROUPS.includes(s.group);
 const samples = await listSamples();
 const count = (split, fake) => samples.filter((s) => s.split === split && s.fake === fake).length;
 console.log(`samples: ${samples.length} (calibration ${count('calibration', true)} AI / ${count('calibration', false)} real, test ${count('test', true)} AI / ${count('test', false)} real)`);
 
 for (const c of CANDIDATES) {
-  if (only !== 'all' && c.id !== only && !c.id.includes(only)) continue;
+  if (only !== 'all' && c.id !== only && !c.id.startsWith(`${only}/`) && !c.id.includes(only)) continue;
   const { scored, ms } = await scoreAll(c, samples);
-  const calibrationSet = scored.filter((s) => s.split === 'calibration' && PHOTO_GROUPS.includes(s.group) && CALIBRATION_CONDITIONS.includes(s.condition));
+  const calibrationSet = scored.filter((s) => s.split === 'calibration' && (isRelevant(s) || s.group === 'art') && CALIBRATION_CONDITIONS.includes(s.condition));
 
-  let calibration = bundled.calibration;
-  let threshold = bundled.threshold;
-  if (calibrate || c.id !== 'bundled') {
-    calibration = fitPlatt(calibrationSet);
-    threshold = thresholdForFpr(calibrationSet.filter((s) => !s.fake).map((s) => calibratedProbability(s.z, calibration)), TARGET_FPR);
-  }
-  for (const s of scored) s.p = calibratedProbability(s.z, calibration);
+  const fitted = calibrate || !c.config;
+  const calibration = fitted ? fitEnsemble(calibrationSet) : c.config.calibration;
+  for (const s of scored) s.p = calibratedProbability(s.zs, calibration);
+  const photos = calibrationSet.filter((s) => !s.fake && s.group !== 'art');
+  const threshold = fitted ? thresholdForFpr(photos.map((s) => s.p), TARGET_FPR) : c.config.threshold;
 
-  console.log(`\n${c.label ?? `${c.id} [${c.dtype}]`}${ms === null ? '' : ` | ${ms.toFixed(0)} ms/img`}`);
-  console.log(`calibration ${JSON.stringify(calibration)} threshold ${threshold}${calibrate || c.id !== 'bundled' ? ` (fitted for ${pct(TARGET_FPR)} flagged photos on ${CALIBRATION_CONDITIONS.join(', ')})` : ' (model.json)'}`);
+  console.log(`\n${c.label}${ms === null ? '' : ` | ${ms.toFixed(0)} ms/img`}`);
+  const target = `${pct(TARGET_FPR)} flagged photos${c.members.length > 1 ? ` and at most ${pct(ART_LIMIT)} flagged paintings` : ''} on ${CALIBRATION_CONDITIONS.join(', ')}`;
+  console.log(`calibration ${JSON.stringify(calibration)} threshold ${threshold}${fitted ? ` (fitted for ${target})` : ' (model.json)'}`);
   report(scored.filter((s) => s.split === 'test'), threshold);
 }

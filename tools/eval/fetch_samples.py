@@ -1,15 +1,30 @@
 import argparse
 import hashlib
+import os
 import random
 import re
 import shutil
+import subprocess
 from collections import Counter
 from pathlib import Path
 
 import pyarrow.parquet as pq
-from huggingface_hub import HfFileSystem
+from huggingface_hub import HfApi, HfFileSystem, snapshot_download
 
-OUT = Path(__file__).parent / ".cache" / "samples"
+
+def main_checkout():
+    try:
+        common = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=Path(__file__).parent, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return Path(common).parent
+    except (OSError, subprocess.CalledProcessError):
+        return Path(__file__).parents[2]
+
+
+CACHE = main_checkout() / "tools" / "eval" / ".cache"
+OUT = CACHE / "samples"
 OPENFAKE = "datasets/ComplexDataLab/OpenFake"
 
 OPENFAKE_SOURCES = [
@@ -25,6 +40,14 @@ PLAIN_SOURCES = [
     {"group": "art", "source": "wikiart", "count": 300, "max_groups": 4,
      "paths": ["datasets/huggan/wikiart@~parquet/default/partial-train/0000.parquet"]},
 ]
+
+
+RESEARCH = {
+    "repo": "bigdatamark/synthid-research",
+    "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
+    "folders": ["gemini-3.1-flash-image", "qwen-image-2.1", "flux.2", "gpt-image-2"],
+    "per_folder": 150,
+}
 
 
 def save(group, label, source, ident, data):
@@ -88,6 +111,22 @@ def fetch_plain(fs, rng, spec):
     return len(seen)
 
 
+def fetch_research(rng, spec):
+    files = sorted(HfApi().list_repo_files(spec["repo"], repo_type="dataset", revision=spec["revision"]))
+    chosen = []
+    for folder in spec["folders"]:
+        candidates = [f for f in files if f.startswith(f"{folder}/") and not f.endswith((".json", ".csv", ".txt"))]
+        chosen += rng.sample(candidates, min(spec["per_folder"], len(candidates)))
+    local = CACHE / "downloads" / spec["repo"].split("/")[1]
+    snapshot_download(spec["repo"], repo_type="dataset", revision=spec["revision"], local_dir=local, allow_patterns=chosen, max_workers=8)
+    target = OUT / "research" / "fake"
+    target.mkdir(parents=True, exist_ok=True)
+    for path in chosen:
+        folder, name = path.split("/", 1)
+        os.link(local / path, target / f"{Path(name).stem}__{folder}{Path(name).suffix}")
+    return Counter(path.split("/", 1)[0] for path in chosen)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
@@ -101,6 +140,7 @@ def main():
         print(spec["group"], taken, "generators", generators)
     for spec in PLAIN_SOURCES:
         print(spec["group"], fetch_plain(fs, rng, spec))
+    print("research", dict(fetch_research(random.Random(f"{args.seed}-research"), RESEARCH)))
 
 
 if __name__ == "__main__":
