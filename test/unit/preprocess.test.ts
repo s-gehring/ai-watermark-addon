@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isScorable, resizedSize, toModelInput } from '../../src/background/preprocess';
+import { inputShape, isScorable, resizedSize, toModelInput } from '../../src/background/preprocess';
 import cases from './fixtures/pil-bicubic.json';
+import bilinearCases from './fixtures/pil-bilinear.json';
+
+const toHwc = (out: Float32Array, plane: number) =>
+  Array.from({ length: plane * 3 }, (_, i) => Math.round(out[(i % 3) * plane + Math.floor(i / 3)] * 255));
 
 describe('toModelInput', () => {
   it.each(cases.map((c) => [`${c.width}x${c.height} -> ${c.shortestEdge}/${c.crop}`, c] as const))(
@@ -10,12 +14,19 @@ describe('toModelInput', () => {
         { width: c.width, height: c.height, channels: 3, data: c.pixels },
         { shortestEdge: c.shortestEdge, crop: c.crop, mean: [0, 0, 0], std: [1, 1, 1] },
       );
-      const plane = c.crop * c.crop;
-      const hwc = Array.from({ length: plane * 3 }, (_, i) => {
-        const pixel = Math.floor(i / 3);
-        return Math.round(out[(i % 3) * plane + pixel] * 255);
-      });
-      expect(hwc).toEqual(c.expected);
+      expect(toHwc(out, c.crop * c.crop)).toEqual(c.expected);
+    },
+  );
+
+  it.each(bilinearCases.map((c) => [`${c.width}x${c.height} -> ${c.size.join('x')}`, c] as const))(
+    'matches Pillow bilinear resize to a fixed size for %s',
+    (_, c) => {
+      const size = c.size as [number, number];
+      const out = toModelInput(
+        { width: c.width, height: c.height, channels: 3, data: c.pixels },
+        { size, resample: 'bilinear', mean: [0, 0, 0], std: [1, 1, 1] },
+      );
+      expect(toHwc(out, size[0] * size[1])).toEqual(c.expected);
     },
   );
 
@@ -26,6 +37,13 @@ describe('toModelInput', () => {
       { shortestEdge: 4, crop: 2, mean: [0.5, 0.5, 0.5], std: [0.25, 0.5, 1] },
     );
     expect(Array.from(out)).toEqual([2, 2, 2, 2, 1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5]);
+  });
+});
+
+describe('inputShape', () => {
+  it('returns width and height of the model input', () => {
+    expect(inputShape({ shortestEdge: 440, crop: 384, mean: [0, 0, 0], std: [1, 1, 1] })).toEqual([384, 384]);
+    expect(inputShape({ size: [224, 160], mean: [0, 0, 0], std: [1, 1, 1] })).toEqual([224, 160]);
   });
 });
 
