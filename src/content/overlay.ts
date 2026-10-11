@@ -5,7 +5,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const STYLE = `
 :host { all: initial; }
-.layer { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: visible; pointer-events: none; }
+.layer { position: fixed; top: 0; left: 0; z-index: 2147483647; width: 0; height: 0; overflow: visible; pointer-events: none; }
 .badge {
   position: absolute; top: 0; left: 0;
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
@@ -40,6 +40,13 @@ export type BadgeState =
 export interface DisplayOptions {
   showScore: boolean;
   showChecked: boolean;
+}
+
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 }
 
 interface Badge {
@@ -136,25 +143,60 @@ export class BadgeLayer {
         continue;
       }
       if (badge.dismissed || !isDisplayed(badge.state, this.options)) continue;
-      const rect = element.getBoundingClientRect();
       const width = badge.node.offsetWidth || 40;
       const height = badge.node.offsetHeight || 22;
-      const right = Math.min(rect.right, viewportWidth);
-      const top = Math.max(rect.top, 0);
-      const fits = right - Math.max(rect.left, 0) >= width + 2 * INSET && rect.bottom - top >= height + 2 * INSET;
+      const box = visibleBox(element, viewportWidth, viewportHeight);
+      const x = box ? box.right - INSET - width : 0;
+      const y = box ? box.top + INSET : 0;
       const visible =
-        fits &&
-        rect.bottom > 0 &&
-        rect.top < viewportHeight &&
-        rect.right > 0 &&
-        rect.left < viewportWidth &&
-        isRendered(element);
+        box !== null &&
+        box.right - box.left >= width + 2 * INSET &&
+        box.bottom - box.top >= height + 2 * INSET &&
+        isRendered(element) &&
+        !this.isCovered(element, x + width / 2, y + height / 2);
       badge.node.hidden = !visible;
-      if (visible) {
-        badge.node.style.transform = `translate(${Math.round(right - INSET - width)}px, ${Math.round(top + INSET)}px)`;
-      }
+      if (visible) badge.node.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     }
   }
+
+  private isCovered(element: Element, x: number, y: number): boolean {
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit === this.host) continue;
+      if (hit === element || hit.contains(element) || element.contains(hit)) return false;
+      for (let node: Element | null = hit; node && !node.contains(element); node = node.parentElement) {
+        const { position } = getComputedStyle(node);
+        if (position === 'fixed' || position === 'sticky') return true;
+      }
+    }
+    return false;
+  }
+}
+
+function visibleBox(element: Element, viewportWidth: number, viewportHeight: number): Box | null {
+  const rect = element.getBoundingClientRect();
+  const box: Box = {
+    left: Math.max(rect.left, 0),
+    top: Math.max(rect.top, 0),
+    right: Math.min(rect.right, viewportWidth),
+    bottom: Math.min(rect.bottom, viewportHeight),
+  };
+  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+    if (box.right <= box.left || box.bottom <= box.top) return null;
+    const style = getComputedStyle(node);
+    if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+      const clip = node.getBoundingClientRect();
+      if (style.overflowX !== 'visible') {
+        box.left = Math.max(box.left, clip.left);
+        box.right = Math.min(box.right, clip.right);
+      }
+      if (style.overflowY !== 'visible') {
+        box.top = Math.max(box.top, clip.top);
+        box.bottom = Math.min(box.bottom, clip.bottom);
+      }
+    }
+    if (style.position === 'fixed') break;
+  }
+  return box.right > box.left && box.bottom > box.top ? box : null;
 }
 
 function isDisplayed(state: BadgeState, options: DisplayOptions): boolean {

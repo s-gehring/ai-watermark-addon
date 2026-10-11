@@ -36,17 +36,24 @@ function withXmp(jpeg: Buffer, xmp: string): Buffer {
 
 const PAGE = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
-  body { margin: 0; font: 14px sans-serif; }
+  body { margin: 0; padding-bottom: 1400px; font: 14px sans-serif; }
   img { display: block; }
   .box { width: 320px; height: 240px; margin: 8px; }
   #bg { background-image: url("/ai.jpg?bg"); background-size: cover; }
   #far { margin-top: 3000px; }
+  .nav { position: sticky; top: 0; z-index: 10; height: 60px; background: #fff; }
+  .raised { position: relative; z-index: 1; display: block; padding: 0; border: 0; background: none; }
+  .strip { display: flex; width: 356px; overflow: hidden; }
+  .strip img { flex: none; }
 </style></head><body>
+  <header class="nav"></header>
   <img id="meta" class="box" src="/ai.jpg">
   <div id="bg" class="box"></div>
   <img id="small" src="/ai.jpg?small" width="100" height="100">
   <img id="plain" class="box" src="/plain.jpg">
   <img id="far" class="box" src="/ai.jpg?far">
+  <button id="raised" class="raised"><img class="box" src="/ai.jpg?raised"></button>
+  <div class="strip"><img id="shown" class="box" src="/ai.jpg?shown"><img id="clipped" class="box" src="/ai.jpg?clipped"></div>
   <script>
     setTimeout(() => {
       const img = document.createElement('img');
@@ -96,6 +103,7 @@ interface BadgeInfo {
   kind: string;
   text: string;
   owner: string | null;
+  onTop: boolean;
 }
 
 interface TabStats {
@@ -137,7 +145,8 @@ async function visibleBadges(): Promise<BadgeInfo[]> {
         return b.left >= r.left && b.right <= r.right && b.top >= r.top && b.bottom <= r.bottom;
       });
       const kind = ['ai', 'clean', 'pending', 'failed'].find((k) => badge.classList.contains(k)) ?? '';
-      return { kind, text: badge.textContent ?? '', owner: owner?.id ?? null };
+      const onTop = document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2) === layer;
+      return { kind, text: badge.textContent ?? '', owner: owner?.id ?? null, onTop };
     });
   });
 }
@@ -175,9 +184,21 @@ describe('content script', () => {
   }, 60_000);
 
   it('checks images that scroll into view', async () => {
-    await driver.executeScript(() => document.getElementById('far')!.scrollIntoView());
+    await driver.executeScript(() => document.getElementById('far')!.scrollIntoView({ block: 'center' }));
     const badges = await waitForBadges({ far: ['ai'] });
     expect(kindOf(badges, 'far')).toBe('ai');
+  }, 60_000);
+
+  it('keeps badges above positioned content, inside scroll containers and below sticky bars', async () => {
+    await driver.executeScript(() => document.getElementById('raised')!.scrollIntoView({ block: 'center' }));
+    const badges = await waitForBadges({ raised: ['ai'], shown: ['ai'] });
+    expect(badges.find((b) => b.owner === 'raised')).toMatchObject({ kind: 'ai', onTop: true });
+    expect(kindOf(badges, 'shown')).toBe('ai');
+    expect(kindOf(badges, 'clipped')).toBeUndefined();
+
+    await driver.executeScript(() => scrollBy(0, document.getElementById('raised')!.getBoundingClientRect().top - 20));
+    await driver.sleep(500);
+    expect(kindOf(await visibleBadges(), 'raised')).toBeUndefined();
   }, 60_000);
 });
 
@@ -201,11 +222,11 @@ describe('background', () => {
           done({ ...total, badgeText });
         })();
       });
-      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 5;
+      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 8;
     }, 20_000).catch(() => {});
     expect(stats).toMatchObject({ pending: 0, failed: 0 });
-    expect(stats!.flagged).toBeGreaterThanOrEqual(4);
-    expect(stats!.flagged + stats!.clean).toBe(5);
+    expect(stats!.flagged).toBeGreaterThanOrEqual(7);
+    expect(stats!.flagged + stats!.clean).toBe(8);
     expect(stats!.badgeText).toBe(String(stats!.flagged));
     await driver.close();
     await driver.switchTo().window(pageHandle);
