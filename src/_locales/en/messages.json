@@ -44,7 +44,7 @@
   "detailsWatermark": { "message": "SynthID watermark" },
   "detailsWatermarkFound": { "message": "Found ($1)", "placeholders": { "1": { "content": "$1" } } },
   "detailsNoWatermark": { "message": "Not found" },
-  "detailsModels": { "message": "Models" },
+  "detailsModels": { "message": "AI score" },
   "detailsModelNote": { "message": "Threshold $1 · weights $2", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
   "detailsSkipped": { "message": "Skipped" },
   "detailsOff": { "message": "Disabled" },
