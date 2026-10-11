@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { Builder, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import model from '../../model.json';
 import synthIdConfig from '../../synthid.json';
 import { fft } from '../../src/background/synthid';
 
@@ -233,6 +234,32 @@ async function waitForBadges(expected: Record<string, string[]>): Promise<BadgeI
 
 const kindOf = (badges: BadgeInfo[], owner: string) => badges.find((b) => b.owner === owner)?.kind;
 
+interface DetailsInfo {
+  rows: string[];
+  models: string[];
+}
+
+async function badgeCenter(owner: string): Promise<{ x: number; y: number }> {
+  return driver.executeScript<{ x: number; y: number }>((id: string) => {
+    const r = document.getElementById(id)!.getBoundingClientRect();
+    const badge = [...document.querySelector('ai-watermark-layer')!.shadowRoot!.querySelectorAll<HTMLElement>('.badge:not([hidden])')]
+      .map((b) => b.getBoundingClientRect())
+      .find((b) => b.left >= r.left && b.right <= r.right && b.top >= r.top && b.bottom <= r.bottom)!;
+    return { x: Math.round((badge.left + badge.right) / 2), y: Math.round((badge.top + badge.bottom) / 2) };
+  }, owner);
+}
+
+async function openDetails(): Promise<DetailsInfo | null> {
+  return driver.executeScript<DetailsInfo | null>(() => {
+    const details = document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelector<HTMLElement>('.details');
+    if (!details || details.hidden) return null;
+    return {
+      rows: [...details.querySelectorAll('.check')].map((row) => row.classList[1]),
+      models: [...details.querySelectorAll('.models > .name')].map((name) => name.textContent ?? ''),
+    };
+  });
+}
+
 describe('content script', () => {
   it('marks images with AI metadata, including CSS backgrounds and late additions', async () => {
     await driver.get(`${origin}/`);
@@ -243,6 +270,25 @@ describe('content script', () => {
     expect(badges.find((b) => b.owner === 'meta')?.text).toMatch(/^AI/);
     expect(['ai', 'clean']).toContain(kindOf(badges, 'plain'));
     expect(kindOf(badges, 'small')).toBeUndefined();
+  }, 60_000);
+
+  it('shows the result of every check while a badge is hovered and hides the badge on click', async () => {
+    await driver.actions().move(await badgeCenter('plain')).perform();
+    const plain = await openDetails();
+    expect(plain?.rows.slice(0, 2)).toEqual(['clear', 'clear']);
+    expect(['hit', 'clear']).toContain(plain?.rows[2]);
+    expect(plain?.models).toEqual(model.models.map((m) => m.label));
+
+    await driver.actions().move(await badgeCenter('meta')).perform();
+    expect(await openDetails()).toEqual({ rows: ['hit', 'off', 'off'], models: [] });
+
+    await driver.actions().move({ x: 5, y: 700 }).perform();
+    await driver.sleep(400);
+    expect(await openDetails()).toBeNull();
+
+    await driver.actions().move(await badgeCenter('meta')).click().perform();
+    expect(await openDetails()).toBeNull();
+    expect(kindOf(await visibleBadges(), 'meta')).toBeUndefined();
   }, 60_000);
 
   it('checks images that scroll into view', async () => {
@@ -309,17 +355,18 @@ describe('background', () => {
     await openExtensionPage('options.html');
     await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
     const verdict = await classify('/plain.jpg');
-    expect(verdict).toMatchObject({ ok: true, source: 'model' });
+    expect(verdict).toMatchObject({ ok: true, source: 'model', metadata: 'clear', watermark: 'clear' });
+    expect(verdict.models).toHaveLength(model.models.length);
     expect(verdict.score).toBeGreaterThanOrEqual(0);
     expect(verdict.score).toBeLessThanOrEqual(1);
   }, 120_000);
 
   it('finds the SynthID pattern in the pixels of a rescaled image', async () => {
-    expect(await classify('/synthid.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'google' });
+    expect(await classify('/synthid.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'google', metadata: 'clear' });
   }, 60_000);
 
   it("tells OpenAI's SynthID pattern apart from Google's", async () => {
-    expect(await classify('/synthid-openai.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'openai' });
+    expect(await classify('/synthid-openai.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'openai', metadata: 'clear' });
   }, 60_000);
 
   it('reads a SynthID declaration from the C2PA manifest', async () => {

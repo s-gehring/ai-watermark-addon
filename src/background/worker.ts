@@ -62,18 +62,20 @@ async function findSynthId(image: PixelImage): Promise<SynthIdProvider | null> {
   }
 }
 
-async function score(bytes: Uint8Array, type: string, checkWatermark: boolean): Promise<Verdict> {
+async function score(bytes: Uint8Array, type: string, checks: Checks): Promise<Verdict> {
   let image;
   try {
     image = await decodeImage(new Blob([bytes as BlobPart], { type }));
   } catch {
     return { ok: false, error: 'decode' };
   }
-  const provider = checkWatermark ? await findSynthId(image) : null;
-  if (provider) return { ok: true, score: 1, source: 'synthid', provider };
+  const metadata = checks.checkMetadata ? 'clear' : 'off';
+  const provider = checks.checkWatermark ? await findSynthId(image) : null;
+  if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   try {
-    return { ok: true, score: await scoreImage(image), source: 'model' };
+    const watermark = checks.checkWatermark ? 'clear' : 'off';
+    return { ok: true, ...(await scoreImage(image)), source: 'model', metadata, watermark };
   } catch (error) {
     console.error('[ai-watermark] inference failed', error);
     return { ok: false, error: 'model' };
@@ -85,6 +87,6 @@ scope.onmessage = ({ data }) => {
   const reason = data.checkMetadata ? detectAiMetadata(bytes) : null;
   const verdict: Promise<Verdict> = reason
     ? Promise.resolve({ ok: true, score: 1, source: 'metadata', reason })
-    : queue.run(() => score(bytes, data.type, data.checkWatermark));
+    : queue.run(() => score(bytes, data.type, data));
   void verdict.then((v) => scope.postMessage({ id: data.id, verdict: v }));
 };

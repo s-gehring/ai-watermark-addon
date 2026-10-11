@@ -21,3 +21,8 @@ export function aiLogit(logits: ArrayLike<number>, spec: OutputSpec, id2label: R
 export function calibratedProbability(logits: number[], calibration: Calibration): number {
   return sigmoid(logits.reduce((sum, z, i) => sum + calibration.weights[i] * z, calibration.bias));
 }
+
+export function modelProbabilities(logits: number[], calibration: Calibration): number[] {
+  const total = calibration.weights.reduce((sum, w) => sum + w, 0);
+  return logits.map((z) => sigmoid(calibration.bias + total * z));
+}

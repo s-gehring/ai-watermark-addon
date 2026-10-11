@@ -2,6 +2,7 @@
   "models": [
     {
       "name": "CommunityForensics-DeepfakeDet-ViT",
+      "label": "CommunityForensics ViT",
       "repo": "buildborderless/CommunityForensics-DeepfakeDet-ViT",
       "revision": "ac6ee457bea904a373065754107451793b56db00",
       "license": "MIT",
@@ -21,6 +22,7 @@
     },
     {
       "name": "ai-vs-human-SigLIP-ONNX",
+      "label": "SigLIP AI vs. Human",
       "repo": "neilxxx/ai-vs-human-SigLIP-ONNX",
       "revision": "dd89749ee94a9e78ef6d80c7c856e0d8d1f1c46c",
       "license": "Apache-2.0",
