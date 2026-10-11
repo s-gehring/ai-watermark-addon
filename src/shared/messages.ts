@@ -10,11 +10,15 @@ export type MetadataReason =
 
 export type SynthIdProvider = 'google' | 'openai';
 
+export type CheckStatus = 'clear' | 'off';
+
+export type VerdictError = 'fetch' | 'decode' | 'model' | 'unsupported';
+
 export type Verdict =
-  | { ok: true; score: number; source: 'model' }
+  | { ok: true; score: number; source: 'model'; models: number[]; metadata: CheckStatus; watermark: CheckStatus }
   | { ok: true; score: 1; source: 'metadata'; reason: MetadataReason }
-  | { ok: true; score: 1; source: 'synthid'; provider: SynthIdProvider }
-  | { ok: false; error: 'fetch' | 'decode' | 'model' | 'unsupported' };
+  | { ok: true; score: 1; source: 'synthid'; provider: SynthIdProvider; metadata: CheckStatus }
+  | { ok: false; error: VerdictError };
 
 export interface FrameStats {
   flagged: number;

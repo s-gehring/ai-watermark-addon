@@ -1,7 +1,7 @@
 import { AutoModelForImageClassification, Tensor, env, type PreTrainedModel } from '@huggingface/transformers';
 import config from '../../model.json';
 import { inputShape, toModelInput, type InputSpec, type PixelImage } from './preprocess';
-import { aiLogit, calibratedProbability, type OutputSpec } from './score';
+import { aiLogit, calibratedProbability, modelProbabilities, type OutputSpec } from './score';
 
 let loading: Promise<PreTrainedModel[]> | null = null;
 
@@ -49,7 +49,7 @@ export async function decodeImage(blob: Blob): Promise<PixelImage> {
   }
 }
 
-export async function scoreImage(image: PixelImage): Promise<number> {
+export async function scoreImage(image: PixelImage): Promise<{ score: number; models: number[] }> {
   const classifiers = await load();
   const logits: number[] = [];
   for (const [i, model] of config.models.entries()) {
@@ -60,5 +60,5 @@ export async function scoreImage(image: PixelImage): Promise<number> {
     const id2label = (classifiers[i].config as { id2label?: Record<string, string> }).id2label;
     logits.push(aiLogit(output.logits.data as Float32Array, model.output as OutputSpec, id2label));
   }
-  return calibratedProbability(logits, config.calibration);
+  return { score: calibratedProbability(logits, config.calibration), models: modelProbabilities(logits, config.calibration) };
 }

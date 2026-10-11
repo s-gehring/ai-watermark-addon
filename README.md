@@ -20,7 +20,7 @@ Prüft größere Bilder auf Webseiten auf AI-Generierung und markiert Treffer mi
    - [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT) (ViT-S, CVPR 2025, MIT-Lizenz, 23 MB), Vorverarbeitung: Bicubic-Resize auf 440 px, Center-Crop 384 px
    - [ai-vs-human-SigLIP-ONNX](https://huggingface.co/neilxxx/ai-vs-human-SigLIP-ONNX) (88 MB), laut `config.json` eine ONNX-Konvertierung von [Ateeqq/ai-vs-human-image-detector](https://huggingface.co/Ateeqq/ai-vs-human-image-detector) (SigLIP2, Apache-2.0), Vorverarbeitung: bilineares Resize auf 224 × 224 px
 
-   Beide Vorverarbeitungen sind in `src/background/preprocess.ts` nachgebaut und rechnen bitgenau wie Pillow in den Referenz-Pipelines der Modelle. Die Rohwerte werden gewichtet addiert und per Platt-Scaling kalibriert (`model.json`). Zusammen erkennen die Modelle unter Web-Bedingungen bei gleich vielen Fehlalarmen auf Fotos mehr AI-Bilder und markieren nur rund halb so viele Gemälde wie das erste Modell allein.
+   Beide Vorverarbeitungen sind in `src/background/preprocess.ts` nachgebaut und rechnen bitgenau wie Pillow in den Referenz-Pipelines der Modelle. Die Rohwerte werden gewichtet addiert und per Platt-Scaling kalibriert (`model.json`). Zusammen erkennen die Modelle unter Web-Bedingungen bei gleich vielen Fehlalarmen auf Fotos mehr AI-Bilder und markieren nur rund halb so viele Gemälde wie das erste Modell allein. Das Detail-Panel eines Symbols zeigt pro Modell den Wert, den das Ensemble hätte, wenn alle Modelle diesem einen zustimmten (gleiche Kalibrierung, nur dieser Rohwert). Der Gesamtwert ist das mit den Modellgewichten gewichtete Mittel dieser Werte in Log-Odds und liegt deshalb immer zwischen ihnen. Die rohen Modellausgaben selbst wären dafür ungeeignet: Bei echten Fotos liegen sie oft unter 0,1 %, auch wenn der kalibrierte Gesamtwert 30 % beträgt.
 
 Das Background-Script lädt das Bild selbst noch einmal (meist aus dem HTTP-Cache), damit auch Bilder fremder Domains ohne CORS-Freigabe geprüft werden können. Metadaten-Scan, Dekodierung und Inferenz laufen in einem Web Worker, damit Popup und Background-Script reaktionsfähig bleiben. Ergebnisse werden pro URL zwischengespeichert. Ein Bild braucht in Firefox ca. 1,5 s, je Modell etwa die Hälfte; Bilder werden nacheinander geprüft, sichtbare zuerst.
 
@@ -142,6 +142,7 @@ Jedes geprüfte Bild bekommt oben rechts ein Symbol:
 
 - Toolbar-Button: Zahl der AI-Bilder auf der Seite; solange noch geprüft wird, ist das Icon gedimmt und zeigt einen Fortschrittsbalken
 - Popup: Fortschritt („Prüfe Bilder: 12 von 30“), Zähler für unauffällige und nicht prüfbare Bilder, Addon global oder pro Seite an- und ausschalten
+- Mauszeiger auf einem Symbol: Ein Panel zeigt das Ergebnis jeder Prüfung (Metadaten, SynthID-Wasserzeichen und die Modelle mit Einzelwerten, Gesamtwert, Schwelle und Gewichtung)
 - Klick auf ein Symbol blendet es aus
 - Einstellungen (`about:addons` → AI Watermark → Einstellungen): Mindestgröße, Schwelle, Metadaten-Prüfung, SynthID-Prüfung der Pixel, CSS-Hintergründe, Prozentanzeige, Symbole für unauffällige Bilder und laufende Prüfungen, deaktivierte Seiten
 

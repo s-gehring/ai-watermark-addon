@@ -26,7 +26,8 @@ export class Scanner {
   }
 
   start(): void {
-    this.layer.setOptions({ showScore: this.settings.showScore, showChecked: this.settings.showChecked });
+    const { showScore, showChecked, threshold } = this.settings;
+    this.layer.setOptions({ showScore, showChecked, threshold });
     this.mo.observe(document.documentElement, {
       childList: true,
       subtree: true,
@@ -50,6 +51,9 @@ export class Scanner {
 
   restart(settings: Settings): void {
     this.stop();
+    if (settings.checkMetadata !== this.settings.checkMetadata || settings.checkWatermark !== this.settings.checkWatermark) {
+      this.verdicts.clear();
+    }
     this.settings = settings;
     this.checkedUrl = new WeakMap();
     this.start();
@@ -140,12 +144,12 @@ export class Scanner {
     this.layer.set(element, { kind: 'pending' });
     void this.verdictFor(url, element).then((verdict) => {
       if (this.checkedUrl.get(element) !== url) return;
-      if (verdict.ok && isFlagged(verdict, this.settings.threshold)) {
-        this.layer.set(element, { kind: 'ai', verdict });
-      } else if (verdict.ok && verdict.source === 'model') {
+      if (!verdict.ok) {
+        this.layer.set(element, { kind: 'failed', error: verdict.error });
+      } else if (verdict.source === 'model' && !isFlagged(verdict, this.settings.threshold)) {
         this.layer.set(element, { kind: 'clean', verdict });
       } else {
-        this.layer.set(element, { kind: 'failed' });
+        this.layer.set(element, { kind: 'ai', verdict });
       }
     });
   }

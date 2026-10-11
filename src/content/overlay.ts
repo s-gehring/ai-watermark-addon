@@ -1,6 +1,10 @@
-import { EMPTY_STATS, type FrameStats, type Verdict } from '../shared/messages';
+import model from '../../model.json';
+import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Verdict, type VerdictError } from '../shared/messages';
 
 const INSET = 6;
+const GAP = 6;
+const MARGIN = 8;
+const CLOSE_DELAY = 200;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const STYLE = `
@@ -29,17 +33,48 @@ const STYLE = `
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-color: #fff; opacity: 0.7; } }
+.details {
+  position: absolute; top: 0; left: 0;
+  box-sizing: border-box; width: 300px; max-width: calc(100vw - ${2 * MARGIN}px);
+  padding: 10px 12px; border-radius: 10px;
+  background: rgba(24, 24, 27, 0.96); color: #f4f4f5;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  font: 400 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: left; cursor: default; pointer-events: auto; user-select: text;
+}
+.details[hidden] { display: none; }
+.title { margin-bottom: 8px; font-size: 13px; font-weight: 700; }
+.checks { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.check { display: grid; grid-template-columns: 8px 1fr auto; column-gap: 8px; align-items: baseline; }
+.dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.hit .dot { background: #a78bfa; }
+.clear .dot { background: #4ade80; }
+.off .dot { background: #71717a; }
+.value { text-align: right; font-variant-numeric: tabular-nums; }
+.off .value, .note { color: #a1a1aa; }
+.check > .note, .models { grid-column: 2 / -1; }
+.models { display: grid; grid-template-columns: 1fr 48px auto; gap: 4px 8px; align-items: center; margin-top: 4px; }
+.models > .note { grid-column: 1 / -1; }
+.bar { position: relative; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.15); }
+.bar > span { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px; background: #e4e4e7; }
+.bar::after { content: ""; position: absolute; top: -2px; bottom: -2px; left: var(--threshold); width: 1px; background: #fbbf24; }
+.hint { margin-top: 10px; }
 `;
+
+type OkVerdict = Extract<Verdict, { ok: true }>;
+type ModelVerdict = Extract<Verdict, { ok: true; source: 'model' }>;
 
 export type BadgeState =
   | { kind: 'pending' }
-  | { kind: 'ai'; verdict: Extract<Verdict, { ok: true }> }
-  | { kind: 'clean'; verdict: Extract<Verdict, { ok: true; source: 'model' }> }
-  | { kind: 'failed' };
+  | { kind: 'ai'; verdict: OkVerdict }
+  | { kind: 'clean'; verdict: ModelVerdict }
+  | { kind: 'failed'; error: VerdictError };
 
 export interface DisplayOptions {
   showScore: boolean;
   showChecked: boolean;
+  threshold: number;
 }
 
 interface Box {
@@ -58,8 +93,11 @@ interface Badge {
 export class BadgeLayer {
   private readonly host = document.createElement('ai-watermark-layer');
   private readonly root: HTMLElement;
+  private readonly details: HTMLElement;
   private readonly badges = new Map<Element, Badge>();
-  private options: DisplayOptions = { showScore: true, showChecked: true };
+  private options: DisplayOptions = { showScore: true, showChecked: true, threshold: model.threshold };
+  private open: Element | null = null;
+  private closeTimer = 0;
   private frame = 0;
 
   constructor(private readonly onChange: () => void) {
@@ -68,7 +106,16 @@ export class BadgeLayer {
     style.textContent = STYLE;
     this.root = document.createElement('div');
     this.root.className = 'layer';
+    this.details = document.createElement('div');
+    this.details.className = 'details';
+    this.details.hidden = true;
+    this.details.addEventListener('pointerenter', () => clearTimeout(this.closeTimer));
+    this.details.addEventListener('pointerleave', () => this.scheduleClose());
+    this.root.append(this.details);
     shadow.append(style, this.root);
+    for (const type of ['click', 'pointerdown', 'mousedown']) {
+      this.root.addEventListener(type, (event) => event.stopPropagation());
+    }
 
     const schedule = () => this.scheduleUpdate();
     addEventListener('scroll', schedule, { capture: true, passive: true });
@@ -88,6 +135,7 @@ export class BadgeLayer {
   setOptions(options: DisplayOptions): void {
     this.options = options;
     for (const badge of this.badges.values()) render(badge, options);
+    this.renderDetails();
     this.scheduleUpdate();
   }
 
@@ -95,20 +143,24 @@ export class BadgeLayer {
     let badge = this.badges.get(element);
     if (!badge) {
       const node = document.createElement('div');
+      node.setAttribute('role', 'button');
       badge = { node, state, dismissed: false };
       const created = badge;
       node.addEventListener('click', (event) => {
         event.preventDefault();
-        event.stopPropagation();
+        this.close();
         created.dismissed = true;
         node.hidden = true;
       });
-      this.root.append(node);
+      node.addEventListener('pointerenter', () => this.show(element));
+      node.addEventListener('pointerleave', () => this.scheduleClose());
+      this.root.insertBefore(node, this.details);
       this.badges.set(element, badge);
     }
     badge.state = state;
     badge.dismissed = false;
     render(badge, this.options);
+    if (element === this.open) this.renderDetails();
     this.onChange();
     this.scheduleUpdate();
   }
@@ -116,6 +168,7 @@ export class BadgeLayer {
   remove(element: Element): void {
     const badge = this.badges.get(element);
     if (!badge) return;
+    if (element === this.open) this.close();
     badge.node.remove();
     this.badges.delete(element);
     this.onChange();
@@ -131,6 +184,46 @@ export class BadgeLayer {
       this.frame = 0;
       this.update();
     });
+  }
+
+  private show(element: Element): void {
+    clearTimeout(this.closeTimer);
+    const badge = this.badges.get(element);
+    if (!badge || this.open === element) return;
+    this.open = element;
+    this.renderDetails();
+    this.details.hidden = false;
+    this.placeDetails(badge.node);
+  }
+
+  private scheduleClose(): void {
+    clearTimeout(this.closeTimer);
+    this.closeTimer = window.setTimeout(() => this.close(), CLOSE_DELAY);
+  }
+
+  private close(): void {
+    clearTimeout(this.closeTimer);
+    this.open = null;
+    this.details.hidden = true;
+  }
+
+  private renderDetails(): void {
+    const badge = this.open && this.badges.get(this.open);
+    if (!badge) return;
+    const hint = text('div', 'note hint', browser.i18n.getMessage('tooltipDismiss'));
+    this.details.replaceChildren(...detailsContent(badge.state, this.options.threshold), hint);
+  }
+
+  private placeDetails(anchor: HTMLElement): void {
+    const viewportWidth = document.documentElement.clientWidth || innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || innerHeight;
+    const badge = anchor.getBoundingClientRect();
+    const width = this.details.offsetWidth;
+    const height = this.details.offsetHeight;
+    const x = Math.min(Math.max(badge.right - width, MARGIN), viewportWidth - width - MARGIN);
+    const below = badge.bottom + GAP;
+    const y = below + height <= viewportHeight - MARGIN ? below : Math.max(badge.top - GAP - height, MARGIN);
+    this.details.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
   }
 
   private update(): void {
@@ -157,6 +250,9 @@ export class BadgeLayer {
       badge.node.hidden = !visible;
       if (visible) badge.node.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     }
+    const open = this.open && this.badges.get(this.open);
+    if (open && open.node.hidden) this.close();
+    else if (open) this.placeDetails(open.node);
   }
 
   private isCovered(element: Element, x: number, y: number): boolean {
@@ -214,7 +310,6 @@ function render(badge: Badge, options: DisplayOptions): void {
   const { node, state } = badge;
   node.className = `badge ${state.kind}`;
   node.hidden = badge.dismissed || !isDisplayed(state, options);
-  node.title = tooltip(state);
   switch (state.kind) {
     case 'ai':
       node.replaceChildren(aiLabel(state.verdict, options.showScore));
@@ -250,7 +345,7 @@ function checkMark(): SVGElement {
   return svg;
 }
 
-function aiLabel(verdict: Extract<Verdict, { ok: true }>, showScore: boolean): DocumentFragment {
+function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
   const fragment = document.createDocumentFragment();
   fragment.append('AI');
   let detail: string | null = null;
@@ -266,22 +361,94 @@ function aiLabel(verdict: Extract<Verdict, { ok: true }>, showScore: boolean): D
   return fragment;
 }
 
-function tooltip(state: BadgeState): string {
-  const hint = browser.i18n.getMessage('tooltipDismiss');
+function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
+  return browser.i18n.getMessage(`reason_${verdict.reason.replace('-', '_')}`);
+}
+
+function detailsContent(state: BadgeState, threshold: number): HTMLElement[] {
   switch (state.kind) {
     case 'pending':
-      return browser.i18n.getMessage('tooltipPending');
+      return [text('div', 'title', browser.i18n.getMessage('tooltipPending'))];
     case 'failed':
-      return `${browser.i18n.getMessage('tooltipFailed')}\n${hint}`;
+      return [
+        text('div', 'title', browser.i18n.getMessage('detailsFailed')),
+        text('div', 'note', browser.i18n.getMessage(`error_${state.error}`)),
+      ];
     case 'clean':
-      return `${browser.i18n.getMessage('tooltipClean', [String(Math.round(state.verdict.score * 100))])}\n${hint}`;
     case 'ai':
-      if (state.verdict.source === 'synthid') {
-        return `${browser.i18n.getMessage(state.verdict.provider === 'openai' ? 'tooltipSynthIdOpenai' : 'tooltipSynthIdGoogle')}\n${hint}`;
-      }
-      if (state.verdict.source === 'metadata') {
-        return `${browser.i18n.getMessage(`reason_${state.verdict.reason.replace('-', '_')}`)}\n${hint}`;
-      }
-      return `${browser.i18n.getMessage('tooltipModel', [String(Math.round(state.verdict.score * 100))])}\n${hint}`;
+      return [text('div', 'title', headline(state.verdict, threshold)), checkList(state.verdict, threshold)];
   }
+}
+
+function headline(verdict: OkVerdict, threshold: number): string {
+  if (verdict.source !== 'model') return browser.i18n.getMessage('detailsLabeledAi');
+  return browser.i18n.getMessage(isFlagged(verdict, threshold) ? 'detailsLikelyAi' : 'detailsClean');
+}
+
+function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
+  const message = (key: string, substitutions?: string[]) => browser.i18n.getMessage(key, substitutions);
+  const metadata =
+    verdict.source === 'metadata'
+      ? row(message('badgeMetadata'), 'hit', message('detailsFound'), text('div', 'note', reasonText(verdict)))
+      : statusRow(message('badgeMetadata'), verdict.metadata, message('detailsNoMetadata'));
+  const provider = verdict.source === 'synthid' && (verdict.provider === 'openai' ? 'OpenAI' : 'Google');
+  const watermark =
+    verdict.source === 'model'
+      ? statusRow(message('detailsWatermark'), verdict.watermark, message('detailsNoWatermark'))
+      : provider
+        ? row(message('detailsWatermark'), 'hit', message('detailsWatermarkFound', [provider]))
+        : row(message('detailsWatermark'), 'off', message('detailsSkipped'));
+  const models =
+    verdict.source === 'model'
+      ? row(
+          message('detailsModels'),
+          isFlagged(verdict, threshold) ? 'hit' : 'clear',
+          percent(verdict.score),
+          modelTable(verdict, threshold),
+        )
+      : row(message('detailsModels'), 'off', message('detailsSkipped'));
+  const list = text('ul', 'checks');
+  list.append(metadata, watermark, models);
+  return list;
+}
+
+function statusRow(name: string, status: CheckStatus, clearText: string): HTMLElement {
+  return status === 'clear' ? row(name, 'clear', clearText) : row(name, 'off', browser.i18n.getMessage('detailsOff'));
+}
+
+function row(name: string, status: 'hit' | 'clear' | 'off', value: string, extra?: HTMLElement): HTMLElement {
+  const item = text('li', `check ${status}`);
+  item.append(text('span', 'dot'), text('span', 'name', name), text('span', 'value', value));
+  if (extra) item.append(extra);
+  return item;
+}
+
+function modelTable(verdict: ModelVerdict, threshold: number): HTMLElement {
+  const table = text('div', 'models');
+  verdict.models.forEach((score, i) => {
+    const bar = text('span', 'bar');
+    bar.style.setProperty('--threshold', `${threshold * 100}%`);
+    const fill = text('span');
+    fill.style.width = `${score * 100}%`;
+    bar.append(fill);
+    table.append(text('span', 'name', model.models[i].label), bar, text('span', 'value', percent(score)));
+  });
+  const total = model.calibration.weights.reduce((sum, w) => sum + w, 0);
+  const weights = model.calibration.weights.map((w) => Math.round((w / total) * 100)).join(' : ');
+  table.append(text('div', 'note', browser.i18n.getMessage('detailsModelNote', [percent(threshold), weights])));
+  return table;
+}
+
+function text(tag: string, className = '', content = ''): HTMLElement {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (content) node.textContent = content;
+  return node;
+}
+
+let percentFormat: Intl.NumberFormat | null = null;
+
+function percent(value: number): string {
+  percentFormat ??= new Intl.NumberFormat(browser.i18n.getUILanguage(), { style: 'percent', maximumFractionDigits: 1 });
+  return percentFormat.format(value);
 }
