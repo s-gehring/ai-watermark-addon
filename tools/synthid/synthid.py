@@ -11,6 +11,8 @@ MIN_FREQUENCY = 4
 NYQUIST_MARGIN = 0.45
 GRID_PERIODS = (8, 16)
 GRID_TOLERANCE = 1.5
+ASPECT_TOLERANCE = 0.02
+TEMPLATE_DIR = Path("src") / "background" / "synthid-templates"
 YCBCR = np.array(
     [[0.299, 0.587, 0.114], [-0.168736, -0.331264, 0.5], [0.5, -0.418688, -0.081312]],
     np.float64,
@@ -78,7 +80,7 @@ def usable(height, width, size=SIZE):
     return rows & cols
 
 
-def build(paths, size=SIZE):
+def build(paths, size=SIZE, max_frequency=None, border=0):
     total, count = None, 0
     for path in paths:
         u = unit_spectrum(load_rgb(path), size)
@@ -86,15 +88,29 @@ def build(paths, size=SIZE):
         count += 1
     mean = total / count
     ky, kx = frequencies(size)
+    keep = (np.abs(ky) >= MIN_FREQUENCY) & (kx >= MIN_FREQUENCY)
+    if max_frequency is not None:
+        keep &= np.hypot(ky, kx) <= max_frequency
     weights = np.sqrt(np.maximum(np.abs(mean) ** 2 - 1 / count, 0))
-    weights *= ((np.abs(ky) >= MIN_FREQUENCY) & (kx >= MIN_FREQUENCY))[None]
-    return weights, np.angle(mean), count
+    phases = np.angle(mean)
+    if border:
+        weights, phases = without_border(weights, phases, border)
+    return weights * keep[None], phases, count
+
+
+def without_border(weights, phases, border):
+    size = weights.shape[1]
+    spatial = np.fft.irfft2(weights * np.exp(1j * phases), s=(size, size))
+    m = round(border * size)
+    spatial[:, :m] = spatial[:, -m:] = spatial[:, :, :m] = spatial[:, :, -m:] = 0
+    masked = np.fft.rfft2(spatial)
+    return np.abs(masked), np.angle(masked)
 
 
 def quantize(weights, phases):
     scale = float(weights.max()) / 255
     w = np.round(weights / scale).astype(np.uint8)
-    p = (np.round(phases / (2 * np.pi) * 256).astype(np.int64) % 256).astype(np.uint8)
+    p = np.where(w > 0, np.round(phases / (2 * np.pi) * 256).astype(np.int64) % 256, 0).astype(np.uint8)
     return w, p, scale
 
 
@@ -102,25 +118,37 @@ def dequantize(w, p, scale):
     return w.astype(np.float64) * scale, p.astype(np.float64) * (2 * np.pi / 256)
 
 
+def score_spectrum(u, height, width, weights, phases):
+    size = u.shape[1]
+    w = weights * usable(height, width, size)[None]
+    signal = (w * np.real(u * np.exp(-1j * phases))).sum()
+    energy = (w**2).sum()
+    return float(signal / np.sqrt(energy / 2)) if energy > 0 else 0.0
+
+
 def score(rgb, weights, phases, size=SIZE):
     height, width, _ = rgb.shape
     if min(height, width) < MIN_SIDE:
         return 0.0
-    w = weights * usable(height, width, size)[None]
-    u = unit_spectrum(rgb, size)
-    signal = (w * np.real(u * np.exp(-1j * phases))).sum()
-    energy = (w**2).sum()
-    return float(signal / np.sqrt(energy / 2)) if energy > 0 else 0.0
+    return score_spectrum(unit_spectrum(rgb, size), height, width, weights, phases)
+
+
+def fits(template, height, width):
+    output = template["meta"].get("outputSize")
+    return output is None or abs(np.log(width / height * output[1] / output[0])) <= ASPECT_TOLERANCE
 
 
 def save(path, w, p):
     Path(path).write_bytes(w.tobytes() + p.tobytes())
 
 
-def load(bin_path, meta_path):
-    meta = json.loads(Path(meta_path).read_text())
-    size = meta["size"]
-    raw = np.frombuffer(Path(bin_path).read_bytes(), np.uint8)
-    shape = (3, size, size // 2 + 1)
-    count = int(np.prod(shape))
-    return (*dequantize(raw[:count].reshape(shape), raw[count:].reshape(shape), meta["weightScale"]), meta)
+def load_templates(root):
+    templates = []
+    for meta in json.loads((Path(root) / "synthid.json").read_text())["templates"]:
+        size = meta["size"]
+        raw = np.frombuffer((Path(root) / TEMPLATE_DIR / meta["file"]).read_bytes(), np.uint8)
+        shape = (3, size, size // 2 + 1)
+        count = int(np.prod(shape))
+        weights, phases = dequantize(raw[:count].reshape(shape), raw[count:].reshape(shape), meta["weightScale"])
+        templates.append({"meta": meta, "weights": weights, "phases": phases})
+    return templates

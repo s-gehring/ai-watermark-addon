@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { fft, resampledPlanes, rfft2, synthIdScore, type SynthIdTemplate } from '../../src/background/synthid';
+import {
+  detectSynthId,
+  fft,
+  resampledPlanes,
+  rfft2,
+  synthIdScore,
+  type SynthIdDetector,
+  type SynthIdTemplate,
+} from '../../src/background/synthid';
 import type { PixelImage } from '../../src/background/preprocess';
+import type { SynthIdProvider } from '../../src/shared/messages';
 
 function patternedImage(width: number, height: number): PixelImage {
   const data = new Float64Array(width * height * 3);
@@ -111,5 +120,29 @@ describe('synthIdScore', () => {
 
   it('skips images that are too small to carry the pattern', () => {
     expect(synthIdScore(patternedImage(48, 300), arithmeticTemplate(64))).toBe(0);
+  });
+});
+
+describe('detectSynthId', () => {
+  const pattern = carrierImage(192, 128, 2, 0);
+  const detector = (provider: SynthIdProvider, size: number, aspect?: number): SynthIdDetector => ({
+    ...templateFrom(pattern, size),
+    provider,
+    threshold: 5,
+    aspect,
+  });
+
+  it('reports the provider of the first matching template', () => {
+    expect(detectSynthId(carrierImage(384, 256, 2, 40), [detector('openai', 64, 1.5), detector('google', 128)])).toBe('openai');
+  });
+
+  it('skips templates made for another aspect ratio', () => {
+    const portrait = carrierImage(256, 384, 2, 40);
+    expect(detectSynthId(portrait, [detector('openai', 64, 1.5)])).toBeNull();
+    expect(detectSynthId(portrait, [detector('openai', 64, 1.5), detector('google', 128)])).toBe('google');
+  });
+
+  it('finds nothing in images without the pattern', () => {
+    expect(detectSynthId(carrierImage(384, 256, 0, 40), [detector('openai', 64, 1.5), detector('google', 128)])).toBeNull();
   });
 });

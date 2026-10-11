@@ -31,10 +31,10 @@ async function photoLikeJpeg(): Promise<Buffer> {
   return sharp(pixels, { raw: { width, height, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
 }
 
-async function synthIdPng(): Promise<Buffer> {
-  const n = synthIdConfig.size;
+async function synthIdPng(file: string, width: number, height: number): Promise<Buffer> {
+  const n = synthIdConfig.templates.find((t) => t.file === file)!.size;
   const half = n / 2 + 1;
-  const template = readFileSync(new URL('../../src/background/synthid-template.bin', import.meta.url));
+  const template = readFileSync(new URL(`../../src/background/synthid-templates/${file}`, import.meta.url));
   const planes = [0, 1, 2].map((c) => {
     const re = new Float64Array(n * n);
     const im = new Float64Array(n * n);
@@ -71,7 +71,7 @@ async function synthIdPng(): Promise<Buffer> {
     pixels[i * 3 + 1] = Math.round(luma - 0.344136 * cb - 0.714136 * cr);
     pixels[i * 3 + 2] = Math.round(luma + 1.772 * cb);
   }
-  return sharp(pixels, { raw: { width: n, height: n, channels: 3 } }).resize(480, 360, { fit: 'fill' }).png().toBuffer();
+  return sharp(pixels, { raw: { width: n, height: n, channels: 3 } }).resize(width, height, { fit: 'fill' }).png().toBuffer();
 }
 
 function withC2paSynthId(png: Buffer): Buffer {
@@ -128,7 +128,8 @@ let driver: firefox.Driver;
 beforeAll(async () => {
   const plain = await photoLikeJpeg();
   const ai = withXmp(plain, XMP_AI);
-  const synthId = await synthIdPng();
+  const synthId = await synthIdPng('google.bin', 480, 360);
+  const synthIdOpenai = await synthIdPng('openai-1254x1254.bin', 600, 600);
   const synthIdC2pa = withC2paSynthId(await sharp(await photoLikeJpeg()).png().toBuffer());
   server = createServer((req, res) => {
     const path = new URL(req.url!, 'http://x').pathname;
@@ -136,6 +137,7 @@ beforeAll(async () => {
     else if (path === '/ai.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(ai);
     else if (path === '/plain.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
     else if (path === '/synthid.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthId);
+    else if (path === '/synthid-openai.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdOpenai);
     else if (path === '/synthid-c2pa.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdC2pa);
     else res.writeHead(404).end();
   });
@@ -313,7 +315,11 @@ describe('background', () => {
   }, 120_000);
 
   it('finds the SynthID pattern in the pixels of a rescaled image', async () => {
-    expect(await classify('/synthid.png')).toEqual({ ok: true, score: 1, source: 'synthid' });
+    expect(await classify('/synthid.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'google' });
+  }, 60_000);
+
+  it("tells OpenAI's SynthID pattern apart from Google's", async () => {
+    expect(await classify('/synthid-openai.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'openai' });
   }, 60_000);
 
   it('reads a SynthID declaration from the C2PA manifest', async () => {
