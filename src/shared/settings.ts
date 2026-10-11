@@ -5,6 +5,7 @@ export interface Settings {
   minSize: number;
   threshold: number;
   checkMetadata: boolean;
+  checkWatermark: boolean;
   includeBackgrounds: boolean;
   showScore: boolean;
   showChecked: boolean;
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   minSize: 200,
   threshold: model.threshold,
   checkMetadata: true,
+  checkWatermark: true,
   includeBackgrounds: true,
   showScore: true,
   showChecked: true,
@@ -28,7 +30,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 export function normalizeSettings(raw: unknown): Settings {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof Settings, unknown>>;
-  const bool = (key: 'enabled' | 'checkMetadata' | 'includeBackgrounds' | 'showScore' | 'showChecked') =>
+  const bool = (key: 'enabled' | 'checkMetadata' | 'checkWatermark' | 'includeBackgrounds' | 'showScore' | 'showChecked') =>
     typeof input[key] === 'boolean' ? (input[key] as boolean) : DEFAULT_SETTINGS[key];
   const num = (key: 'minSize' | 'threshold', min: number, max: number) => {
     const value = Number(input[key]);
@@ -42,6 +44,7 @@ export function normalizeSettings(raw: unknown): Settings {
     minSize: Math.round(num('minSize', 16, 4096)),
     threshold: num('threshold', 0.01, 0.99),
     checkMetadata: bool('checkMetadata'),
+    checkWatermark: bool('checkWatermark'),
     includeBackgrounds: bool('includeBackgrounds'),
     showScore: bool('showScore'),
     showChecked: bool('showChecked'),

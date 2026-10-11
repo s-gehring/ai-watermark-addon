@@ -1,4 +1,5 @@
 export type MetadataReason =
+  | 'synthid'
   | 'ai-generated'
   | 'ai-edited'
   | 'stable-diffusion'
@@ -9,6 +10,7 @@ export type MetadataReason =
 export type Verdict =
   | { ok: true; score: number; source: 'model' }
   | { ok: true; score: 1; source: 'metadata'; reason: MetadataReason }
+  | { ok: true; score: 1; source: 'synthid' }
   | { ok: false; error: 'fetch' | 'decode' | 'model' | 'unsupported' };
 
 export interface FrameStats {
@@ -31,7 +33,7 @@ export interface PageStatus {
 export const EMPTY_STATS: Readonly<FrameStats> = { flagged: 0, clean: 0, pending: 0, failed: 0 };
 
 export function isFlagged(verdict: Verdict, threshold: number): boolean {
-  return verdict.ok && (verdict.source === 'metadata' || verdict.score >= threshold);
+  return verdict.ok && (verdict.source !== 'model' || verdict.score >= threshold);
 }
 
 export function sumStats(all: Iterable<FrameStats>): FrameStats {

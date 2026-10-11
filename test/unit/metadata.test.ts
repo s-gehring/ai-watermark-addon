@@ -16,6 +16,15 @@ describe('detectAiMetadata', () => {
     expect(detectAiMetadata(jpegWith(`${IPTC}compositeWithTrainedAlgorithmicMedia`))).toBe('ai-edited');
   });
 
+  it('reports SynthID when a C2PA action declares the watermark', () => {
+    const action = `factionkc2pa.editedkdescriptionx(Applied imperceptible SynthID watermark.qdigitalSourceTypexF${IPTC}trainedAlgorithmicMedia`;
+    expect(detectAiMetadata(pngWith('caBX', `jumdc2pa${action}`))).toBe('synthid');
+  });
+
+  it('does not treat captions that mention SynthID as a watermark declaration', () => {
+    expect(detectAiMetadata(jpegWith('<dc:description>How SynthID watermarks work</dc:description>'))).toBeNull();
+  });
+
   it('ignores camera captures and images without metadata', () => {
     expect(detectAiMetadata(jpegWith(`${IPTC}digitalCapture`))).toBeNull();
     expect(detectAiMetadata(latin1('\xff\xd8\xff\xdb\x00\x43plain\xff\xd9'))).toBeNull();

@@ -6,6 +6,7 @@ const TAIL_BYTES = 1024 * 1024;
 const EXIF_REGION = 512 * 1024;
 
 const PATTERNS: ReadonlyArray<[MetadataReason, RegExp]> = [
+  ['synthid', /c2pa\.\w+[\s\S]{0,80}?\bSynthID\b/],
   ['ai-edited', /compositeWithTrainedAlgorithmicMedia/],
   ['ai-generated', /\btrainedAlgorithmicMedia/],
   ['stable-diffusion', /parameters\x00[\s\S]{0,16384}?Steps: \d+,\s*Sampler: /],
