@@ -11,8 +11,8 @@
     "mean": [0.48145466, 0.4578275, 0.40821073],
     "std": [0.26862954, 0.26130258, 0.27577711]
   },
-  "calibration": { "scale": 0.5621, "bias": 3.8641 },
-  "threshold": 0.8,
+  "calibration": { "scale": 0.4452, "bias": 3.216 },
+  "threshold": 0.94,
   "files": {
     "config.json": null,
     "onnx/model_quantized.onnx": "968f113f1107d58bfc73444b6e87020e2d541780ad43b7a1ac3e3b18b86c2bbd"

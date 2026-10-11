@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   disabledHosts: [],
 };
 
+const CALIBRATION = JSON.stringify(model.calibration);
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export function normalizeSettings(raw: unknown): Settings {
@@ -55,19 +57,28 @@ export function isActiveOn(settings: Settings, hostname: string): boolean {
   return settings.enabled && !settings.disabledHosts.includes(normalizeHost(hostname));
 }
 
+export function toStorage(settings: Settings): Record<string, unknown> {
+  return { ...settings, calibration: CALIBRATION };
+}
+
+export function fromStorage(stored: unknown): Settings {
+  const raw = (stored && typeof stored === 'object' ? stored : {}) as Record<string, unknown>;
+  return normalizeSettings(raw.calibration === CALIBRATION ? raw : { ...raw, threshold: undefined });
+}
+
 export async function loadSettings(): Promise<Settings> {
   const { settings } = await browser.storage.local.get('settings');
-  return normalizeSettings(settings);
+  return fromStorage(settings);
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
   const next = normalizeSettings({ ...(await loadSettings()), ...patch });
-  await browser.storage.local.set({ settings: next });
+  await browser.storage.local.set({ settings: toStorage(next) });
   return next;
 }
 
 export function onSettingsChanged(listener: (settings: Settings) => void): void {
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.settings) listener(normalizeSettings(changes.settings.newValue));
+    if (area === 'local' && changes.settings) listener(fromStorage(changes.settings.newValue));
   });
 }
