@@ -1,34 +1,39 @@
-import { AutoModelForImageClassification, Tensor, env, type PreTrainedModel } from '@huggingface/transformers';
+import * as ort from 'onnxruntime-web/wasm';
 import config from '../../model.json';
 import { inputShape, toModelInput, type InputSpec, type PixelImage } from './preprocess';
 import { aiLogit, calibratedProbability, modelProbabilities, type OutputSpec } from './score';
 
-let loading: Promise<PreTrainedModel[]> | null = null;
+type ModelEntry = (typeof config.models)[number];
+
+interface Classifier {
+  session: ort.InferenceSession;
+  id2label?: Record<string, string>;
+}
+
+let loading: Promise<Classifier[]> | null = null;
 
 const assetUrl = (path: string) => new URL(path, self.location.href).href;
 
-function configureRuntime(): void {
-  env.allowRemoteModels = false;
-  env.allowLocalModels = true;
-  env.localModelPath = assetUrl('models/');
-  env.useBrowserCache = false;
-  env.useWasmCache = false;
-  const wasm = env.backends.onnx.wasm!;
-  wasm.wasmPaths = {
-    mjs: assetUrl('ort/ort-wasm-simd-threaded.asyncify.mjs'),
-    wasm: assetUrl('ort/ort-wasm-simd-threaded.asyncify.wasm'),
-  };
-  wasm.numThreads = 1;
+const onnxFile = (model: ModelEntry) => Object.keys(model.files).find((file) => file.endsWith('.onnx'))!;
+
+async function loadClassifier(model: ModelEntry): Promise<Classifier> {
+  const session = await ort.InferenceSession.create(assetUrl(`models/${model.name}/${onnxFile(model)}`), {
+    executionProviders: ['wasm'],
+  });
+  if (!('config.json' in model.files)) return { session };
+  const res = await fetch(assetUrl(`models/${model.name}/config.json`));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return { session, id2label: (await res.json()).id2label };
 }
 
-function load(): Promise<PreTrainedModel[]> {
+function load(): Promise<Classifier[]> {
   loading ??= (async () => {
-    configureRuntime();
-    return Promise.all(
-      config.models.map((model) =>
-        AutoModelForImageClassification.from_pretrained(model.name, { dtype: model.dtype as 'q8', device: 'wasm' }),
-      ),
-    );
+    ort.env.wasm.wasmPaths = {
+      mjs: assetUrl('ort/ort-wasm-simd-threaded.mjs'),
+      wasm: assetUrl('ort/ort-wasm-simd-threaded.wasm'),
+    };
+    ort.env.wasm.numThreads = 1;
+    return Promise.all(config.models.map(loadClassifier));
   })().catch((error) => {
     loading = null;
     throw error;
@@ -55,10 +60,10 @@ export async function scoreImage(image: PixelImage): Promise<{ score: number; mo
   for (const [i, model] of config.models.entries()) {
     const spec = model.input as InputSpec;
     const [width, height] = inputShape(spec);
-    const pixels = toModelInput(image, spec);
-    const output = await classifiers[i]({ pixel_values: new Tensor('float32', pixels, [1, 3, height, width]) });
-    const id2label = (classifiers[i].config as { id2label?: Record<string, string> }).id2label;
-    logits.push(aiLogit(output.logits.data as Float32Array, model.output as OutputSpec, id2label));
+    const { session, id2label } = classifiers[i];
+    const input = new ort.Tensor('float32', toModelInput(image, spec), [1, 3, height, width]);
+    const output = await session.run({ [session.inputNames[0]]: input });
+    logits.push(aiLogit(output[session.outputNames[0]].data as Float32Array, model.output as OutputSpec, id2label));
   }
   return { score: calibratedProbability(logits, config.calibration), models: modelProbabilities(logits, config.calibration) };
 }

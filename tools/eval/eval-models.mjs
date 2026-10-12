@@ -1,13 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
+import * as ort from 'onnxruntime-node';
 import {
   AutoModelForImageClassification,
   AutoProcessor,
   RawImage,
-  Tensor,
   env,
 } from '@huggingface/transformers';
 import { inputShape, toModelInput } from '../../src/background/preprocess.ts';
@@ -30,15 +30,49 @@ const config = JSON.parse(await readFile(join(root, 'model.json'), 'utf8'));
 env.cacheDir = join(CACHE, 'models');
 
 const BUNDLED = config.models.map((m) => ({ ...m, id: m.name, local: true }));
+const COMMUNITY_FORENSICS_INPUT = {
+  shortestEdge: 440,
+  crop: 384,
+  resample: 'bicubic',
+  mean: [0.48145466, 0.4578275, 0.40821073],
+  std: [0.26862954, 0.26130258, 0.27577711],
+};
 const HUB = [
   { id: 'buildborderless/CommunityForensics-DeepfakeDet-ViT', dtype: 'fp32', output: 'sigmoid' },
   { id: 'onnx-community/SMOGY-Ai-images-detector-ONNX', dtype: 'q8', output: { softmaxLabels: ['artificial'] } },
   { id: 'prithivMLmods/AI-vs-Deepfake-vs-Real-ONNX', dtype: 'q8', output: { softmaxLabels: ['Artificial', 'Deepfake'] } },
+  { id: 'onnx-community/ai-image-detection-ONNX', dtype: 'q8', output: { softmaxLabels: ['FAKE'] } },
+  { id: 'onnx-community/ai-image-detect-distilled-ONNX', dtype: 'q8', output: { softmaxLabels: ['fake'] } },
+  {
+    id: 'angelhd25/ull-ai-image-detector',
+    revision: '88ae192e4001bcbbf6f02de75e033171e227b5b2',
+    file: 'commfor384_web_v13_fp32.onnx',
+    dtype: 'fp32',
+    output: 'sigmoid',
+    input: COMMUNITY_FORENSICS_INPUT,
+  },
 ];
+const PRECOMPUTED = (await readdir(join(SCORES, 'precomputed')).catch(() => []))
+  .filter((file) => file.endsWith('.json'))
+  .map((file) => ({ id: `precomputed/${file.slice(0, -'.json'.length)}`, dtype: 'precomputed', precomputed: true }));
+const args = process.argv.slice(2);
+const only = args.find((a) => !a.startsWith('--')) ?? 'bundled';
+const calibrate = args.includes('--calibrate');
+const perGenerator = args.includes('--per-generator');
+const membersArg = args.find((a) => a.startsWith('--members='))?.slice('--members='.length);
+
+function findMember(id) {
+  const member = [...BUNDLED, ...HUB, ...PRECOMPUTED].find((m) => m.id === id);
+  if (!member) throw new Error(`unknown model ${id}`);
+  return member;
+}
+
 const CANDIDATES = [
   { id: 'bundled', label: `bundled: ${BUNDLED.map((m) => `${m.name} [${m.dtype}]`).join(' + ')}`, members: BUNDLED, config },
   ...(BUNDLED.length > 1 ? BUNDLED.map((m) => ({ id: `bundled/${m.name}`, label: `${m.name} [${m.dtype}] alone`, members: [m] })) : []),
   ...HUB.map((h) => ({ id: h.id, label: `${h.id} [${h.dtype}]`, members: [h] })),
+  ...HUB.map((h) => ({ id: `bundled+${h.id}`, label: `bundled + ${h.id} [${h.dtype}]`, members: [...BUNDLED, h] })),
+  ...(membersArg ? [{ id: 'members', label: membersArg.replaceAll(',', ' + '), members: membersArg.split(',').map(findMember) }] : []),
 ];
 
 const CONDITIONS = {
@@ -50,11 +84,6 @@ const CALIBRATION_CONDITIONS = ['web1280', 'web800'];
 const PHOTO_GROUPS = ['core', 'reddit', 'coco'];
 const TARGET_FPR = 0.01;
 const ART_LIMIT = 0.05;
-
-const args = process.argv.slice(2);
-const only = args.find((a) => !a.startsWith('--')) ?? 'bundled';
-const calibrate = args.includes('--calibrate');
-const perGenerator = args.includes('--per-generator');
 
 async function listSamples() {
   const out = [];
@@ -88,19 +117,27 @@ async function loadPixels(path, condition) {
   return { width: info.width, height: info.height, channels: 3, data };
 }
 
-async function localScorer(m) {
-  env.allowRemoteModels = false;
-  env.localModelPath = join(root, 'vendor', 'models') + '/';
-  const model = await AutoModelForImageClassification.from_pretrained(m.name, { dtype: m.dtype });
+async function sessionScorer(path, m, id2label) {
+  const session = await ort.InferenceSession.create(path, {
+    intraOpNumThreads: Number(process.env.EVAL_THREADS) || 0,
+    extra: { session: { intra_op: { allow_spinning: '0' } } },
+  });
   const [width, height] = inputShape(m.input);
   return {
-    model,
+    model: { dispose: () => session.release() },
     async logit(image) {
-      const pixels = toModelInput(image, m.input);
-      const { logits } = await model({ pixel_values: new Tensor('float32', pixels, [1, 3, height, width]) });
-      return aiLogit(logits.data, m.output, model.config.id2label);
+      const input = new ort.Tensor('float32', toModelInput(image, m.input), [1, 3, height, width]);
+      const output = await session.run({ [session.inputNames[0]]: input });
+      return aiLogit(output[session.outputNames[0]].data, m.output, id2label);
     },
   };
+}
+
+async function localScorer(m) {
+  const dir = join(root, 'vendor', 'models', m.name);
+  const files = Object.keys(m.files);
+  const modelConfig = files.includes('config.json') ? JSON.parse(await readFile(join(dir, 'config.json'), 'utf8')) : {};
+  return sessionScorer(join(dir, files.find((file) => file.endsWith('.onnx'))), m, modelConfig.id2label);
 }
 
 async function hubScorer(m) {
@@ -116,8 +153,22 @@ async function hubScorer(m) {
   };
 }
 
+async function onnxScorer(m) {
+  const path = join(CACHE, 'models', m.id, m.revision, m.file);
+  if (!(await stat(path).then(() => true, () => false))) {
+    const res = await fetch(`https://huggingface.co/${m.id}/resolve/${m.revision}/${m.file}`);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${m.id}/${m.file}`);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, Buffer.from(await res.arrayBuffer()));
+  }
+  return sessionScorer(path, m);
+}
+
 function cacheName(m) {
-  const identity = m.local ? { repo: m.repo, revision: m.revision, dtype: m.dtype, input: m.input, output: m.output } : m;
+  if (m.precomputed) return `${m.id}.json`;
+  const identity = m.local
+    ? { repo: m.repo, revision: m.revision, dtype: m.dtype, input: m.input, output: m.output, ...(m.repo ? {} : { files: m.files }) }
+    : m;
   const hash = createHash('sha1').update(JSON.stringify(identity)).digest('hex').slice(0, 10);
   return `${m.id.replace(/\W+/g, '_')}-${hash}.json`;
 }
@@ -127,7 +178,8 @@ async function scoreMember(m, samples) {
   const cached = JSON.parse(await readFile(file, 'utf8').catch(() => '{}'));
   const missing = samples.flatMap((s) => Object.keys(CONDITIONS).filter((k) => cached[`${s.key}|${k}`] === undefined).map((k) => [s, k]));
   if (!missing.length) return { cached, ms: null };
-  const scorer = m.local ? await localScorer(m) : await hubScorer(m);
+  if (m.precomputed) throw new Error(`${m.id} lacks ${missing.length} scores`);
+  const scorer = m.local ? await localScorer(m) : m.file ? await onnxScorer(m) : await hubScorer(m);
   const t0 = performance.now();
   let done = 0;
   for (const [s, k] of missing) {
@@ -259,19 +311,32 @@ function fitEnsemble(calibrationSet) {
   const k = calibrationSet[0].zs.length;
   const withoutArt = calibrationSet.filter((s) => s.group !== 'art');
   if (k === 1) return fitLogistic(withoutArt);
-  if (k > 2) throw new Error('weight search supports at most two models');
-  let best = null;
-  for (let step = 0; step <= 60; step++) {
-    const ratio = step / 20;
-    const combined = (s) => s.zs[0] + ratio * s.zs[1];
+  const combine = (ratios) => (s) => s.zs.reduce((sum, z, i) => sum + ratios[i] * z, 0);
+  const detected = (ratios) => {
+    const combined = combine(ratios);
     const threshold = rankThreshold(withoutArt.filter((s) => !s.fake).map(combined), TARGET_FPR);
     const share = (rows) => rows.filter((s) => combined(s) > threshold).length / rows.length;
-    const detected = share(calibrationSet.filter((s) => s.fake));
-    if (share(calibrationSet.filter((s) => s.group === 'art')) <= ART_LIMIT && (!best || detected > best.detected)) best = { ratio, detected };
+    return share(calibrationSet.filter((s) => s.group === 'art')) <= ART_LIMIT ? share(calibrationSet.filter((s) => s.fake)) : -1;
+  };
+  const ratios = [1, ...new Array(k - 1).fill(0)];
+  let best = detected(ratios);
+  for (let improved = true; improved; ) {
+    improved = false;
+    for (let i = 1; i < k; i++) {
+      for (let step = 0; step <= 100; step++) {
+        const candidate = ratios.with(i, step / 20);
+        const score = detected(candidate);
+        if (score > best) {
+          best = score;
+          ratios[i] = step / 20;
+          improved = true;
+        }
+      }
+    }
   }
-  const platt = fitLogistic(withoutArt.map((s) => ({ ...s, zs: [s.zs[0] + best.ratio * s.zs[1]] })));
+  const platt = fitLogistic(withoutArt.map((s) => ({ ...s, zs: [combine(ratios)(s)] })));
   const [scale] = platt.weights;
-  return { weights: [scale, Number((scale * best.ratio).toFixed(4))], bias: platt.bias };
+  return { weights: ratios.map((r) => Number((scale * r).toFixed(4))), bias: platt.bias };
 }
 
 function thresholdForFpr(realProbabilities, fpr) {
@@ -334,7 +399,7 @@ const count = (split, fake) => samples.filter((s) => s.split === split && s.fake
 console.log(`samples: ${samples.length} (calibration ${count('calibration', true)} AI / ${count('calibration', false)} real, test ${count('test', true)} AI / ${count('test', false)} real)`);
 
 for (const c of CANDIDATES) {
-  if (only !== 'all' && c.id !== only && !c.id.startsWith(`${only}/`) && !c.id.includes(only)) continue;
+  if (only !== 'all' && c.id !== only && !c.id.startsWith(`${only}/`) && (only === 'bundled' || !c.id.includes(only))) continue;
   const { scored, ms } = await scoreAll(c, samples);
   const calibrationSet = scored.filter((s) => s.split === 'calibration' && (isRelevant(s) || s.group === 'art') && CALIBRATION_CONDITIONS.includes(s.condition));
 

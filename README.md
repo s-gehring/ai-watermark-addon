@@ -16,13 +16,11 @@ Prüft größere Bilder auf Webseiten auf AI-Generierung und markiert Treffer mi
    - **OpenAI:** Hier hängt der feste Anteil von der Ausgabegröße ab. Bilder gleicher Größe aus verschiedenen Quellen teilen ihn, Bilder verschiedener Größen nicht. Das Addon hat Vorlagen für die vier Ausgabegrößen, von denen genug Bilder mit nachgewiesenem Wasserzeichen vorliegen: 1254 × 1254, 1448 × 1086, 1672 × 941 und 1122 × 1402 (ChatGPT wählt sie für quadratische, 4:3-, 16:9- und 4:5-Bilder). Jede Vorlage wird nur auf Bilder mit ihrem Seitenverhältnis (±2 %) angewandt, also auch auf verkleinerte Kopien. Das Muster liegt bei hohen Frequenzen, die drei nicht quadratischen Vorlagen rechnen deshalb mit 1024 × 1024 (bis 384 Schwingungen pro Bild). Alle OpenAI-Vorlagen blenden außerdem einen Rand von 2 % aus, weil dort sonst Effekte der Bildränder statt des Wasserzeichens in die Vorlage geraten.
 
    Kostet in Node gemessen ca. 0,13 s für ein 4-Megapixel-Bild, bei den Seitenverhältnissen 4:3, 16:9 und 4:5 wegen der feineren OpenAI-Vorlagen ca. 0,35 s.
-3. **Modelle** (Badge „AI 99 %“): Zwei Detektoren, beide int8-quantisiert und mit ONNX Runtime Web (WASM) im Background-Script ausgeführt:
-   - [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT) (ViT-S, CVPR 2025, MIT-Lizenz, 23 MB), Vorverarbeitung: Bicubic-Resize auf 440 px, Center-Crop 384 px
-   - [ai-vs-human-SigLIP-ONNX](https://huggingface.co/neilxxx/ai-vs-human-SigLIP-ONNX) (88 MB), laut `config.json` eine ONNX-Konvertierung von [Ateeqq/ai-vs-human-image-detector](https://huggingface.co/Ateeqq/ai-vs-human-image-detector) (SigLIP2, Apache-2.0), Vorverarbeitung: bilineares Resize auf 224 × 224 px
+3. **Modell** (Badge „AI 99 %“): Ein Detektor, mit ONNX Runtime Web (WASM) im Worker ausgeführt: Detectra, auf OpenFake feinjustiert (44 MB, fp16). Ausgangspunkt ist [Detectra v3](https://huggingface.co/TensorFold/detectra-v1) (MIT-Lizenz), ein Feintuning des CommunityForensics-ViT-S auf neueren Generatoren (DALL·E 3, Midjourney, FLUX, SD 3.5, Recraft, HiDream), auf Bildern aus sozialen Netzwerken ([WildRF](https://github.com/barcavia/RealTime-DeepfakeDetection-in-the-RealWorld)) und mit echten Gemälden, Anime-Zeichnungen, Memes und Screenshots als Gegenbeispielen. Mit `tools/train/` ist es drei Epochen lang auf 15 Dateien aus dem Trainingssplit von [OpenFake](https://huggingface.co/datasets/ComplexDataLab/OpenFake) weitertrainiert (ca. 60.000 Bilder, je zur Hälfte echt und von vielen Generatoren), dazu 4.500 Gemälde aus WikiArt, 5.900 Fotos aus COCO und Diagramme aus ChartQA als Gegenbeispiele. Jedes Trainingsbild wird zufällig verkleinert und als JPEG neu komprimiert, damit das Modell die Bedingungen auf Webseiten kennt. Die Gewichte liegen nur lokal vor, weil OpenFake unter CC BY-NC 4.0 steht (siehe [Modell trainieren](#modell-trainieren)). Vorverarbeitung: bilineares Resize auf 440 px, Center-Crop 384 px.
 
-   Beide Vorverarbeitungen sind in `src/background/preprocess.ts` nachgebaut und rechnen bitgenau wie Pillow in den Referenz-Pipelines der Modelle. Die Rohwerte werden gewichtet addiert und per Platt-Scaling kalibriert (`model.json`). Zusammen erkennen die Modelle unter Web-Bedingungen bei gleich vielen Fehlalarmen auf Fotos mehr AI-Bilder und markieren nur rund halb so viele Gemälde wie das erste Modell allein. Das Detail-Panel eines Symbols zeigt pro Modell den Wert, den das Ensemble hätte, wenn alle Modelle diesem einen zustimmten (gleiche Kalibrierung, nur dieser Rohwert). Der Gesamtwert ist das mit den Modellgewichten gewichtete Mittel dieser Werte in Log-Odds und liegt deshalb immer zwischen ihnen. Die rohen Modellausgaben selbst wären dafür ungeeignet: Bei echten Fotos liegen sie oft unter 0,1 %, auch wenn der kalibrierte Gesamtwert 30 % beträgt.
+   Die Vorverarbeitung ist in `src/background/preprocess.ts` nachgebaut und rechnet bitgenau wie Pillow. Der Rohwert wird per Platt-Scaling kalibriert (`model.json`); die Rohausgabe selbst wäre als Prozentwert ungeeignet, weil sie bei echten Fotos oft unter 0,1 % liegt. Unter Web-Bedingungen erkennt das Modell bei gleich vielen Fehlalarmen auf Fotos 10 bis 15 Prozentpunkte mehr AI-Bilder als das vorherige Ensemble aus Detectra, CommunityForensics und SigLIP (siehe [Genauigkeit](#genauigkeit)).
 
-Das Background-Script lädt das Bild selbst noch einmal (meist aus dem HTTP-Cache), damit auch Bilder fremder Domains ohne CORS-Freigabe geprüft werden können. Metadaten-Scan, Dekodierung und Inferenz laufen in einem Web Worker, damit Popup und Background-Script reaktionsfähig bleiben. Ergebnisse werden pro URL zwischengespeichert. Ein Bild braucht in Firefox ca. 1,5 s, je Modell etwa die Hälfte; Bilder werden nacheinander geprüft, sichtbare zuerst.
+Das Background-Script lädt das Bild selbst noch einmal (meist aus dem HTTP-Cache), damit auch Bilder fremder Domains ohne CORS-Freigabe geprüft werden können. Metadaten-Scan, Dekodierung und Inferenz laufen in einem Web Worker, damit Popup und Background-Script reaktionsfähig bleiben. Ergebnisse werden pro URL zwischengespeichert. Ein Bild braucht in Firefox ca. 0,8 s; Bilder werden nacheinander geprüft, sichtbare zuerst.
 
 ## Genauigkeit
 
@@ -32,47 +30,57 @@ Gemessen mit `npm run eval` auf 4006 Bildern. Die eine Hälfte dient der Kalibri
 - echte Fotos: 943 aus OpenFake (ImageNet, DOCCI), 375 aus Fotografie-Subreddits (OpenFake-Reddit-Testset) und 1000 aus [COCO](https://huggingface.co/datasets/detection-datasets/coco)
 - Grafik und Kunst: 300 Diagramme aus [ChartQA](https://huggingface.co/datasets/HuggingFaceM4/ChartQA) und 300 Gemälde aus [WikiArt](https://huggingface.co/datasets/huggan/wikiart)
 
-Jedes Bild wird dreimal bewertet: als Originaldatei und so, wie Bilder auf Webseiten typischerweise ankommen, also auf höchstens 1280 px bzw. 800 px verkleinert und als JPEG mit Qualität 80 bzw. 75 gespeichert. Die Gewichtung der beiden Modelle ist so gewählt, dass auf der Kalibrierhälfte möglichst viele AI-Bilder erkannt und höchstens 5 % der Gemälde markiert werden. Kalibrierung und Default-Schwelle sind so gewählt, dass unter Web-Bedingungen rund 1 % der echten Fotos markiert werden.
+Jedes Bild wird dreimal bewertet: als Originaldatei und so, wie Bilder auf Webseiten typischerweise ankommen, also auf höchstens 1280 px bzw. 800 px verkleinert und als JPEG mit Qualität 80 bzw. 75 gespeichert. Die Gewichtung der Modelle ist so gewählt, dass auf der Kalibrierhälfte möglichst viele AI-Bilder erkannt und höchstens 5 % der Gemälde markiert werden. Kalibrierung und Default-Schwelle sind so gewählt, dass unter Web-Bedingungen rund 1 % der echten Fotos markiert werden.
 
-Bei der Default-Schwelle von 98 %, in Klammern das CommunityForensics-Modell allein, ebenfalls auf 1 % markierte Fotos kalibriert:
+Bei der Default-Schwelle von 93 %, in Klammern das vorherige Ensemble aus Detectra, CommunityForensics und SigLIP bei seiner Default-Schwelle von 95 %, beide auf 1 % markierte Fotos kalibriert:
 
 | | Originaldatei | Web 1280 px | Web 800 px |
 |---|---|---|---|
-| AI-Bilder erkannt (OpenFake) | 44 % (42 %) | 43 % (32 %) | 40 % (30 %) |
-| AI-Bilder erkannt (Reddit) | 44 % (33 %) | 45 % (28 %) | 42 % (32 %) |
-| AI-Bilder erkannt (neuere Generatoren) | 21 % (47 %) | 13 % (16 %) | 15 % (19 %) |
-| echte Fotos markiert (alle) | 0,9 % (1,0 %) | 1,0 % (1,0 %) | 1,1 % (1,2 %) |
-| echte Fotos markiert (Fotografie-Subreddits) | 2,7 % (3,2 %) | 2,7 % (1,6 %) | 3,7 % (3,2 %) |
-| Gemälde markiert | 7 % (12 %) | 7 % (11 %) | 7 % (13 %) |
+| AI-Bilder erkannt (OpenFake) | 68 % (53 %) | 65 % (52 %) | 64 % (52 %) |
+| AI-Bilder erkannt (Reddit) | 68 % (53 %) | 66 % (52 %) | 61 % (53 %) |
+| AI-Bilder erkannt (neuere Generatoren) | 63 % (29 %) | 32 % (23 %) | 37 % (28 %) |
+| echte Fotos markiert (alle) | 1,0 % (1,1 %) | 1,0 % (1,0 %) | 0,9 % (1,5 %) |
+| echte Fotos markiert (Fotografie-Subreddits) | 2,1 % (3,7 %) | 1,1 % (5,3 %) | 1,1 % (7,5 %) |
+| echte Fotos markiert (DOCCI-Kamerafotos) | 4,4 % (1,9 %) | 5,0 % (0,6 %) | 3,8 % (1,9 %) |
+| Gemälde markiert | 0,7 % (0,7 %) | 0,7 % (0,7 %) | 0,7 % (0,7 %) |
 | Diagramme markiert | 0 % (0 %) | 0 % (0 %) | 0 % (0 %) |
 
 Andere Schwellen (Web 1280 px, alle AI-Bilder gegen echte Fotos):
 
 | Schwelle | AI-Bilder erkannt | echte Fotos markiert |
 |---|---|---|
-| 50 % | 70 % | 15 % |
-| 70 % | 54 % | 6,9 % |
-| 80 % | 47 % | 5,7 % |
-| 90 % | 37 % | 3,6 % |
-| 97 % | 30 % | 1,5 % |
-| **98 % (Default)** | **26 %** | **1,0 %** |
+| 50 % | 80 % | 13 % |
+| 70 % | 67 % | 6,4 % |
+| 80 % | 61 % | 3,6 % |
+| 90 % | 51 % | 1,7 % |
+| **93 % (Default)** | **47 %** | **1,0 %** |
+| 97 % | 39 % | 0,8 % |
 
 Vergleich mit anderen lokalen Modellen unter Web-Bedingungen (1280 px und 800 px), erkannte AI-Bilder bei genau 1 % markierten Fotos:
 
 | Modell | AUC | AI-Bilder erkannt |
 |---|---|---|
-| **Ensemble (gebündelt)** | **0,87** | **24–26 %** |
+| **Detectra, auf OpenFake feinjustiert (gebündelt)** | **0,92–0,94** | **46–51 %** |
+| dasselbe mit fünf Ausschnitten pro Bild, siehe unten | 0,94–0,95 | 50–51 % |
+| vorheriges Ensemble (Detectra, CommunityForensics, SigLIP) | 0,91 | 36 % |
+| Detectra ohne Feintuning (fp16) | 0,91 | 34–35 % |
+| [fev v13](https://huggingface.co/angelhd25/ull-ai-image-detector) allein (fp32, 88 MB), siehe unten | 0,91 | 37–39 % |
+| Detectra ohne Feintuning und fev | 0,93 | 36 % |
+| früheres Ensemble (CommunityForensics und SigLIP) | 0,87 | 24–26 % |
 | CommunityForensics allein (int8) | 0,86–0,87 | 20–22 % |
 | CommunityForensics ohne Quantisierung (fp32, viermal so groß) | 0,89–0,90 | 22–24 % |
 | SigLIP-Detektor allein (int8) | 0,77 | 22–23 % |
 | SMOGY, ViT-Deepfake-Klassifikator | 0,57–0,67 | 0–8 % |
+| [capcheck/ai-image-detection](https://huggingface.co/onnx-community/ai-image-detection-ONNX), [ai-image-detect-distilled](https://huggingface.co/onnx-community/ai-image-detect-distilled-ONNX) | 0,56 | 0–2 % |
 
 Einschränkungen:
 
-- Das Badge ist ein Hinweis, kein Beweis. Die Default-Schwelle ist auf wenige Fehlalarme ausgelegt, dafür bleibt ohne Metadaten oder Wasserzeichen mehr als die Hälfte der AI-Bilder unmarkiert. Wer mehr erkennen will, senkt die Schwelle in den Einstellungen und nimmt mehr Fehlalarme in Kauf.
-- Die neuesten Generatoren erkennen die Modelle schlecht, das Ensemble als Originaldatei sogar schlechter als das erste Modell allein. Gemini-Bilder (3 von 85) findet fast nur die SynthID-Prüfung.
-- Gemälde werden öfter markiert als Fotos (rund jedes fünfzehnte), stark nachbearbeitete Fotos wie aus Fotografie-Subreddits zu bis zu 4 %. 3D-Renderings sind nicht im Testset.
-- Kompression und Verkleinerung kosten Erkennung (AUC 0,94 als Originaldatei, 0,87 unter Web-Bedingungen).
+- Das Badge ist ein Hinweis, kein Beweis. Die Default-Schwelle ist auf wenige Fehlalarme ausgelegt, dafür bleibt ohne Metadaten oder Wasserzeichen rund die Hälfte der AI-Bilder unmarkiert. Wer mehr erkennen will, senkt die Schwelle in den Einstellungen und nimmt mehr Fehlalarme in Kauf.
+- Die neuesten Generatoren erkennt das Modell schlechter. Unter Web-Bedingungen (1280 px) findet es 43 von 78 FLUX.2-Bildern, 18 von 70 GPT-Image-2-Bildern, 13 von 73 Qwen-Image-2.1-Bildern und 24 von 85 Gemini-Bildern (vorheriges Ensemble: 41, 15, 11 und 4). Als Originaldatei erkennt es 63 % dieser Bilder, Kompression kostet hier also besonders viel. Gemini-Bilder findet zusätzlich die SynthID-Prüfung.
+- Hochwertige Kamerafotos wie die aus DOCCI markiert das Modell häufiger als das vorherige Ensemble, unter Web-Bedingungen 4 bis 5 % statt 1 bis 2 %. Stark nachbearbeitete Fotos aus Fotografie-Subreddits markiert es dagegen seltener (1 bis 2 % statt 5 bis 8 %). 3D-Renderings sind nicht im Testset.
+- Detectra und das Feintuning nutzen WikiArt-Gemälde als Gegenbeispiele, und die Gemälde dieser Messung stammen ebenfalls aus WikiArt (aus anderen Dateien als beim Feintuning). Der Wert für markierte Gemälde ist deshalb vermutlich zu niedrig.
+- Das Feintuning nutzt den Trainingssplit von OpenFake, COCO-Train und WikiArt-Dateien, die in der Messung nicht vorkommen. Die Messung nutzt den Testsplit mit anderen Generatoren und anderen Fotoquellen (ImageNet und DOCCI statt LAION und Pexels). Ausgewählt wurde der Checkpoint aber anhand dieser Messung (aus wenigen Varianten), die Zahlen sind deshalb leicht optimistisch.
+- Kompression und Verkleinerung kosten Erkennung (AUC 0,97 als Originaldatei, 0,92 bis 0,94 unter Web-Bedingungen).
 - Kalibrierung und Messung nutzen getrennte Bilder, aber dieselben Quellen. Seiten mit anderer Bildauswahl oder eigener Kompression können abweichen.
 
 ### SynthID-Prüfung
@@ -126,6 +134,11 @@ Einschränkungen:
 
 ### Geprüft und nicht eingebaut
 
+- **Das vorherige Ensemble** (Detectra v3, [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT), [ai-vs-human-SigLIP-ONNX](https://huggingface.co/neilxxx/ai-vs-human-SigLIP-ONNX)): Zusätzlich zum feinjustierten Modell bringen diese Modelle, einzeln oder zusammen, bei gleich vielen Fehlalarmen keine zusätzlichen Treffer, kosten aber je 0,7 s pro Bild (zusammen 155 MB).
+- **Fünf Ausschnitte pro Bild:** Mitte und vier Ecken aus dem auf 640 px kurze Kante verkleinerten Bild, davon der höchste Wert. Unter Web-Bedingungen erkennt das 0 bis 5 Prozentpunkte mehr AI-Bilder, braucht aber die fünffache Rechenzeit und markiert mehr Kamerafotos (DOCCI 7 bis 9 %).
+- **fev v13** ([angelhd25/ull-ai-image-detector](https://huggingface.co/angelhd25/ull-ai-image-detector), MIT-Lizenz), wie Detectra ein Feintuning des CommunityForensics-ViT-S für ein Browser-Addon: Allein erkennt es unter Web-Bedingungen die meisten AI-Bilder (37–39 %), markiert aber 7 % der Gemälde. Im Ensemble mit Detectra bringt es bei höchstens 5 % markierten Gemälden keine zusätzlichen Treffer, kostet aber 88 MB und 0,7 s pro Bild. Es wurde zudem teils auf dem Validierungssplit von OpenFake trainiert, der unter CC BY-NC 4.0 steht. Dessen Generatoren und Fotoquellen kommen im Testsplit dieser Messung nicht vor.
+- **Weitere Detektoren von Hugging Face** (capcheck/ai-image-detection, ai-image-detect-distilled, SMOGY u. a.): Viele sind auf kleinen Datensätzen wie CIFAKE trainiert und unterscheiden AI-Bilder unter Web-Bedingungen kaum besser als Zufall (AUC 0,56 bis 0,67). Größere Modelle wie SwinV2-Large-Detektoren oder SigLIP-DINOv2-Ensembles wären mit 200 MB bis 2 GB zu groß für das Addon.
+
 - **DWT-DCT-Wasserzeichen aus `invisible-watermark`:** Der Referenzcode von SDXL und Stable Video Diffusion (Stability, diffusers) sowie von FLUX.1 und FLUX.2 (Black Forest Labs) bettet je eine feste 48-Bit-Nachricht ein. Ein Nachbau des Decoders fand sie in selbst markierten Bildern (PNG und JPEG 4:4:4), aber in keinem echten Bild aus sieben Datensätzen (FLUX.1.1 Pro und FLUX.2 Pro über die API, SDXL, SD 1.4/2.1, FLUX.2 klein). JPEG mit Chroma-Subsampling, wie im Web üblich, löscht das Wasserzeichen ganz.
 
 ## Bedienung
@@ -152,7 +165,7 @@ Voraussetzungen: Node 22, Firefox.
 
 ```bash
 npm ci
-npm run fetch-model   # lädt das Modell (gepinnte Revision, SHA-256-geprüft) nach vendor/models/
+npm run fetch-model   # prüft das Modell in vendor/models/ (SHA-256), siehe Modell trainieren
 npm run build         # baut nach dist/
 npm start             # startet Firefox mit dem Addon (web-ext run)
 ```
@@ -177,7 +190,7 @@ npm run build
 npx web-ext sign --source-dir dist --channel unlisted --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
 ```
 
-Das Paket ist ca. 90 MB groß (zwei Modelle, WASM-Runtime und SynthID-Vorlagen), unter dem AMO-Limit von 200 MB.
+Das Paket ist ca. 49 MB groß (Modell, WASM-Runtime und SynthID-Vorlagen), unter dem AMO-Limit von 200 MB.
 
 ### Modell evaluieren oder tauschen
 
@@ -186,9 +199,23 @@ python3 -m venv .venv && .venv/bin/pip install pyarrow fsspec aiohttp huggingfac
 .venv/bin/python tools/eval/fetch_samples.py
 npm run eval -- bundled --calibrate --per-generator
 npm run eval -- all
+npm run eval -- members --members=detectra-openfake,angelhd25/ull-ai-image-detector   # beliebige Kombination fitten und messen
 ```
 
-`fetch_samples.py` liest nur einzelne Parquet-Row-Groups aus OpenFake, COCO, ChartQA und WikiArt und 600 Dateien aus bigdatamark/synthid-research (ca. 5 GB Download statt der kompletten Datensätze, 3,3 GB auf der Platte). Testdaten und Rohwerte liegen immer im Haupt-Checkout unter `tools/eval/.cache/`, auch wenn die Skripte in einem Git-Worktree laufen, damit sie das Löschen des Worktrees überstehen. `npm run eval` speichert die Rohwerte pro Modell in `tools/eval/.cache/scores/`, weitere Läufe rechnen nur neue Bilder. `--calibrate` wählt auf der Kalibrierhälfte die Gewichtung der Modelle (möglichst viele erkannte AI-Bilder bei höchstens 5 % markierten Gemälden), fittet Platt-Scaling und wählt die Schwelle für 1 % markierte Fotos unter Web-Bedingungen; die Werte gehören dann nach `model.json` (`calibration`, `threshold`). Ändert sich die Kalibrierung, setzt das Addon eine selbst gewählte Schwelle auf den neuen Default zurück, weil die Prozentwerte danach etwas anderes bedeuten.
+`fetch_samples.py` liest nur einzelne Parquet-Row-Groups aus OpenFake, COCO, ChartQA und WikiArt und 600 Dateien aus bigdatamark/synthid-research (ca. 5 GB Download statt der kompletten Datensätze, 3,3 GB auf der Platte). Testdaten und Rohwerte liegen immer im Haupt-Checkout unter `tools/eval/.cache/`, auch wenn die Skripte in einem Git-Worktree laufen, damit sie das Löschen des Worktrees überstehen. `npm run eval` speichert die Rohwerte pro Modell in `tools/eval/.cache/scores/`, weitere Läufe rechnen nur neue Bilder. Rechnen mehrere Läufe parallel, begrenzt `EVAL_THREADS=4` die Threads pro Lauf. `--calibrate` wählt auf der Kalibrierhälfte die Gewichtung der Modelle (möglichst viele erkannte AI-Bilder bei höchstens 5 % markierten Gemälden), fittet Platt-Scaling und wählt die Schwelle für 1 % markierte Fotos unter Web-Bedingungen; die Werte gehören dann nach `model.json` (`calibration`, `threshold`). Ändert sich die Kalibrierung, setzt das Addon eine selbst gewählte Schwelle auf den neuen Default zurück, weil die Prozentwerte danach etwas anderes bedeuten.
+
+### Modell trainieren
+
+Braucht eine CUDA-GPU mit 12 GB (gemessen auf einer RTX 4070 Ti) und ca. 95 GB Platz.
+
+```bash
+.venv/bin/pip install torch timm safetensors pyarrow pillow numpy huggingface_hub onnx onnxruntime onnxconverter-common
+.venv/bin/python tools/train/fetch_data.py   # Detectra-Gewichte, 16 OpenFake-Dateien und Gegenbeispiele nach tools/train/.cache/
+.venv/bin/python tools/train/train.py --name full   # 3 Epochen, ca. 1 h
+.venv/bin/python tools/train/export_onnx.py tools/train/.cache/runs/full/epoch3.safetensors   # -> vendor/models/detectra-openfake/model.onnx
+```
+
+Die Datensätze sind auf feste Revisionen gepinnt. Die letzte der 16 OpenFake-Dateien dient als Holdout; `train.py` gibt nach jeder Epoche AUC und Erkennungsrate bei 1 % Fehlalarmen darauf aus. Das Training ist nicht bitgenau reproduzierbar: Nach einem neuen Lauf gehört der von `export_onnx.py` ausgegebene SHA-256 nach `model.json`, und `npm run eval -- bundled --calibrate` liefert die neue Kalibrierung. Weil OpenFake unter CC BY-NC 4.0 steht, sind die Gewichte nicht veröffentlicht und `npm run fetch-model` kann sie nicht laden. CI prüft deshalb nur Typen und Unit-Tests.
 
 ### SynthID-Vorlagen neu berechnen oder prüfen
 
@@ -214,8 +241,9 @@ src/background/   Bild-Download, Cache, Tab-Statistik und Toolbar-Icon; Worker m
 src/content/      Bildsuche (IntersectionObserver, MutationObserver) und Badge-Overlay im Shadow DOM
 src/popup/        Toolbar-Popup
 src/options/      Einstellungen
-model.json        gepinntes Modell, Eingabeformat, Kalibrierung, Default-Schwelle
+model.json        Modell, Eingabeformat, Kalibrierung, Default-Schwelle
 synthid.json      Herkunft, Größe, Skalierung und Schwelle der SynthID-Vorlagen (src/background/synthid-templates/)
 tools/eval/       Testdaten-Download und Modellvergleich
+tools/train/      Feintuning des Modells (Daten-Download, Training, ONNX-Export)
 tools/synthid/    Referenzimplementierung, Vorlagen-Bau und Messung der SynthID-Prüfung
 ```

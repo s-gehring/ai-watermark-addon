@@ -15,6 +15,9 @@ for (const model of models) {
       console.log(`ok       ${model.name}/${file}`);
       continue;
     }
+    if (!model.repo) {
+      throw new Error(`${model.name}/${file} has no download source; place it in vendor/models/${model.name}/`);
+    }
     const url = `https://huggingface.co/${model.repo}/resolve/${model.revision}/${file}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${url}`);
