@@ -32,9 +32,9 @@ The badge is a hint, not proof. Full numbers and limitations are in [docs/accura
 
 ## Install
 
-Open the `.xpi` file of the [latest release](https://github.com/s-gehring/ai-watermark-addon/releases/latest) in Firefox and confirm the installation. If Firefox only downloads the file, open `about:addons`, click the gear icon and choose "Install Add-on From File…". The add-on is signed by Mozilla and updates itself, but is not listed on addons.mozilla.org.
+Install the add-on from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/ai-watermark/), in Firefox for desktop or Android.
 
-On Firefox for Android, enable the debug menu (Settings → About Firefox, tap the logo five times), then use "Install extension from file" in the settings.
+Every [GitHub release](https://github.com/s-gehring/ai-watermark-addon/releases/latest) also carries the signed `.xpi` file. Open it in Firefox and confirm the installation. If Firefox only downloads the file, open `about:addons`, click the gear icon and choose "Install Add-on From File…". Either way, the add-on updates itself through addons.mozilla.org.
 
 Requires Firefox 140 or later, or Firefox for Android 142 or later.
 
