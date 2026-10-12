@@ -3,6 +3,8 @@
   "name": "__MSG_extName__",
   "description": "__MSG_extDescription__",
   "version": "0.0.0",
+  "author": "Simon Gehring",
+  "homepage_url": "https://github.com/s-gehring/ai-watermark-addon",
   "default_locale": "en",
   "icons": {
     "48": "icons/icon.svg",

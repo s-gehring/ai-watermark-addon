@@ -2,6 +2,15 @@
   "name": "ai-watermark-addon",
   "version": "0.1.0",
   "description": "Firefox add-on that checks larger images on web pages locally for AI generation and marks hits with an AI badge.",
+  "author": "Simon Gehring",
+  "homepage": "https://github.com/s-gehring/ai-watermark-addon#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/s-gehring/ai-watermark-addon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/s-gehring/ai-watermark-addon/issues"
+  },
   "scripts": {
     "fetch-model": "node scripts/fetch-model.mjs",
     "build": "node build.mjs",
@@ -14,7 +23,7 @@
     "package": "npm run build && web-ext build --source-dir dist --overwrite-dest",
     "eval": "node tools/eval/eval-models.mjs"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "devDependencies": {
     "@huggingface/transformers": "^4.3.1",
     "@types/firefox-webext-browser": "^143.0.1",

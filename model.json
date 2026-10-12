@@ -3,7 +3,7 @@
     {
       "name": "detectra-openfake",
       "label": "Detectra (OpenFake)",
-      "license": "MIT; Feintuning mit OpenFake (CC BY-NC 4.0), nur lokal",
+      "license": "CC BY-NC 4.0",
       "dtype": "fp16",
       "output": "sigmoid",
       "input": {
