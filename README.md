@@ -57,6 +57,10 @@ npm start             # starts Firefox with the add-on
 
 Tests, linting, releases, model evaluation and training, and rebuilding the SynthID templates are described in [docs/development.md](docs/development.md).
 
+## Written with AI
+
+Large parts of the code, tools and documentation in this repository were written by AI (Claude Code).
+
 ## Contributing
 
 Bug reports, false positives and missed AI images are welcome as [issues](https://github.com/s-gehring/ai-watermark-addon/issues). See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
