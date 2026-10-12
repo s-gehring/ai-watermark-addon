@@ -59,7 +59,7 @@ Tests, linting, releases, model evaluation and training, and rebuilding the Synt
 
 ## Written with AI
 
-Large parts of the code, tools and documentation in this repository were written by AI (Claude Code).
+Large parts of the code, tools and documentation in this repository were written by AI (Claude Code with Claude Opus 5.5).
 
 ## Contributing
 
