@@ -53,6 +53,8 @@ manifest.version = pkg.version;
 await writeFile(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 const copies = [
+  ['LICENSE', 'LICENSE'],
+  ['THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md'],
   ['src/_locales', '_locales'],
   ['src/icons', 'icons'],
   ['src/shared/ui.css', 'ui.css'],

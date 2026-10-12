@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      XPI: ai-watermark-${{ github.ref_name }}.xpi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: vendor/models
+          key: models-${{ hashFiles('model.json') }}
+      - run: npm run fetch-model
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:e2e
+      - run: npm run lint
+      - name: Sign with addons.mozilla.org (unlisted)
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          git archive --format=zip -o source.zip HEAD
+          npx web-ext sign --channel unlisted --source-dir dist --artifacts-dir signed --upload-source-code source.zip --approval-timeout 1800000
+          mv signed/*.xpi "$XPI"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$XPI" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Announce the update in updates.json
+        run: |
+          git fetch --depth=1 origin main
+          git checkout -B main origin/main
+          jq --indent 2 \
+            --arg version "${GITHUB_REF_NAME#v}" \
+            --arg link "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$XPI" \
+            --arg hash "sha256:$(sha256sum "$XPI" | cut -d' ' -f1)" \
+            '.addons[].updates += [{version: $version, update_link: $link, update_hash: $hash}]' updates.json > updates.json.new
+          mv updates.json.new updates.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "Announce $GITHUB_REF_NAME in updates.json"
+          git push origin main

@@ -1,11 +1,13 @@
 import argparse
 import hashlib
+import json
 import os
 import random
 import re
 import shutil
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter
 from io import BytesIO
@@ -52,6 +54,13 @@ RESEARCH = {
     "folders": ["gemini-3.1-flash-image", "qwen-image-2.1", "flux.2", "gpt-image-2"],
     "per_folder": 150,
 }
+
+MUSEUM = {
+    "api": "https://openaccess-api.clevelandart.org/api/artworks/",
+    "type": "Painting",
+    "count": 300,
+}
+USER_AGENT = {"User-Agent": "ai-watermark-addon-eval"}
 
 YOUTUBE = {
     "segments": "http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/eval_segments.csv",
@@ -137,6 +146,22 @@ def fetch_research(rng, spec):
     return Counter(path.split("/", 1)[0] for path in chosen)
 
 
+def fetch_museum(rng, spec):
+    items, skip = [], 0
+    while True:
+        query = urllib.parse.urlencode({"cc0": 1, "has_image": 1, "type": spec["type"], "limit": 1000, "skip": skip, "fields": "id,images"})
+        with urllib.request.urlopen(urllib.request.Request(f"{spec['api']}?{query}", headers=USER_AGENT), timeout=60) as res:
+            data = json.load(res)["data"]
+        items += [(r["id"], r["images"]["web"]["url"]) for r in data if (r.get("images") or {}).get("web")]
+        if len(data) < 1000:
+            break
+        skip += 1000
+    for ident, url in rng.sample(sorted(items), spec["count"]):
+        with urllib.request.urlopen(urllib.request.Request(url, headers=USER_AGENT), timeout=60) as res:
+            save("art", "real", "cma", ident, res.read())
+    return spec["count"]
+
+
 def youtube_thumbnail(ytid):
     try:
         with urllib.request.urlopen(f"https://i.ytimg.com/vi/{ytid}/hqdefault.jpg", timeout=20) as res:
@@ -177,7 +202,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--only-youtube", action="store_true")
+    parser.add_argument("--only-museum", action="store_true")
     args = parser.parse_args()
+
+    if args.only_museum:
+        for path in (OUT / "art" / "real").glob("*__cma.*"):
+            path.unlink()
+        print("museum", fetch_museum(random.Random(f"{args.seed}-museum"), MUSEUM))
+        return
 
     if args.only_youtube:
         shutil.rmtree(OUT / "youtube", ignore_errors=True)
@@ -192,6 +224,7 @@ def main():
     for spec in PLAIN_SOURCES:
         print(spec["group"], fetch_plain(fs, rng, spec))
     print("research", dict(fetch_research(random.Random(f"{args.seed}-research"), RESEARCH)))
+    print("museum", fetch_museum(random.Random(f"{args.seed}-museum"), MUSEUM))
     print("youtube", fetch_youtube(random.Random(f"{args.seed}-youtube"), YOUTUBE))
 
 
