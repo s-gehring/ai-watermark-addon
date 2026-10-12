@@ -39,6 +39,7 @@ const COMMUNITY_FORENSICS_INPUT = {
 };
 const HUB = [
   { id: 'buildborderless/CommunityForensics-DeepfakeDet-ViT', dtype: 'fp32', output: 'sigmoid' },
+  { id: 'neilxxx/ai-vs-human-SigLIP-ONNX', dtype: 'q8', output: { softmaxLabels: ['ai'] } },
   { id: 'onnx-community/SMOGY-Ai-images-detector-ONNX', dtype: 'q8', output: { softmaxLabels: ['artificial'] } },
   { id: 'prithivMLmods/AI-vs-Deepfake-vs-Real-ONNX', dtype: 'q8', output: { softmaxLabels: ['Artificial', 'Deepfake'] } },
   { id: 'onnx-community/ai-image-detection-ONNX', dtype: 'q8', output: { softmaxLabels: ['FAKE'] } },
@@ -81,7 +82,7 @@ const CONDITIONS = {
   web800: { size: 800, quality: 75 },
 };
 const CALIBRATION_CONDITIONS = ['web1280', 'web800'];
-const PHOTO_GROUPS = ['core', 'reddit', 'coco'];
+const PHOTO_GROUPS = ['core', 'reddit', 'coco', 'youtube'];
 const TARGET_FPR = 0.01;
 const ART_LIMIT = 0.05;
 

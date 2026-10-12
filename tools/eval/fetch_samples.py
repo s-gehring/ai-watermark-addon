@@ -5,11 +5,15 @@ import random
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from collections import Counter
+from io import BytesIO
 from pathlib import Path
 
 import pyarrow.parquet as pq
 from huggingface_hub import HfApi, HfFileSystem, snapshot_download
+from PIL import Image
 
 
 def main_checkout():
@@ -47,6 +51,12 @@ RESEARCH = {
     "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
     "folders": ["gemini-3.1-flash-image", "qwen-image-2.1", "flux.2", "gpt-image-2"],
     "per_folder": 150,
+}
+
+YOUTUBE = {
+    "segments": "http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/eval_segments.csv",
+    "music": "/m/04rlf",
+    "per_kind": 300,
 }
 
 
@@ -127,11 +137,52 @@ def fetch_research(rng, spec):
     return Counter(path.split("/", 1)[0] for path in chosen)
 
 
+def youtube_thumbnail(ytid):
+    try:
+        with urllib.request.urlopen(f"https://i.ytimg.com/vi/{ytid}/hqdefault.jpg", timeout=20) as res:
+            image = Image.open(BytesIO(res.read())).convert("RGB")
+    except (urllib.error.URLError, OSError):
+        return None
+    height = round(image.width * 9 / 16)
+    top = (image.height - height) // 2
+    out = BytesIO()
+    image.crop((0, top, image.width, top + height)).save(out, "JPEG", quality=90)
+    return out.getvalue()
+
+
+def fetch_youtube(rng, spec):
+    path = CACHE / "downloads" / "audioset" / "eval_segments.csv"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        urllib.request.urlretrieve(spec["segments"], path)
+    rows = [line.split(", ", 3) for line in path.read_text().splitlines() if not line.startswith("#")]
+    kinds = {
+        "music": [r[0] for r in rows if spec["music"] in r[3]],
+        "other": [r[0] for r in rows if spec["music"] not in r[3]],
+    }
+    taken = Counter()
+    for kind, ids in kinds.items():
+        rng.shuffle(ids)
+        for ytid in ids:
+            if taken[kind] >= spec["per_kind"]:
+                break
+            data = youtube_thumbnail(ytid)
+            if data:
+                save("youtube", "real", f"audioset-{kind}", ytid, data)
+                taken[kind] += 1
+    return dict(taken)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--only-youtube", action="store_true")
     args = parser.parse_args()
 
+    if args.only_youtube:
+        shutil.rmtree(OUT / "youtube", ignore_errors=True)
+        print("youtube", fetch_youtube(random.Random(f"{args.seed}-youtube"), YOUTUBE))
+        return
     rng = random.Random(args.seed)
     fs = HfFileSystem()
     shutil.rmtree(OUT, ignore_errors=True)
@@ -141,6 +192,7 @@ def main():
     for spec in PLAIN_SOURCES:
         print(spec["group"], fetch_plain(fs, rng, spec))
     print("research", dict(fetch_research(random.Random(f"{args.seed}-research"), RESEARCH)))
+    print("youtube", fetch_youtube(random.Random(f"{args.seed}-youtube"), YOUTUBE))
 
 
 if __name__ == "__main__":

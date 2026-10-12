@@ -46,10 +46,11 @@
   "detailsNoWatermark": { "message": "Nicht gefunden" },
   "detailsModels": { "message": "AI-Score" },
   "detailsModelNote": { "message": "Schwelle $1 · Gewichtung $2", "placeholders": { "1": { "content": "$1" }, "2": { "content": "$2" } } },
+  "detailsThreshold": { "message": "Schwelle $1", "placeholders": { "1": { "content": "$1" } } },
   "detailsSkipped": { "message": "Übersprungen" },
   "detailsOff": { "message": "Deaktiviert" },
   "error_fetch": { "message": "Das Bild ließ sich nicht laden." },
   "error_decode": { "message": "Das Bild ließ sich nicht dekodieren." },
   "error_unsupported": { "message": "Bildformat oder Seitenverhältnis wird nicht unterstützt." },
-  "error_model": { "message": "Die Modelle konnten das Bild nicht auswerten." }
+  "error_model": { "message": "Das Modell konnte das Bild nicht auswerten." }
 }

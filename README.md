@@ -24,13 +24,13 @@ Das Background-Script lädt das Bild selbst noch einmal (meist aus dem HTTP-Cach
 
 ## Genauigkeit
 
-Gemessen mit `npm run eval` auf 4006 Bildern. Die eine Hälfte dient der Kalibrierung, die Zahlen unten stammen aus der anderen:
+Gemessen mit `npm run eval` auf 4606 Bildern. Die eine Hälfte dient der Kalibrierung, die Zahlen unten stammen aus der anderen:
 
 - AI-Bilder: 300 aus dem Testsplit von [OpenFake](https://huggingface.co/datasets/ComplexDataLab/OpenFake) (18 Generatoren bis 2026), 188 aus OpenFakes Reddit-Testset (AI-Subreddits) und 600 von neueren Generatoren aus [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (je 150 von Gemini 3.1 Flash Image, Qwen-Image 2.1, FLUX.2 und GPT-Image 2)
-- echte Fotos: 943 aus OpenFake (ImageNet, DOCCI), 375 aus Fotografie-Subreddits (OpenFake-Reddit-Testset) und 1000 aus [COCO](https://huggingface.co/datasets/detection-datasets/coco)
+- echte Fotos: 943 aus OpenFake (ImageNet, DOCCI), 375 aus Fotografie-Subreddits (OpenFake-Reddit-Testset), 1000 aus [COCO](https://huggingface.co/datasets/detection-datasets/coco) und 600 Vorschaubilder von YouTube-Videos aus dem Evalset von [AudioSet](https://research.google.com/audioset/) (hochgeladen bis Anfang 2017, je 300 mit und ohne Musik), so auf 16:9 zugeschnitten, wie YouTube sie in Listen zeigt
 - Grafik und Kunst: 300 Diagramme aus [ChartQA](https://huggingface.co/datasets/HuggingFaceM4/ChartQA) und 300 Gemälde aus [WikiArt](https://huggingface.co/datasets/huggan/wikiart)
 
-Jedes Bild wird dreimal bewertet: als Originaldatei und so, wie Bilder auf Webseiten typischerweise ankommen, also auf höchstens 1280 px bzw. 800 px verkleinert und als JPEG mit Qualität 80 bzw. 75 gespeichert. Die Gewichtung der Modelle ist so gewählt, dass auf der Kalibrierhälfte möglichst viele AI-Bilder erkannt und höchstens 5 % der Gemälde markiert werden. Kalibrierung und Default-Schwelle sind so gewählt, dass unter Web-Bedingungen rund 1 % der echten Fotos markiert werden.
+Jedes Bild wird dreimal bewertet: als Originaldatei und so, wie Bilder auf Webseiten typischerweise ankommen, also auf höchstens 1280 px bzw. 800 px verkleinert und als JPEG mit Qualität 80 bzw. 75 gespeichert. Kalibrierung und Default-Schwelle sind so gewählt, dass unter Web-Bedingungen rund 1 % der echten Fotos markiert werden.
 
 Bei der Default-Schwelle von 93 %, in Klammern das vorherige Ensemble aus Detectra, CommunityForensics und SigLIP bei seiner Default-Schwelle von 95 %, beide auf 1 % markierte Fotos kalibriert:
 
@@ -155,7 +155,7 @@ Jedes geprüfte Bild bekommt oben rechts ein Symbol:
 
 - Toolbar-Button: Zahl der AI-Bilder auf der Seite; solange noch geprüft wird, ist das Icon gedimmt und zeigt einen Fortschrittsbalken
 - Popup: Fortschritt („Prüfe Bilder: 12 von 30“), Zähler für unauffällige und nicht prüfbare Bilder, Addon global oder pro Seite an- und ausschalten
-- Mauszeiger auf einem Symbol: Ein Panel zeigt das Ergebnis jeder Prüfung (Metadaten, SynthID-Wasserzeichen und die Modelle mit Einzelwerten, Gesamtwert, Schwelle und Gewichtung)
+- Mauszeiger auf einem Symbol: Ein Panel zeigt das Ergebnis jeder Prüfung (Metadaten, SynthID-Wasserzeichen und AI-Score des Modells mit Schwelle)
 - Klick auf ein Symbol blendet es aus
 - Einstellungen (`about:addons` → AI Watermark → Einstellungen): Mindestgröße, Schwelle, Metadaten-Prüfung, SynthID-Prüfung der Pixel, CSS-Hintergründe, Prozentanzeige, Symbole für unauffällige Bilder und laufende Prüfungen, deaktivierte Seiten
 
@@ -195,14 +195,14 @@ Das Paket ist ca. 49 MB groß (Modell, WASM-Runtime und SynthID-Vorlagen), unter
 ### Modell evaluieren oder tauschen
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pyarrow fsspec aiohttp huggingface_hub
+python3 -m venv .venv && .venv/bin/pip install pyarrow fsspec aiohttp huggingface_hub pillow
 .venv/bin/python tools/eval/fetch_samples.py
 npm run eval -- bundled --calibrate --per-generator
 npm run eval -- all
 npm run eval -- members --members=detectra-openfake,angelhd25/ull-ai-image-detector   # beliebige Kombination fitten und messen
 ```
 
-`fetch_samples.py` liest nur einzelne Parquet-Row-Groups aus OpenFake, COCO, ChartQA und WikiArt und 600 Dateien aus bigdatamark/synthid-research (ca. 5 GB Download statt der kompletten Datensätze, 3,3 GB auf der Platte). Testdaten und Rohwerte liegen immer im Haupt-Checkout unter `tools/eval/.cache/`, auch wenn die Skripte in einem Git-Worktree laufen, damit sie das Löschen des Worktrees überstehen. `npm run eval` speichert die Rohwerte pro Modell in `tools/eval/.cache/scores/`, weitere Läufe rechnen nur neue Bilder. Rechnen mehrere Läufe parallel, begrenzt `EVAL_THREADS=4` die Threads pro Lauf. `--calibrate` wählt auf der Kalibrierhälfte die Gewichtung der Modelle (möglichst viele erkannte AI-Bilder bei höchstens 5 % markierten Gemälden), fittet Platt-Scaling und wählt die Schwelle für 1 % markierte Fotos unter Web-Bedingungen; die Werte gehören dann nach `model.json` (`calibration`, `threshold`). Ändert sich die Kalibrierung, setzt das Addon eine selbst gewählte Schwelle auf den neuen Default zurück, weil die Prozentwerte danach etwas anderes bedeuten.
+`fetch_samples.py` liest nur einzelne Parquet-Row-Groups aus OpenFake, COCO, ChartQA und WikiArt und 600 Dateien aus bigdatamark/synthid-research, dazu 600 YouTube-Vorschaubilder von `i.ytimg.com` (ca. 5 GB Download statt der kompletten Datensätze, 3,3 GB auf der Platte). Testdaten und Rohwerte liegen immer im Haupt-Checkout unter `tools/eval/.cache/`, auch wenn die Skripte in einem Git-Worktree laufen, damit sie das Löschen des Worktrees überstehen. `npm run eval` speichert die Rohwerte pro Modell in `tools/eval/.cache/scores/`, weitere Läufe rechnen nur neue Bilder. `--calibrate` wählt auf der Kalibrierhälfte bei mehreren gebündelten Modellen deren Gewichtung (möglichst viele erkannte AI-Bilder bei höchstens 5 % markierten Gemälden), fittet Platt-Scaling und wählt die Schwelle für 1 % markierte Fotos unter Web-Bedingungen; die Werte gehören dann nach `model.json` (`calibration`, `threshold`). Ändert sich die Kalibrierung, setzt das Addon eine selbst gewählte Schwelle auf den neuen Default zurück, weil die Prozentwerte danach etwas anderes bedeuten.
 
 ### Modell trainieren
 
