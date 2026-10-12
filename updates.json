@@ -1,7 +1,13 @@
 {
   "addons": {
     "ai-watermark-addon@s-gehring.github.io": {
-      "updates": []
+      "updates": [
+        {
+          "version": "0.1.0",
+          "update_link": "https://github.com/s-gehring/ai-watermark-addon/releases/download/v0.1.0/ai-watermark-v0.1.0.xpi",
+          "update_hash": "sha256:7f6d8dac189500e1b90be84ba60e5afd87593ed03667d5ab11117a80f5be8abb"
+        }
+      ]
     }
   }
 }
