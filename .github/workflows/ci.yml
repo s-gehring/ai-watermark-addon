@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,3 +20,16 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - uses: actions/cache@v4
+        with:
+          path: vendor/models
+          key: models-${{ hashFiles('model.json') }}
+      - run: npm run fetch-model
+      - run: npm run test:e2e
+      - run: npm run lint
+      - run: npx web-ext build --source-dir dist --overwrite-dest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-watermark-addon
+          path: web-ext-artifacts/*.zip
+          retention-days: 14
