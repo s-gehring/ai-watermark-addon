@@ -22,7 +22,7 @@
   "optionsThreshold": { "message": "Modell-Schwelle für das AI-Badge" },
   "optionsThresholdHint": { "message": "Niedrigere Werte finden mehr AI-Bilder, markieren aber auch mehr echte Fotos fälschlich." },
   "optionsCheckMetadata": { "message": "AI-Kennzeichnungen aus Bild-Metadaten lesen (C2PA, IPTC, Generator-Parameter)" },
-  "optionsCheckWatermark": { "message": "Bildpixel auf das SynthID-Wasserzeichen von Google prüfen" },
+  "optionsCheckWatermark": { "message": "Bildpixel auf das SynthID-Wasserzeichen prüfen (Google, OpenAI)" },
   "optionsIncludeBackgrounds": { "message": "Auch CSS-Hintergrundbilder prüfen" },
   "optionsShowScore": { "message": "Wahrscheinlichkeit im Badge anzeigen" },
   "optionsDisabledHosts": { "message": "Deaktivierte Seiten (eine pro Zeile)" },
