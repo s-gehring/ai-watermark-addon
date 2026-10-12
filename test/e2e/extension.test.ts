@@ -122,6 +122,14 @@ const PAGE = `<!doctype html>
   </script>
 </body></html>`;
 
+const STRICT_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><style>.box { display: block; width: 320px; height: 240px; }</style></head><body>
+  <img id="blob" class="box">
+  <script>
+    fetch('/synthid.png').then((r) => r.blob()).then((b) => { document.getElementById('blob').src = URL.createObjectURL(b); });
+  </script>
+</body></html>`;
+
 let server: Server;
 let origin: string;
 let driver: firefox.Driver;
@@ -135,6 +143,13 @@ beforeAll(async () => {
   server = createServer((req, res) => {
     const path = new URL(req.url!, 'http://x').pathname;
     if (path === '/') res.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
+    else if (path === '/strict')
+      res
+        .writeHead(200, {
+          'content-type': 'text/html',
+          'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'",
+        })
+        .end(STRICT_PAGE);
     else if (path === '/ai.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(ai);
     else if (path === '/plain.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
     else if (path === '/synthid.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthId);
@@ -371,5 +386,13 @@ describe('background', () => {
 
   it('reads a SynthID declaration from the C2PA manifest', async () => {
     expect(await classify('/synthid-c2pa.png')).toEqual({ ok: true, score: 1, source: 'metadata', reason: 'synthid' });
+  }, 60_000);
+});
+
+describe('page with a strict content security policy', () => {
+  it('checks an image the page shows from a blob URL the content script may not fetch', async () => {
+    await driver.get(`${origin}/strict`);
+    const badges = await waitForBadges({ blob: ['ai'] });
+    expect(kindOf(badges, 'blob')).toBe('ai');
   }, 60_000);
 });
