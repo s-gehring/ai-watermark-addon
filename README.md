@@ -38,24 +38,6 @@ On Firefox for Android, enable the debug menu (Settings → About Firefox, tap t
 
 Requires Firefox 140 or later, or Firefox for Android 142 or later.
 
-## Usage
-
-Every checked image gets a symbol in its top right corner:
-
-| Symbol | Meaning |
-|---|---|
-| dark circle with spinner | being checked |
-| purple "AI 97 %" or "AI · Metadata" | likely AI-generated, or AI-generated according to its metadata |
-| purple "AI · SynthID" | SynthID watermark (Google or OpenAI) found in the pixels or the C2PA manifest |
-| green check mark | checked, nothing found |
-| grey "?" | could not be checked (download, format or aspect ratio) |
-
-- **Toolbar button:** number of AI images on the page; while checks are running, the icon is dimmed and shows a progress bar.
-- **Popup:** progress ("Checking images: 12 of 30"), counters for unremarkable and uncheckable images, switches to turn the add-on off globally or per site.
-- **Hover a symbol:** a panel shows the result of every check (metadata, SynthID watermark, model score with threshold).
-- **Click a symbol:** hides it.
-- **Settings** (popup → Settings, or via `about:addons`): minimum image size, model threshold, metadata check, SynthID check, CSS background images, percentage display, symbols for unremarkable images and running checks, disabled sites.
-
 ## Privacy and permissions
 
 - All checks run locally in a Web Worker. The add-on sends no data to any third party and has no telemetry.
@@ -74,21 +56,6 @@ npm start             # starts Firefox with the add-on
 ```
 
 Tests, linting, releases, model evaluation and training, and rebuilding the SynthID templates are described in [docs/development.md](docs/development.md).
-
-## Project structure
-
-```
-src/background/   image download, cache, tab statistics and toolbar icon; worker with metadata scan, SynthID check, preprocessing and model
-src/content/      image discovery (IntersectionObserver, MutationObserver) and badge overlay in a shadow DOM
-src/popup/        toolbar popup
-src/options/      settings page
-model.json        model, input format, calibration, default threshold
-synthid.json      source, size, scaling and threshold of the SynthID templates (src/background/synthid-templates/)
-updates.json      update manifest for installed add-ons, written by the release workflow
-tools/eval/       test data download and model comparison
-tools/train/      model fine-tuning (data download, training, ONNX export)
-tools/synthid/    reference implementation, template building and measurement of the SynthID check
-```
 
 ## Contributing
 
