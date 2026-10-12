@@ -3,6 +3,8 @@
     {
       "name": "detectra-openfake",
       "label": "Detectra (OpenFake)",
+      "repo": "s-gehring/detectra-openfake",
+      "revision": "0954cff4e126c7944b115aa617aecf558bca6624",
       "license": "CC BY-NC 4.0",
       "dtype": "fp16",
       "output": "sigmoid",
