@@ -1,0 +1,29 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: Page URL
+      description: A public page where the problem occurs, if there is one.
+  - type: input
+    id: version
+    attributes:
+      label: Firefox and add-on version
+      placeholder: Firefox 143 on Windows 11, add-on 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Errors
+      description: Errors from the browser console or from about:debugging → Inspect, if any.
+      render: text

@@ -1,0 +1,46 @@
+name: Detection error
+description: A real image was marked as AI, or an AI image was not marked
+labels: [detection]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of error
+      options:
+        - Real image marked as AI (false positive)
+        - AI image not marked (miss)
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: Image URL
+      description: Direct link to the image, if it is public. Do not share images of private people.
+  - type: dropdown
+    id: badge
+    attributes:
+      label: What the badge showed
+      options:
+        - AI with a percentage (model)
+        - AI · SynthID
+        - AI · Metadata
+        - Green check mark
+        - Grey question mark
+        - No badge at all
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details panel
+      description: Hover the badge and paste or screenshot the panel.
+  - type: textarea
+    id: source
+    attributes:
+      label: Origin of the image
+      description: The generator that made it, or where a real photo comes from, if you know.
+  - type: input
+    id: version
+    attributes:
+      label: Firefox and add-on version
+      placeholder: Firefox 143, add-on 0.1.0
