@@ -14,13 +14,13 @@
         "std": [0.229, 0.224, 0.225]
       },
       "files": {
-        "model.onnx": "5770e48c6a3de889a8760abf65349021a56c5507d7bddf62b49149eac9ae023c"
+        "model.onnx": "3be624e0e334d39a5d2d2b2b27333cc78954978496158b3f9b5fd1d4961305b2"
       }
     }
   ],
   "calibration": {
-    "weights": [0.4803],
-    "bias": 1.544
+    "weights": [0.4371],
+    "bias": 1.4406
   },
   "threshold": 0.92
 }

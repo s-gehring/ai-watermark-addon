@@ -24,7 +24,7 @@ There is no public SynthID detector. The add-on reconstructs a fixed part of the
 
 ## How well it works
 
-- **Model:** at the default threshold it flags about 1 % of real photos and detects about half of all AI images under web conditions (downscaled and JPEG-compressed): 64–66 % from OpenFake and AI subreddits, 33–38 % from the newest generators (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1). It rarely flags paintings (0.7 %) and never flagged charts.
+- **Model:** at the default threshold it flags about 1 % of real photos and detects about half of all AI images under web conditions (downscaled and JPEG-compressed): 54–65 % from OpenFake and AI subreddits, 34–40 % from the newest generators (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1). It flagged none of 156 museum paintings, 5–7 % of WikiArt paintings and no charts.
 - **SynthID:** detects 95 % of Gemini 3.1 images as delivered and 75–94 % of ChatGPT images in the four supported output sizes. False positives are rare: the Google template triggered on 1 of about 1,700 real photos, the OpenAI templates on none of about 1,900 images without the watermark. Cropping destroys the signal and recompression weakens it.
 - **Metadata:** reliable when present, but many platforms strip metadata on upload.
 

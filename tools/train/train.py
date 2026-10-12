@@ -221,7 +221,7 @@ def main():
         openfake = openfake[: args.max_openfake_files]
     val_file, train_files = openfake[-1], openfake[:-1]
     groups = row_groups(train_files, "column", 1.0)
-    groups += row_groups(complete(args.data, "wikiart/*.parquet"), 0, 1.0)
+    groups += row_groups(complete(args.data, "met/*.parquet"), 0, 1.0)
     groups += row_groups(complete(args.data, "coco/*.parquet"), 0, 0.6)
     groups += row_groups(complete(args.data, "chartqa/*.parquet"), 0, 0.3)
     val_groups = row_groups([val_file], "column", 1.0)

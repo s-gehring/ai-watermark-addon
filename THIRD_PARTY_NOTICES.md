@@ -29,7 +29,7 @@ Base models:
 Fine-tuning data (not shipped):
 
 - [OpenFake](https://huggingface.co/datasets/ComplexDataLab/OpenFake) by Victor Livernoche, Akshatha Arodi, Andreea Musulan, Zachary Yang, Adam Salvail, Gaétan Marceau Caron, Jean-François Godbout and Reihaneh Rabbany (Complex Data Lab), [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Used: 15 files of the `core/train` split. Changes: images were randomly downscaled and recompressed as JPEG during training; the dataset itself is not redistributed.
-- [WikiArt](https://huggingface.co/datasets/huggan/wikiart) (huggan/wikiart): images © their original authors, no license stated; the dataset card restricts use to non-commercial research
+- [The Metropolitan Museum of Art Open Access](https://huggingface.co/datasets/metmuseum/openaccess): public domain paintings, drawings and prints, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Changes: images larger than 2048 px were downscaled.
 - [COCO](https://huggingface.co/datasets/detection-datasets/coco) train images: Flickr images under their individual licenses
 - [ChartQA](https://huggingface.co/datasets/HuggingFaceM4/ChartQA) train split, GPL-3.0
 
