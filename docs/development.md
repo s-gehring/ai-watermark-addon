@@ -24,7 +24,7 @@ npm start             # starts Firefox with the add-on (web-ext run)
 
 Release Firefox only installs add-ons signed by Mozilla. Without a signature, `dist/` can be loaded temporarily via `about:debugging` → "This Firefox" → "Load Temporary Add-on…" (pick `dist/manifest.json`), or permanently in Firefox Developer Edition or Nightly with `xpinstall.signatures.required = false`.
 
-Releases are listed on addons.mozilla.org (AMO) and also published as GitHub releases by [`.github/workflows/release.yml`](../.github/workflows/release.yml) and [`.github/workflows/publish.yml`](../.github/workflows/publish.yml). Both need [AMO API keys](https://addons.mozilla.org/developers/addon/api/key/) as the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. To release:
+Releases are listed on addons.mozilla.org (AMO) and also published as GitHub releases by [`.github/workflows/release.yml`](../.github/workflows/release.yml) and [`.github/workflows/publish.yml`](../.github/workflows/publish.yml). To release:
 
 1. Raise `version` in `package.json` and merge the change into `main`.
 2. Tag the merge commit and push the tag:
