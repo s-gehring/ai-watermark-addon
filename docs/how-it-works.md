@@ -33,9 +33,15 @@ The add-on therefore checks for a fixed component of the watermark that can be m
 - **Google:** one template from 288 Gemini images. Because frequencies are counted relative to the image size, this works at any resolution and aspect ratio.
 - **OpenAI:** here the fixed component depends on the output size. Images of the same size from different sources share it, images of different sizes do not. The add-on has templates for the four output sizes with enough images carrying a verified watermark: 1254 × 1254, 1448 × 1086, 1672 × 941 and 1122 × 1402 (ChatGPT picks them for square, 4:3, 16:9 and 4:5 images). Each template is applied only to images with its aspect ratio (±2 %), which includes downscaled copies. The pattern sits at high frequencies, so the three non-square templates work at 1024 × 1024 (up to 384 cycles per image). All OpenAI templates also mask a 2 % border, because otherwise edge effects instead of the watermark would end up in the template.
 
-Measured in Node, the check takes about 0.13 s for a 4-megapixel image, about 0.35 s at 4:3, 16:9 and 4:5 because of the finer OpenAI templates.
+Measured in Node, the SynthID check takes about 0.13 s for a 4-megapixel image, about 0.35 s at 4:3, 16:9 and 4:5 because of the finer OpenAI templates.
 
 [`tools/synthid/synthid.py`](../tools/synthid/synthid.py) is the reference implementation of [`src/background/synthid.ts`](../src/background/synthid.ts); a unit test checks that both produce the same z-scores. Detection rates and false positives are in [accuracy.md](accuracy.md#synthid-watermark).
+
+### Stable Diffusion watermark
+
+After the SynthID templates, the same step decodes the classic [invisible-watermark](https://pypi.org/project/invisible-watermark) (`dwtDct`) that the Stable Diffusion reference scripts (`StableDiffusionV1`, `SDV2`) and the SDXL pipelines (a fixed 46-bit pattern) write into the pixels. It is a fixed algorithm without a secret key: a Haar transform of the U channel, in each 4 × 4 block the largest coefficient modulo 36 gives one bit, and the bits are voted per payload position. A hit needs the decoded bits to match a payload at z ≥ 5 (about 1 false positive in 500,000 images with random bits; none in 977 real images tested). Badge "AI · Watermark".
+
+This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline.
 
 ## 3. Model
 

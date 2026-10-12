@@ -350,6 +350,7 @@ function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
   fragment.append('AI');
   let detail: string | null = null;
   if (verdict.source === 'synthid' || (verdict.source === 'metadata' && verdict.reason === 'synthid')) detail = 'SynthID';
+  else if (verdict.source === 'watermark') detail = browser.i18n.getMessage('badgeWatermark');
   else if (verdict.source === 'metadata') detail = browser.i18n.getMessage('badgeMetadata');
   else if (showScore) detail = `${Math.round(verdict.score * 100)} %`;
   if (detail) {
@@ -395,6 +396,12 @@ function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
   const watermark =
     verdict.source === 'model'
       ? statusRow(message('detailsWatermark'), verdict.watermark, message('detailsNoWatermark'))
+      : verdict.source === 'watermark'
+        ? row(
+            message('detailsInvisibleWatermark'),
+            'hit',
+            message('detailsWatermarkFound', [verdict.scheme === 'sdxl' ? 'SDXL' : 'Stable Diffusion']),
+          )
       : provider
         ? row(message('detailsWatermark'), 'hit', message('detailsWatermarkFound', [provider]))
         : row(message('detailsWatermark'), 'off', message('detailsSkipped'));

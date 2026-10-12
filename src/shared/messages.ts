@@ -10,6 +10,8 @@ export type MetadataReason =
 
 export type SynthIdProvider = 'google' | 'openai';
 
+export type InvisibleWatermarkScheme = 'stable-diffusion' | 'sdxl';
+
 export type CheckStatus = 'clear' | 'off';
 
 export type VerdictError = 'fetch' | 'decode' | 'model' | 'unsupported';
@@ -18,6 +20,7 @@ export type Verdict =
   | { ok: true; score: number; source: 'model'; models: number[]; metadata: CheckStatus; watermark: CheckStatus }
   | { ok: true; score: 1; source: 'metadata'; reason: MetadataReason }
   | { ok: true; score: 1; source: 'synthid'; provider: SynthIdProvider; metadata: CheckStatus }
+  | { ok: true; score: 1; source: 'watermark'; scheme: InvisibleWatermarkScheme; metadata: CheckStatus }
   | { ok: false; error: VerdictError };
 
 export interface FrameStats {

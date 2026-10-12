@@ -1,6 +1,7 @@
 import synthIdConfig from '../../synthid.json';
 import type { SynthIdProvider, Verdict } from '../shared/messages';
 import { decodeImage, scoreImage } from './classifier';
+import { detectInvisibleWatermark } from './invisible-watermark';
 import { detectAiMetadata } from './metadata';
 import { isScorable, type PixelImage } from './preprocess';
 import { SerialQueue } from './queue';
@@ -72,6 +73,8 @@ async function score(bytes: Uint8Array, type: string, checks: Checks): Promise<V
   const metadata = checks.checkMetadata ? 'clear' : 'off';
   const provider = checks.checkWatermark ? await findSynthId(image) : null;
   if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
+  const scheme = checks.checkWatermark ? detectInvisibleWatermark(image) : null;
+  if (scheme) return { ok: true, score: 1, source: 'watermark', scheme, metadata };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   try {
     const watermark = checks.checkWatermark ? 'clear' : 'off';
