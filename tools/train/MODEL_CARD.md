@@ -26,7 +26,7 @@ AI-generated image detector bundled with the Firefox add-on [AI Watermark](https
 - **Input:** `pixel_values`, float32, 1 × 3 × 384 × 384. Resize the shortest edge to 440 px (bilinear), center-crop 384 px, scale to [0, 1], normalize with ImageNet mean `[0.485, 0.456, 0.406]` and std `[0.229, 0.224, 0.225]`.
 - **Output:** `logits`, float32, 1 × 1. `sigmoid(logit)` is the raw probability that the image is AI-generated.
 
-The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.4371 * logit + 1.4406)`) and flags images from 0.92, which marks about 1 % of real photos under web conditions.
+The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.4369 * logit + 1.4392)`) and flags images from 0.92, which marks about 1 % of real photos under web conditions.
 
 ## Evaluation
 

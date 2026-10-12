@@ -16,7 +16,7 @@ At the default threshold of 92 %, with the previously bundled Community Forensic
 |---|---|---|---|
 | AI images detected (OpenFake) | 67 % (40 %) | 65 % (30 %) | 62 % (27 %) |
 | AI images detected (Reddit) | 65 % (31 %) | 65 % (28 %) | 54 % (29 %) |
-| AI images detected (newer generators) | 57 % (43 %) | 34 % (14 %) | 40 % (18 %) |
+| AI images detected (newer generators) | 57 % (43 %) | 33 % (14 %) | 40 % (18 %) |
 | real photos flagged (all) | 1.1 % (0.8 %) | 1.3 % (0.8 %) | 1.1 % (0.8 %) |
 | real photos flagged (photography subreddits) | 2.7 % (3.2 %) | 2.7 % (1.6 %) | 2.7 % (2.7 %) |
 | real photos flagged (DOCCI camera photos) | 5.0 % (2.5 %) | 6.3 % (1.9 %) | 3.8 % (0.6 %) |
@@ -54,7 +54,7 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 ### Limitations
 
 - The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about half of the AI images without metadata or watermark stay unmarked. To catch more, lower the threshold in the settings and accept more false positives.
-- The model is weaker on the newest generators. Under web conditions (1280 px) it finds 47 of 78 FLUX.2 images, 22 of 70 GPT-Image 2 images, 11 of 73 Qwen-Image 2.1 images and 23 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 57 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
+- The model is weaker on the newest generators. Under web conditions (1280 px) it finds 47 of 78 FLUX.2 images, 21 of 70 GPT-Image 2 images, 11 of 73 Qwen-Image 2.1 images and 23 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 57 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
 - The model flags high-quality camera photos like those from DOCCI more often than Community Forensics, 4 to 6 % instead of 1 to 2 % under web conditions, and YouTube thumbnails at about 1 % instead of almost never. Heavily edited photos from photography subreddits are flagged about as often (3 % instead of 2 to 3 %). 3D renderings are not in the test set.
 - The fine-tuning uses public domain artworks from the Met as negatives, mostly from before 1900. The paintings from the Cleveland Museum of Art are similar and are not flagged at all, WikiArt contains more modern and abstract art and is flagged at 5 to 7 %. Detectra, the base model, was itself trained with WikiArt paintings.
 - The fine-tuning uses the OpenFake train split, COCO train and Met artworks, none of which appear in the measurement. The measurement uses the test split with other generators and other photo sources (ImageNet and DOCCI instead of LAION and Pexels). The checkpoint was, however, selected based on this measurement (out of a few variants), so the numbers are slightly optimistic.

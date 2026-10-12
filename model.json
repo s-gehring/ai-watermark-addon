@@ -19,8 +19,8 @@
     }
   ],
   "calibration": {
-    "weights": [0.4371],
-    "bias": 1.4406
+    "weights": [0.4369],
+    "bias": 1.4392
   },
   "threshold": 0.92
 }
