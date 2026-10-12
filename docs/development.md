@@ -2,6 +2,8 @@
 
 Requirements: Node 22 and Firefox. Python 3 only for the tools below.
 
+The evaluation, training and template tools download third-party datasets and YouTube thumbnails for local use. They are not part of this repository; their own licenses and terms apply to you when you run the tools.
+
 ```bash
 npm ci
 npm run fetch-model   # downloads the model to vendor/models/ and verifies its SHA-256
