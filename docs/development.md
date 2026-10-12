@@ -24,7 +24,7 @@ npm start             # starts Firefox with the add-on (web-ext run)
 
 Release Firefox only installs add-ons signed by Mozilla. Without a signature, `dist/` can be loaded temporarily via `about:debugging` → "This Firefox" → "Load Temporary Add-on…" (pick `dist/manifest.json`), or permanently in Firefox Developer Edition or Nightly with `xpinstall.signatures.required = false`.
 
-Releases are signed as an unlisted add-on on addons.mozilla.org and published as GitHub releases by [`.github/workflows/release.yml`](../.github/workflows/release.yml). It needs [AMO API keys](https://addons.mozilla.org/developers/addon/api/key/) as the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. To release:
+Releases are listed on addons.mozilla.org (AMO) and also published as GitHub releases by [`.github/workflows/release.yml`](../.github/workflows/release.yml) and [`.github/workflows/publish.yml`](../.github/workflows/publish.yml). Both need [AMO API keys](https://addons.mozilla.org/developers/addon/api/key/) as the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. To release:
 
 1. Raise `version` in `package.json` and merge the change into `main`.
 2. Tag the merge commit and push the tag:
@@ -37,7 +37,9 @@ Releases are signed as an unlisted add-on on addons.mozilla.org and published as
    git push origin v0.2.0
    ```
 
-The workflow tests and lints the build, uploads it together with the source code to AMO, waits for the signature, attaches the signed `.xpi` to a GitHub release and adds it to [`updates.json`](../updates.json) on `main`. Installed add-ons check that file through `update_url` in the manifest and update themselves.
+The release workflow tests and lints the build, uploads it together with the source code and [`amo-metadata.json`](../amo-metadata.json) (categories, support URL, license) to AMO and creates a draft GitHub release. AMO reviews the version, which can take a few days. Every night the publish workflow asks AMO about each draft release. Once the version is approved, it attaches the signed `.xpi` to the release and publishes it. To check right away, start the publish workflow by hand under Actions → Publish → "Run workflow". A rejected version makes the publish workflow fail until the draft release is deleted.
+
+Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
 The package is about 49 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
 
