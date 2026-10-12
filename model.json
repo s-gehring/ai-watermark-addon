@@ -1,26 +1,26 @@
 {
   "models": [
     {
-      "name": "CommunityForensics-DeepfakeDet-ViT",
-      "label": "CommunityForensics ViT",
-      "repo": "buildborderless/CommunityForensics-DeepfakeDet-ViT",
-      "revision": "ac6ee457bea904a373065754107451793b56db00",
-      "license": "MIT",
-      "dtype": "q8",
+      "name": "detectra-openfake",
+      "label": "Detectra (OpenFake)",
+      "license": "MIT; Feintuning mit OpenFake (CC BY-NC 4.0), nur lokal",
+      "dtype": "fp16",
       "output": "sigmoid",
       "input": {
         "shortestEdge": 440,
         "crop": 384,
-        "resample": "bicubic",
-        "mean": [0.48145466, 0.4578275, 0.40821073],
-        "std": [0.26862954, 0.26130258, 0.27577711]
+        "resample": "bilinear",
+        "mean": [0.485, 0.456, 0.406],
+        "std": [0.229, 0.224, 0.225]
       },
       "files": {
-        "config.json": null,
-        "onnx/model_quantized.onnx": "968f113f1107d58bfc73444b6e87020e2d541780ad43b7a1ac3e3b18b86c2bbd"
+        "model.onnx": "5770e48c6a3de889a8760abf65349021a56c5507d7bddf62b49149eac9ae023c"
       }
     }
   ],
-  "calibration": { "weights": [0.4501], "bias": 3.2742 },
-  "threshold": 0.95
+  "calibration": {
+    "weights": [0.4803],
+    "bias": 1.544
+  },
+  "threshold": 0.92
 }
