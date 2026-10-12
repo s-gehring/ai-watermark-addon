@@ -1,0 +1,37 @@
+name: Publish
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Publish draft releases approved on addons.mozilla.org
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          for tag in $(gh release list --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | sort -V); do
+            xpi="ai-watermark-$tag.xpi"
+            status=0
+            node scripts/amo-download.mjs "${tag#v}" "$xpi" || status=$?
+            [ "$status" = 3 ] && continue
+            [ "$status" = 0 ] || exit "$status"
+            gh release upload "$tag" "$xpi"
+            gh release edit "$tag" --draft=false
+          done
