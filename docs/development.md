@@ -20,16 +20,24 @@ npm start             # starts Firefox with the add-on (web-ext run)
 | `npm run lint` | `web-ext lint` on `dist/` |
 | `npm run package` | creates the ZIP in `web-ext-artifacts/` |
 
-## Install permanently
+## Release
 
-Release Firefox only installs signed add-ons. Without a signature, the add-on can be loaded temporarily via `about:debugging` → "This Firefox" → "Load Temporary Add-on…" (pick `dist/manifest.json`), or permanently in Firefox Developer Edition or Nightly with `xpinstall.signatures.required = false`.
+Release Firefox only installs add-ons signed by Mozilla. Without a signature, `dist/` can be loaded temporarily via `about:debugging` → "This Firefox" → "Load Temporary Add-on…" (pick `dist/manifest.json`), or permanently in Firefox Developer Edition or Nightly with `xpinstall.signatures.required = false`.
 
-For a signed, unlisted version with [AMO API keys](https://addons.mozilla.org/developers/addon/api/key/):
+Releases are signed as an unlisted add-on on addons.mozilla.org and published as GitHub releases by [`.github/workflows/release.yml`](../.github/workflows/release.yml). It needs [AMO API keys](https://addons.mozilla.org/developers/addon/api/key/) as the repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. To release:
 
-```bash
-npm run build
-npx web-ext sign --source-dir dist --channel unlisted --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
-```
+1. Raise `version` in `package.json` and merge the change into `main`.
+2. Tag the merge commit and push the tag:
+
+   ```bash
+   git tag v0.2.0 origin/main
+   ```
+
+   ```bash
+   git push origin v0.2.0
+   ```
+
+The workflow tests and lints the build, uploads it together with the source code to AMO, waits for the signature, attaches the signed `.xpi` to a GitHub release and adds it to [`updates.json`](../updates.json) on `main`. Installed add-ons check that file through `update_url` in the manifest and update themselves.
 
 The package is about 49 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
 

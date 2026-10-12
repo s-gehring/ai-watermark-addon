@@ -32,7 +32,9 @@ The badge is a hint, not proof. Full numbers and limitations are in [docs/accura
 
 ## Install
 
-The add-on is not on addons.mozilla.org yet. To try it, [build it from source](#build-from-source) and load `dist/manifest.json` via `about:debugging` → "This Firefox" → "Load Temporary Add-on…". For a permanent install, see [docs/development.md](docs/development.md#install-permanently).
+Open the `.xpi` file of the [latest release](https://github.com/s-gehring/ai-watermark-addon/releases/latest) in Firefox and confirm the installation. If Firefox only downloads the file, open `about:addons`, click the gear icon and choose "Install Add-on From File…". The add-on is signed by Mozilla and updates itself, but is not listed on addons.mozilla.org.
+
+On Firefox for Android, enable the debug menu (Settings → About Firefox, tap the logo five times), then use "Install extension from file" in the settings.
 
 Requires Firefox 140 or later, or Firefox for Android 142 or later.
 
@@ -71,7 +73,7 @@ npm run build         # builds to dist/
 npm start             # starts Firefox with the add-on
 ```
 
-Tests, linting, packaging, model evaluation and training, and rebuilding the SynthID templates are described in [docs/development.md](docs/development.md).
+Tests, linting, releases, model evaluation and training, and rebuilding the SynthID templates are described in [docs/development.md](docs/development.md).
 
 ## Project structure
 
@@ -82,6 +84,7 @@ src/popup/        toolbar popup
 src/options/      settings page
 model.json        model, input format, calibration, default threshold
 synthid.json      source, size, scaling and threshold of the SynthID templates (src/background/synthid-templates/)
+updates.json      update manifest for installed add-ons, written by the release workflow
 tools/eval/       test data download and model comparison
 tools/train/      model fine-tuning (data download, training, ONNX export)
 tools/synthid/    reference implementation, template building and measurement of the SynthID check
