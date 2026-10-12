@@ -176,16 +176,17 @@ async function send(request: BackgroundRequest): Promise<Verdict> {
 }
 
 async function requestVerdict(url: string, element: Element): Promise<Verdict> {
-  if (url.startsWith('blob:')) {
-    const bytes = await fetch(url)
-      .then((r) => r.arrayBuffer())
-      .catch(() => null);
-    return bytes ? send({ type: 'classify', url, bytes }) : { ok: false, error: 'fetch' };
-  }
-  const verdict = await send({ type: 'classify', url });
+  const verdict = url.startsWith('blob:') ? await classifyBlob(url) : await send({ type: 'classify', url });
   if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
   const bytes = await pixelsOf(element);
   return bytes ? send({ type: 'classify', url, bytes }) : verdict;
+}
+
+async function classifyBlob(url: string): Promise<Verdict> {
+  const bytes = await fetch(url)
+    .then((r) => r.arrayBuffer())
+    .catch(() => null);
+  return bytes ? send({ type: 'classify', url, bytes }) : { ok: false, error: 'fetch' };
 }
 
 async function pixelsOf(image: HTMLImageElement): Promise<ArrayBuffer | null> {
