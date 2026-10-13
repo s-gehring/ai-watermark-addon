@@ -9,7 +9,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const STYLE = `
 :host { all: initial; }
-.layer { position: fixed; top: 0; left: 0; z-index: 2147483647; width: 0; height: 0; overflow: visible; pointer-events: none; }
+.layer { position: absolute; top: 0; left: 0; z-index: 2147483647; width: 0; height: 0; overflow: visible; pointer-events: none; }
+.layer.fixed { position: fixed; }
 .badge {
   position: absolute; top: 0; left: 0;
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
@@ -92,7 +93,8 @@ interface Badge {
 
 export class BadgeLayer {
   private readonly host = document.createElement('ai-watermark-layer');
-  private readonly root: HTMLElement;
+  private readonly page: HTMLElement;
+  private readonly screen: HTMLElement;
   private readonly details: HTMLElement;
   private readonly badges = new Map<Element, Badge>();
   private options: DisplayOptions = { showScore: true, showChecked: true, threshold: model.threshold };
@@ -104,17 +106,16 @@ export class BadgeLayer {
     const shadow = this.host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = STYLE;
-    this.root = document.createElement('div');
-    this.root.className = 'layer';
-    this.details = document.createElement('div');
-    this.details.className = 'details';
+    this.page = text('div', 'layer');
+    this.screen = text('div', 'layer fixed');
+    this.details = text('div', 'details');
     this.details.hidden = true;
     this.details.addEventListener('pointerenter', () => clearTimeout(this.closeTimer));
     this.details.addEventListener('pointerleave', () => this.scheduleClose());
-    this.root.append(this.details);
-    shadow.append(style, this.root);
+    this.page.append(this.details);
+    shadow.append(style, this.page, this.screen);
     for (const type of ['click', 'pointerdown', 'mousedown']) {
-      this.root.addEventListener(type, (event) => event.stopPropagation());
+      for (const layer of [this.page, this.screen]) layer.addEventListener(type, (event) => event.stopPropagation());
     }
 
     const schedule = () => this.scheduleUpdate();
@@ -154,7 +155,7 @@ export class BadgeLayer {
       });
       node.addEventListener('pointerenter', () => this.show(element));
       node.addEventListener('pointerleave', () => this.scheduleClose());
-      this.root.insertBefore(node, this.details);
+      this.place(node, this.page);
       this.badges.set(element, badge);
     }
     badge.state = state;
@@ -196,6 +197,10 @@ export class BadgeLayer {
     this.placeDetails(badge.node);
   }
 
+  private place(node: HTMLElement, layer: HTMLElement): void {
+    if (node.parentElement !== layer) layer.insertBefore(node, this.details.parentElement === layer ? this.details : null);
+  }
+
   private scheduleClose(): void {
     clearTimeout(this.closeTimer);
     this.closeTimer = window.setTimeout(() => this.close(), CLOSE_DELAY);
@@ -215,6 +220,9 @@ export class BadgeLayer {
   }
 
   private placeDetails(anchor: HTMLElement): void {
+    const layer = anchor.parentElement!;
+    if (this.details.parentElement !== layer) layer.append(this.details);
+    const origin = layer.getBoundingClientRect();
     const viewportWidth = document.documentElement.clientWidth || innerWidth;
     const viewportHeight = document.documentElement.clientHeight || innerHeight;
     const badge = anchor.getBoundingClientRect();
@@ -223,13 +231,14 @@ export class BadgeLayer {
     const x = Math.min(Math.max(badge.right - width, MARGIN), viewportWidth - width - MARGIN);
     const below = badge.bottom + GAP;
     const y = below + height <= viewportHeight - MARGIN ? below : Math.max(badge.top - GAP - height, MARGIN);
-    this.details.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    this.details.style.transform = `translate(${Math.round(x - origin.left)}px, ${Math.round(y - origin.top)}px)`;
   }
 
   private update(): void {
     if (!this.host.isConnected) document.documentElement.append(this.host);
     const viewportWidth = document.documentElement.clientWidth || innerWidth;
     const viewportHeight = document.documentElement.clientHeight || innerHeight;
+    const origins = new Map([this.page, this.screen].map((layer) => [layer, layer.getBoundingClientRect()]));
     for (const [element, badge] of [...this.badges]) {
       if (!element.isConnected) {
         this.remove(element);
@@ -238,17 +247,22 @@ export class BadgeLayer {
       if (badge.dismissed || !isDisplayed(badge.state, this.options)) continue;
       const width = badge.node.offsetWidth || 40;
       const height = badge.node.offsetHeight || 22;
-      const box = visibleBox(element, viewportWidth, viewportHeight);
+      const clip = visibleBox(element, viewportWidth, viewportHeight);
+      const box = clip?.box;
       const x = box ? box.right - INSET - width : 0;
       const y = box ? box.top + INSET : 0;
       const visible =
-        box !== null &&
+        !!box &&
         box.right - box.left >= width + 2 * INSET &&
         box.bottom - box.top >= height + 2 * INSET &&
         isRendered(element) &&
         !this.isCovered(element, x + width / 2, y + height / 2);
       badge.node.hidden = !visible;
-      if (visible) badge.node.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      if (!visible || !clip) continue;
+      const layer = clip.fixed ? this.screen : this.page;
+      const origin = origins.get(layer)!;
+      this.place(badge.node, layer);
+      badge.node.style.transform = `translate(${Math.round(x - origin.left)}px, ${Math.round(y - origin.top)}px)`;
     }
     const open = this.open && this.badges.get(this.open);
     if (open && open.node.hidden) this.close();
@@ -268,14 +282,16 @@ export class BadgeLayer {
   }
 }
 
-function visibleBox(element: Element, viewportWidth: number, viewportHeight: number): Box | null {
+function visibleBox(element: Element, viewportWidth: number, viewportHeight: number): { box: Box; fixed: boolean } | null {
   const rect = element.getBoundingClientRect();
+  if (rect.bottom < -viewportHeight || rect.top > 2 * viewportHeight) return null;
   const box: Box = {
     left: Math.max(rect.left, 0),
-    top: Math.max(rect.top, 0),
+    top: rect.top,
     right: Math.min(rect.right, viewportWidth),
-    bottom: Math.min(rect.bottom, viewportHeight),
+    bottom: rect.bottom,
   };
+  let fixed = false;
   for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
     if (box.right <= box.left || box.bottom <= box.top) return null;
     const style = getComputedStyle(node);
@@ -290,9 +306,14 @@ function visibleBox(element: Element, viewportWidth: number, viewportHeight: num
         box.bottom = Math.min(box.bottom, clip.bottom);
       }
     }
-    if (style.position === 'fixed') break;
+    if (style.position === 'fixed') {
+      fixed = true;
+      box.top = Math.max(box.top, 0);
+      box.bottom = Math.min(box.bottom, viewportHeight);
+      break;
+    }
   }
-  return box.right > box.left && box.bottom > box.top ? box : null;
+  return box.right > box.left && box.bottom > box.top ? { box, fixed } : null;
 }
 
 function isDisplayed(state: BadgeState, options: DisplayOptions): boolean {
