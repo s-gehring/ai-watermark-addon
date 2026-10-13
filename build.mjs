@@ -34,6 +34,7 @@ const configs = [
     ...common,
     entryPoints: { background: 'src/background/index.ts', worker: 'src/background/worker.ts' },
     format: 'esm',
+    supported: { 'dynamic-import': false },
     outdir: out,
   },
   {
@@ -63,7 +64,6 @@ const copies = [
   ['src/popup/popup.css', 'popup.css'],
   ['src/options/options.html', 'options.html'],
   ['src/options/options.css', 'options.css'],
-  ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', 'ort/ort-wasm-simd-threaded.mjs'],
   ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', 'ort/ort-wasm-simd-threaded.wasm'],
 ];
 for (const [from, to] of copies) {

@@ -17,7 +17,7 @@ npm start             # starts Firefox with the add-on (web-ext run)
 | `npm test` | unit tests (Vitest) |
 | `npm run test:e2e` | builds and tests the add-on in headless Firefox (Selenium/geckodriver) |
 | `npm run typecheck` | TypeScript check |
-| `npm run lint` | `web-ext lint` on `dist/` |
+| `npm run lint` | `web-ext lint` on `dist/`, fails on warnings |
 | `npm run package` | creates the ZIP in `web-ext-artifacts/` |
 
 ## Release
