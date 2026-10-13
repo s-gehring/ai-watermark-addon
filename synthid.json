@@ -135,6 +135,69 @@
         ],
         "images": 193
       }
+    },
+    {
+      "provider": "amazon",
+      "file": "amazon-nova-canvas.bin",
+      "size": 1024,
+      "minChannelStd": 0.5,
+      "weightScale": 0.0034057388523643676,
+      "threshold": 8,
+      "source": {
+        "repositories": [
+          {
+            "repository": "ExamProCo/aws-storage-genai-workshop",
+            "revision": "004e5a6dc999683857a18754b53eb4028932202a",
+            "images": 1
+          },
+          {
+            "repository": "asha1-alt/AITraining-1",
+            "revision": "09ba28ee8dd20df6a420bec74b294491ea1d122f",
+            "images": 2
+          },
+          {
+            "repository": "aws-samples/amazon-nova-samples",
+            "revision": "4fc3505d412e2ca88b01917d7d85c3f74a7de0c5",
+            "images": 1
+          },
+          {
+            "repository": "aws-samples/sample-amazon-nova-prompt-examples",
+            "revision": "3abcdd878999ab27acf81154eba77c998233b173",
+            "images": 1
+          },
+          {
+            "repository": "aws-samples/sample-devops-agent-demo",
+            "revision": "9408fe6b67223188647d7d45afaa59da1b18c1b8",
+            "images": 17
+          },
+          {
+            "repository": "baochen10luo/stagenthand",
+            "revision": "6879465c5b6393a636b6b84ac2dbf7cd363f66e5",
+            "images": 2
+          },
+          {
+            "repository": "camila-hinojosa-anez/practice-speaking-with-sonic",
+            "revision": "7a4d96604de93ab141c030e25d8dec0c2eb2bb83",
+            "images": 3
+          },
+          {
+            "repository": "leegilmorecode/llm-image-assertions",
+            "revision": "b691209206dff2a6dcdb239230af0ad93fa89f1f",
+            "images": 1
+          },
+          {
+            "repository": "niravdd/ArtSmoker",
+            "revision": "456c569de42f3eef27eea3b7713e6fbb518e79e9",
+            "images": 46
+          },
+          {
+            "repository": "stellarshenson/stellars-jupyterhub-ds",
+            "revision": "305e9f978fc42317218d4cf8d5e50797dd086423",
+            "images": 1
+          }
+        ],
+        "images": 75
+      }
     }
   ]
 }

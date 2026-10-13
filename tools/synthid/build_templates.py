@@ -1,5 +1,8 @@
 import argparse
+import hashlib
 import json
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from huggingface_hub import snapshot_download
@@ -33,6 +36,13 @@ OPENAI_SIZES = {(1254, 1254): 512, (1448, 1086): 1024, (1672, 941): 1024, (1122,
 OPENAI_MAX_FREQUENCY = 384
 OPENAI_BORDER = 0.02
 WATERMARK_ACTION = b"c2pa.watermarked"
+AMAZON = json.loads((Path(__file__).parent / "amazon_sources.json").read_text())
+AMAZON_SIZE = 1024
+AMAZON_MIN_FREQUENCY = 128
+AMAZON_BORDER = 0.02
+AMAZON_MIN_CHANNEL_STD = 0.5
+CR = 2
+NOVA_MANIFEST = (b"Amazon_Bedrock", b"Nova Canvas")
 
 
 def download(source):
@@ -63,19 +73,43 @@ def openai_images():
     return groups
 
 
+def amazon_images():
+    groups, seen = {}, set()
+    for source in AMAZON:
+        repository, revision = source["repository"], source["revision"]
+        for file in source["files"]:
+            local = CACHE / "amazon-nova" / repository / revision / file
+            if not local.exists():
+                local.parent.mkdir(parents=True, exist_ok=True)
+                url = f"https://raw.githubusercontent.com/{repository}/{revision}/{urllib.parse.quote(file)}"
+                with urllib.request.urlopen(url, timeout=60) as response:
+                    local.write_bytes(response.read())
+            data = local.read_bytes()
+            if not all(marker in data for marker in NOVA_MANIFEST):
+                continue
+            pixels = hashlib.sha1(synthid.load_rgb(local).tobytes()).hexdigest()
+            if pixels not in seen:
+                seen.add(pixels)
+                groups.setdefault(repository, []).append(local)
+    return groups
+
+
 def build(entry, sources, paths_by_dataset, existing, **options):
     paths = [p for paths in paths_by_dataset.values() for p in paths]
     weights, phases, count = synthid.build(paths, entry["size"], **options)
     w, p, scale = synthid.quantize(weights, phases)
     target = ROOT / synthid.TEMPLATE_DIR / entry["file"]
     synthid.save(target, w, p)
+    datasets = [{**s, "images": len(paths_by_dataset[s["dataset"]])} for s in sources if s.get("dataset") in paths_by_dataset]
+    repositories = [
+        {"repository": s["repository"], "revision": s["revision"], "images": len(paths_by_dataset[s["repository"]])}
+        for s in sources
+        if s.get("repository") in paths_by_dataset
+    ]
     entry.update(
         weightScale=scale,
         threshold=existing.get(entry["file"], {}).get("threshold", entry.pop("threshold")),
-        source={
-            "datasets": [{**s, "images": len(paths_by_dataset[s["dataset"]])} for s in sources if s["dataset"] in paths_by_dataset],
-            "images": count,
-        },
+        source={**({"datasets": datasets} if datasets else {}), **({"repositories": repositories} if repositories else {}), "images": count},
     )
     print(f"{entry['file']}: {count} images -> {target.relative_to(ROOT)} ({target.stat().st_size // 1024} KB)", flush=True)
     return entry
@@ -83,7 +117,7 @@ def build(entry, sources, paths_by_dataset, existing, **options):
 
 def main():
     parser = argparse.ArgumentParser(description="Build the SynthID phase templates from pinned Hugging Face datasets.")
-    parser.add_argument("providers", nargs="*", choices=["google", "openai"], default=["google", "openai"])
+    parser.add_argument("providers", nargs="*", choices=["google", "openai", "amazon"], default=["google", "openai", "amazon"])
     args = parser.parse_args()
 
     existing = {t["file"]: t for t in json.loads(META.read_text())["templates"]} if META.exists() else {}
@@ -103,7 +137,18 @@ def main():
             templates[entry["file"]] = build(
                 entry, OPENAI, paths_by_dataset, existing, max_frequency=OPENAI_MAX_FREQUENCY, border=OPENAI_BORDER
             )
-    order = ["google.bin", *(f"openai-{w}x{h}.bin" for w, h in OPENAI_SIZES)]
+    if "amazon" in args.providers:
+        entry = {
+            "provider": "amazon",
+            "file": "amazon-nova-canvas.bin",
+            "size": AMAZON_SIZE,
+            "minChannelStd": AMAZON_MIN_CHANNEL_STD,
+            "threshold": 8,
+        }
+        templates[entry["file"]] = build(
+            entry, AMAZON, amazon_images(), existing, min_frequency=AMAZON_MIN_FREQUENCY, border=AMAZON_BORDER, channels=(CR,)
+        )
+    order = ["google.bin", *(f"openai-{w}x{h}.bin" for w, h in OPENAI_SIZES), "amazon-nova-canvas.bin"]
     ordered = sorted(templates.values(), key=lambda t: order.index(t["file"]) if t["file"] in order else len(order))
     META.write_text(json.dumps({"templates": ordered}, indent=2) + "\n")
 

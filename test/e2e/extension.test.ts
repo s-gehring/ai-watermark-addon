@@ -32,7 +32,7 @@ async function photoLikeJpeg(): Promise<Buffer> {
   return sharp(pixels, { raw: { width, height, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
 }
 
-async function synthIdPng(file: string, width: number, height: number): Promise<Buffer> {
+async function synthIdPng(file: string, width: number, height: number, amplitude = 24): Promise<Buffer> {
   const n = synthIdConfig.templates.find((t) => t.file === file)!.size;
   const half = n / 2 + 1;
   const template = readFileSync(new URL(`../../src/background/synthid-templates/${file}`, import.meta.url));
@@ -63,7 +63,7 @@ async function synthIdPng(file: string, width: number, height: number): Promise<
       }
     }
     const peak = re.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-    return re.map((v) => (v / peak) * 24);
+    return re.map((v) => (peak ? (v / peak) * amplitude : 0));
   });
   const pixels = Buffer.alloc(n * n * 3);
   for (let i = 0; i < n * n; i++) {
@@ -139,6 +139,7 @@ beforeAll(async () => {
   const ai = withXmp(plain, XMP_AI);
   const synthId = await synthIdPng('google.bin', 480, 360);
   const synthIdOpenai = await synthIdPng('openai-1254x1254.bin', 600, 600);
+  const novaCanvas = await synthIdPng('amazon-nova-canvas.bin', 1280, 720, 48);
   const synthIdC2pa = withC2paSynthId(await sharp(await photoLikeJpeg()).png().toBuffer());
   server = createServer((req, res) => {
     const path = new URL(req.url!, 'http://x').pathname;
@@ -154,6 +155,7 @@ beforeAll(async () => {
     else if (path === '/plain.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
     else if (path === '/synthid.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthId);
     else if (path === '/synthid-openai.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdOpenai);
+    else if (path === '/nova-canvas.png') res.writeHead(200, { 'content-type': 'image/png' }).end(novaCanvas);
     else if (path === '/synthid-c2pa.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdC2pa);
     else res.writeHead(404).end();
   });
@@ -382,6 +384,10 @@ describe('background', () => {
 
   it("tells OpenAI's SynthID pattern apart from Google's", async () => {
     expect(await classify('/synthid-openai.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'openai', metadata: 'clear' });
+  }, 60_000);
+
+  it('reports the Amazon Nova Canvas pattern as an invisible watermark, not as SynthID', async () => {
+    expect(await classify('/nova-canvas.png')).toEqual({ ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata: 'clear' });
   }, 60_000);
 
   it('reads a SynthID declaration from the C2PA manifest', async () => {

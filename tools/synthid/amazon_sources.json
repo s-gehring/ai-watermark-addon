@@ -1,0 +1,137 @@
+[
+  {
+    "repository": "ExamProCo/aws-storage-genai-workshop",
+    "revision": "004e5a6dc999683857a18754b53eb4028932202a",
+    "files": [
+      "docs/assets/generated_image_1.png"
+    ]
+  },
+  {
+    "repository": "asha1-alt/AITraining-1",
+    "revision": "09ba28ee8dd20df6a420bec74b294491ea1d122f",
+    "files": [
+      "Module 3 - Building Applications with Foundation Models/Labs/Lab-5/content/Troubleshooting/Pics/pic_horizontal_lines.png",
+      "Module 3 - Building Applications with Foundation Models/Labs/Lab-5/content/Troubleshooting/Pics/pic_purple_light.png"
+    ]
+  },
+  {
+    "repository": "aws-samples/amazon-nova-samples",
+    "revision": "4fc3505d412e2ca88b01917d7d85c3f74a7de0c5",
+    "files": [
+      "multimodal-embeddings/getting-started/sample_assets/images/dog.png"
+    ]
+  },
+  {
+    "repository": "aws-samples/sample-amazon-nova-prompt-examples",
+    "revision": "3abcdd878999ab27acf81154eba77c998233b173",
+    "files": [
+      "docs/prompts/generation/image_manipulation/watercolor_mountain_lake.jpg"
+    ]
+  },
+  {
+    "repository": "aws-samples/sample-devops-agent-demo",
+    "revision": "9408fe6b67223188647d7d45afaa59da1b18c1b8",
+    "files": [
+      "lib/stacks/frontend/app/public/avatars/ahmed-hassan.jpg",
+      "lib/stacks/frontend/app/public/avatars/aisha-mohammed.jpg",
+      "lib/stacks/frontend/app/public/avatars/carlos-martinez.jpg",
+      "lib/stacks/frontend/app/public/avatars/david-kim.jpg",
+      "lib/stacks/frontend/app/public/avatars/elena-rodriguez.jpg",
+      "lib/stacks/frontend/app/public/avatars/james-wilson.jpg",
+      "lib/stacks/frontend/app/public/avatars/jennifer-lee.jpg",
+      "lib/stacks/frontend/app/public/avatars/lisa-wang.jpg",
+      "lib/stacks/frontend/app/public/avatars/marcus-johnson.jpg",
+      "lib/stacks/frontend/app/public/avatars/michael-brown.jpg",
+      "lib/stacks/frontend/app/public/avatars/nina-patel.jpg",
+      "lib/stacks/frontend/app/public/avatars/sarah-chen.jpg",
+      "lib/stacks/frontend/app/public/avatars/sophia-anderson.jpg",
+      "lib/stacks/frontend/app/public/avatars/yuki-tanaka.jpg",
+      "lib/stacks/frontend/app/public/crm/illustrations/no-accounts.png",
+      "lib/stacks/frontend/app/public/crm/illustrations/no-opportunities.png",
+      "lib/stacks/frontend/app/public/crm/illustrations/no-team-data.png"
+    ]
+  },
+  {
+    "repository": "baochen10luo/stagenthand",
+    "revision": "6879465c5b6393a636b6b84ac2dbf7cd363f66e5",
+    "files": [
+      "outputs/scene_1_panel_1.png",
+      "remotion-template/public/test.png"
+    ]
+  },
+  {
+    "repository": "camila-hinojosa-anez/practice-speaking-with-sonic",
+    "revision": "7a4d96604de93ab141c030e25d8dec0c2eb2bb83",
+    "files": [
+      "multimodal-generation/workshop-sample/NovaReel/data/ref_img_1.png",
+      "multimodal-generation/workshop-sample/NovaReel/data/ref_img_2.png",
+      "multimodal-generation/workshop-sample/NovaReel/data/ref_img_3.png"
+    ]
+  },
+  {
+    "repository": "leegilmorecode/llm-image-assertions",
+    "revision": "b691209206dff2a6dcdb239230af0ad93fa89f1f",
+    "files": [
+      "tests/images/couple-dreaming.png"
+    ]
+  },
+  {
+    "repository": "niravdd/ArtSmoker",
+    "revision": "456c569de42f3eef27eea3b7713e6fbb518e79e9",
+    "files": [
+      "data/images/0a21f3ae-a212-485c-8faf-73115adc7b1f_o3_v0/asset_v1.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o0_v0/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o0_v1/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o0_v2/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o1_v0/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o1_v1/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o1_v2/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o2_v0/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o2_v1/asset.png",
+      "data/images/28059a1e-1d45-4f2f-b095-25e695549b5f_o2_v2/asset.png",
+      "data/images/2efc7718-1dc0-46d2-a0a4-e2fef5449e90_o4_v0/asset.png",
+      "data/images/2efc7718-1dc0-46d2-a0a4-e2fef5449e90_o4_v1/asset.png",
+      "data/images/2efc7718-1dc0-46d2-a0a4-e2fef5449e90_o4_v2/asset.png",
+      "data/images/2efc7718-1dc0-46d2-a0a4-e2fef5449e90_o4_v3/asset.png",
+      "data/images/2efc7718-1dc0-46d2-a0a4-e2fef5449e90_o4_v4/asset.png",
+      "data/images/5490bcfe-8d03-4d08-9f96-d9b452638b27_o3_v1/asset.png",
+      "data/images/5490bcfe-8d03-4d08-9f96-d9b452638b27_o4_v1/asset.png",
+      "data/images/5490bcfe-8d03-4d08-9f96-d9b452638b27_o4_v2/asset.png",
+      "data/images/5490bcfe-8d03-4d08-9f96-d9b452638b27_o4_v3/asset.png",
+      "data/images/5490bcfe-8d03-4d08-9f96-d9b452638b27_o4_v4/asset.png",
+      "data/images/837933c8-8d32-449d-a477-0f25380dc464_o0_v0/asset.png",
+      "data/images/837933c8-8d32-449d-a477-0f25380dc464_o0_v1/asset.png",
+      "data/images/837933c8-8d32-449d-a477-0f25380dc464_o0_v2/asset.png",
+      "data/images/837933c8-8d32-449d-a477-0f25380dc464_o1_v0/asset.png",
+      "data/images/837933c8-8d32-449d-a477-0f25380dc464_o1_v1/asset.png",
+      "data/images/837933c8-8d32-449d-a477-0f25380dc464_o1_v2/asset.png",
+      "data/images/91b28db0-6820-4ef8-80fb-6fa2084a893d_o0_v1/asset.png",
+      "data/images/98f8b363-9b68-4468-a2e7-0b83d5a57de8_o1_v0/asset.png",
+      "data/images/98f8b363-9b68-4468-a2e7-0b83d5a57de8_o1_v1/asset.png",
+      "data/images/9b4f4e74-6b21-46d2-b1c0-0529143b1880_o0_v0/asset.png",
+      "data/images/9b4f4e74-6b21-46d2-b1c0-0529143b1880_o0_v1/asset.png",
+      "data/images/9b4f4e74-6b21-46d2-b1c0-0529143b1880_o1_v0/asset.png",
+      "data/images/9b4f4e74-6b21-46d2-b1c0-0529143b1880_o1_v1/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o3_v0/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o3_v1/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o3_v2/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o3_v3/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o3_v4/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o4_v0/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o4_v1/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o4_v2/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o4_v3/asset.png",
+      "data/images/a8a95ae5-84ee-409e-aa93-753e9066f22b_o4_v4/asset.png",
+      "data/images/ada81722-596d-479e-b1e7-74bf1f238857_v0/asset.png",
+      "data/images/ada81722-596d-479e-b1e7-74bf1f238857_v1/asset.png",
+      "data/images/ada81722-596d-479e-b1e7-74bf1f238857_v2/asset.png"
+    ]
+  },
+  {
+    "repository": "stellarshenson/stellars-jupyterhub-ds",
+    "revision": "305e9f978fc42317218d4cf8d5e50797dd086423",
+    "files": [
+      "docs/medium/images/article-cover.png"
+    ]
+  }
+]

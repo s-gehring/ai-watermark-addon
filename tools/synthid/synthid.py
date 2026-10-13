@@ -55,9 +55,14 @@ def planes(rgb, size=SIZE):
     return out - out.mean(axis=(1, 2), keepdims=True)
 
 
+def spectrum(rgb, size=SIZE):
+    p = planes(rgb, size)
+    f = np.fft.rfft2(p)
+    return f / (np.abs(f) + 1e-6), p.std(axis=(1, 2))
+
+
 def unit_spectrum(rgb, size=SIZE):
-    spectrum = np.fft.rfft2(planes(rgb, size))
-    return spectrum / (np.abs(spectrum) + 1e-6)
+    return spectrum(rgb, size)[0]
 
 
 def frequencies(size=SIZE):
@@ -80,7 +85,7 @@ def usable(height, width, size=SIZE):
     return rows & cols
 
 
-def build(paths, size=SIZE, max_frequency=None, border=0):
+def build(paths, size=SIZE, max_frequency=None, border=0, min_frequency=None, channels=(0, 1, 2)):
     total, count = None, 0
     for path in paths:
         u = unit_spectrum(load_rgb(path), size)
@@ -91,11 +96,14 @@ def build(paths, size=SIZE, max_frequency=None, border=0):
     keep = (np.abs(ky) >= MIN_FREQUENCY) & (kx >= MIN_FREQUENCY)
     if max_frequency is not None:
         keep &= np.hypot(ky, kx) <= max_frequency
+    if min_frequency is not None:
+        keep &= np.hypot(ky, kx) >= min_frequency
     weights = np.sqrt(np.maximum(np.abs(mean) ** 2 - 1 / count, 0))
     phases = np.angle(mean)
     if border:
         weights, phases = without_border(weights, phases, border)
-    return weights * keep[None], phases, count
+    selected = np.isin(np.arange(3), channels)[:, None, None]
+    return weights * keep[None] * selected, phases, count
 
 
 def without_border(weights, phases, border):
@@ -118,19 +126,22 @@ def dequantize(w, p, scale):
     return w.astype(np.float64) * scale, p.astype(np.float64) * (2 * np.pi / 256)
 
 
-def score_spectrum(u, height, width, weights, phases):
+def score_spectrum(u, height, width, weights, phases, channel_std=None, min_channel_std=0):
     size = u.shape[1]
     w = weights * usable(height, width, size)[None]
+    if min_channel_std:
+        w = w * (channel_std >= min_channel_std)[:, None, None]
     signal = (w * np.real(u * np.exp(-1j * phases))).sum()
     energy = (w**2).sum()
     return float(signal / np.sqrt(energy / 2)) if energy > 0 else 0.0
 
 
-def score(rgb, weights, phases, size=SIZE):
+def score(rgb, weights, phases, size=SIZE, min_channel_std=0):
     height, width, _ = rgb.shape
     if min(height, width) < MIN_SIDE:
         return 0.0
-    return score_spectrum(unit_spectrum(rgb, size), height, width, weights, phases)
+    u, channel_std = spectrum(rgb, size)
+    return score_spectrum(u, height, width, weights, phases, channel_std, min_channel_std)
 
 
 def fits(template, height, width):

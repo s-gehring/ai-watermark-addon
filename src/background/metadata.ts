@@ -16,6 +16,7 @@ const PATTERNS: ReadonlyArray<[MetadataReason, RegExp]> = [
   ['comfyui', /"class_type"\s*:\s*"(?:KSampler\w*|SamplerCustom\w*)"/],
   ['novelai', /Software\x00NovelAI/],
   ['invokeai', /(?:invokeai_metadata|invokeai_graph|sd-metadata)\x00/],
+  ['stability-ai', /stability-diffusion\x00stability\.ai\x00|Stability_ContentCredentials_Service/],
   ['aigc-label', AIGC_LABEL],
 ];
 

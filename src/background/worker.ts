@@ -1,11 +1,11 @@
 import synthIdConfig from '../../synthid.json';
-import type { SynthIdProvider, Verdict } from '../shared/messages';
+import type { Verdict } from '../shared/messages';
 import { decodeImage, scoreImage } from './classifier';
 import { detectInvisibleWatermark } from './invisible-watermark';
 import { detectAiMetadata } from './metadata';
 import { isScorable, type PixelImage } from './preprocess';
 import { SerialQueue } from './queue';
-import { detectSynthId, type SynthIdDetector } from './synthid';
+import { detectSynthId, type SynthIdDetector, type TemplateProvider } from './synthid';
 
 export interface Checks {
   checkMetadata: boolean;
@@ -36,11 +36,12 @@ async function loadDetector(entry: (typeof synthIdConfig.templates)[number]): Pr
   const bytes = new Uint8Array(await res.arrayBuffer());
   const count = bytes.length / 2;
   return {
-    provider: entry.provider as SynthIdProvider,
+    provider: entry.provider as TemplateProvider,
     threshold: entry.threshold,
     aspect: entry.outputSize && entry.outputSize[0] / entry.outputSize[1],
     size: entry.size,
     weightScale: entry.weightScale,
+    minChannelStd: entry.minChannelStd,
     weights: bytes.subarray(0, count),
     phases: bytes.subarray(count),
   };
@@ -54,7 +55,7 @@ function loadDetectors(): Promise<SynthIdDetector[]> {
   return detectors;
 }
 
-async function findSynthId(image: PixelImage): Promise<SynthIdProvider | null> {
+async function findSynthId(image: PixelImage): Promise<TemplateProvider | null> {
   try {
     return detectSynthId(image, await loadDetectors());
   } catch (error) {
@@ -72,6 +73,7 @@ async function score(bytes: Uint8Array, type: string, checks: Checks): Promise<V
   }
   const metadata = checks.checkMetadata ? 'clear' : 'off';
   const provider = checks.checkWatermark ? await findSynthId(image) : null;
+  if (provider === 'amazon') return { ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata };
   if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
   const scheme = checks.checkWatermark ? detectInvisibleWatermark(image) : null;
   if (scheme) return { ok: true, score: 1, source: 'watermark', scheme, metadata };

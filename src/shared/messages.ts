@@ -6,11 +6,12 @@ export type MetadataReason =
   | 'comfyui'
   | 'novelai'
   | 'invokeai'
+  | 'stability-ai'
   | 'aigc-label';
 
 export type SynthIdProvider = 'google' | 'openai';
 
-export type InvisibleWatermarkScheme = 'stable-diffusion' | 'sdxl';
+export type InvisibleWatermarkScheme = 'stable-diffusion' | 'sdxl' | 'nova-canvas';
 
 export type CheckStatus = 'clear' | 'off';
 
