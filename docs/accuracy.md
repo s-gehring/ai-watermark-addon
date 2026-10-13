@@ -132,6 +132,25 @@ False positives: none of 7,795 images without the Nova Canvas watermark (real ph
 - 46 of the 75 template images come from one repository. Output sizes other than 512 × 512, 1024 × 576, 1024 × 768, 1024 × 1024 and 1280 × 720 are untested, Nova 2 Omni is unverified.
 - The template images come from public GitHub repositories, pinned to commits in [`tools/synthid/amazon_sources.json`](../tools/synthid/amazon_sources.json); only images whose C2PA manifest from Amazon Bedrock names Nova Canvas count. Only averaged phases and weights are shipped, no images.
 
+## Stable Diffusion, SDXL and FLUX watermark
+
+Measured on 12 AI images (6 FLUX.2 Pro PNGs, 6 SDXL JPEGs) that the Python library `invisible-watermark` marked in the same way as the reference code:
+
+| marked images (12 per variant) | detected |
+|---|---|
+| SDXL and FLUX payload, PNG | 10 of 12 each |
+| SDXL and FLUX payload with red and blue swapped (diffusers before April 2024), PNG | 9 of 12 each |
+| `StableDiffusionV1` or `SDV2`, PNG | 10 or 9 of 12 |
+| any payload, JPEG 90 | 0 of 12 |
+
+In the wild: 10 SDXL outputs among the 279 PNGs of the diffusers documentation images ([huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images/tree/df6c7e6873499cfe63686cb4b6edb05d6f8a5755/diffusers), for example [`sdxl-double-prompt.png`](https://huggingface.co/datasets/huggingface/documentation-images/blob/df6c7e6873499cfe63686cb4b6edb05d6f8a5755/diffusers/sdxl-double-prompt.png) and [`with_cfg_callback.png`](https://huggingface.co/datasets/huggingface/documentation-images/blob/df6c7e6873499cfe63686cb4b6edb05d6f8a5755/diffusers/with_cfg_callback.png)), 46 to 48 of 48 bits matching; eight of them have red and blue swapped. Most other images there are grids, which break the bit order. SDXL on Amazon Bedrock and the v1 Stability API writes the same watermark: 26 of 36 distinct SDXL images with the Stability EXIF fields from 27 public GitHub repositories carry it (43 to 48 of 48 bits), plus 5 images whose metadata was removed. The misses are mostly 512 × 512 and 768 × 512 images from 2023. No hit in Wikimedia Commons' Stable Diffusion category (52 PNGs), the example images of the Stability, Black Forest Labs, CompVis and diffusers repositories, or seven datasets (FLUX.1.1 Pro and FLUX.2 Pro via API, SDXL, SD 1.4/2.1, FLUX.2 klein).
+
+False positives: none of 9,090 images without this watermark (real photos from ImageNet, DOCCI, COCO and Reddit, YouTube thumbnails, paintings, charts, and images from FLUX.1.1 Pro, FLUX.2, Gemini, GPT-Image 1.5 and 2, Qwen-Image, Z-Image, Midjourney 7 and other generators).
+
+### Limitations
+
+- Only images that are still byte-identical to the generator output: JPEG compression, scaling, cropping and grids erase the watermark. Many front ends (A1111, ComfyUI, Forge) and the FLUX API do not write it.
+
 ## Tested and not included
 
 - **Ensembles with other models** (Detectra v3, [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT), [ai-vs-human-SigLIP-ONNX](https://huggingface.co/neilxxx/ai-vs-human-SigLIP-ONNX)): on top of the fine-tuned model, these models, alone or together, add no hits at the same false positive rate, but cost 0.7 s per image each (155 MB together).
@@ -140,5 +159,4 @@ False positives: none of 7,795 images without the Nova Canvas watermark (real ph
 - **fev v13** ([angelhd25/ull-ai-image-detector](https://huggingface.co/angelhd25/ull-ai-image-detector), MIT), like Detectra a fine-tune of the Community Forensics ViT-S for a browser add-on: alone it detects 37–39 % of AI images under web conditions, but flags 7 % of paintings. In an ensemble with Detectra v3 it added no hits at no more than 5 % flagged paintings, but costs 88 MB and 0.7 s per image. It was also partly trained on the OpenFake validation split (CC BY-NC 4.0), whose generators and photo sources do not appear in the test split used here.
 - **Other detectors from Hugging Face** (capcheck/ai-image-detection, ai-image-detect-distilled, SMOGY and others): many are trained on small datasets like CIFAKE and separate AI images under web conditions hardly or not at all better than chance (AUC 0.46 to 0.62). Larger models like SwinV2-Large detectors or SigLIP-DINOv2 ensembles would be too big for the add-on at 200 MB to 2 GB.
 - **Amazon Titan Image Generator watermark:** Titan images (G1 and G1 v2, 35 images with C2PA from 12 GitHub repositories and 37 from an AWS blog post) share a phase pattern only when they were generated with the same seed (0 and 42 are common defaults). Images with random seeds from other repositories show none (z ≈ 0), so no fixed template is possible. Unmodified Titan images are recognized by their C2PA manifest.
-- **Stability AI on Amazon Bedrock:** no `invisible-watermark` and no fixed phase pattern in 434 PNGs from 61 GitHub repositories and 23 PNGs from AWS blog posts (SD3 Large, SD3.5 Large, Stable Image Ultra). SDXL outputs carry the EXIF fields of the Stability API, which the metadata check reads.
-- **DWT-DCT watermark from `invisible-watermark`:** the reference code of SDXL and Stable Video Diffusion (Stability, diffusers) as well as FLUX.1 and FLUX.2 (Black Forest Labs) embeds a fixed 48-bit message. A reimplemented decoder found it in self-watermarked images (PNG and JPEG 4:4:4), but in no real image from seven datasets (FLUX.1.1 Pro and FLUX.2 Pro via API, SDXL, SD 1.4/2.1, FLUX.2 klein). JPEG with chroma subsampling, as common on the web, erases the watermark completely.
+- **Stability AI on Amazon Bedrock:** the newer models (SD3 Large, SD3.5 Large, Stable Image Ultra) write no `invisible-watermark` and show no fixed phase pattern in 434 PNGs from 61 GitHub repositories and 23 PNGs from AWS blog posts. Only the SDXL outputs among them carry the SDXL watermark and the EXIF fields of the Stability API.
