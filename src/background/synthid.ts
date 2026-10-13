@@ -65,11 +65,11 @@ function kernel(inSize: number, outSize: number): Kernel {
   return { start, length, taps, weights };
 }
 
-export function resampledPlanes(image: PixelImage, size: number): Float64Array[] {
+export function resampledPlanes(image: PixelImage, size: number, planes: readonly number[] = [0, 1, 2]): Float64Array[] {
   const { width, height, channels, data } = image;
   const horizontal = kernel(width, size);
   const vertical = kernel(height, size);
-  const rows = YCBCR.map(() => new Float64Array(height * size));
+  const rows = YCBCR.map((_, c) => new Float64Array(planes.includes(c) ? height * size : 0));
   const line = YCBCR.map(() => new Float64Array(width));
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -77,12 +77,12 @@ export function resampledPlanes(image: PixelImage, size: number): Float64Array[]
       const r = data[p];
       const g = data[p + 1];
       const b = data[p + 2];
-      for (let c = 0; c < 3; c++) line[c][x] = YCBCR[c][0] * r + YCBCR[c][1] * g + YCBCR[c][2] * b;
+      for (const c of planes) line[c][x] = YCBCR[c][0] * r + YCBCR[c][1] * g + YCBCR[c][2] * b;
     }
     for (let o = 0; o < size; o++) {
       const lo = horizontal.start[o];
       const offset = o * horizontal.taps;
-      for (let c = 0; c < 3; c++) {
+      for (const c of planes) {
         let sum = 0;
         for (let i = 0; i < horizontal.length[o]; i++) sum += horizontal.weights[offset + i] * line[c][lo + i];
         rows[c][y * size + o] = sum;
@@ -90,6 +90,7 @@ export function resampledPlanes(image: PixelImage, size: number): Float64Array[]
     }
   }
   return rows.map((row) => {
+    if (row.length === 0) return row;
     const plane = new Float64Array(size * size);
     for (let o = 0; o < size; o++) {
       const lo = vertical.start[o];
@@ -186,8 +187,10 @@ interface UnitSpectrum {
   im: Float64Array[];
 }
 
-function unitSpectrum(image: PixelImage, size: number): UnitSpectrum {
-  const channels = resampledPlanes(image, size).map((plane) => {
+function unitSpectrum(image: PixelImage, size: number, wanted: readonly number[]): UnitSpectrum {
+  const planes = resampledPlanes(image, size, wanted);
+  const channels = planes.map((plane) => {
+    if (!plane.length) return { re: new Float64Array(0), im: new Float64Array(0) };
     const { re, im } = rfft2(plane, size);
     for (let i = 0; i < re.length; i++) {
       const norm = Math.hypot(re[i], im[i]) + 1e-6;
@@ -205,6 +208,18 @@ function unitSpectrum(image: PixelImage, size: number): UnitSpectrum {
   };
 }
 
+const usedChannels = new WeakMap<SynthIdTemplate, number[]>();
+
+function channelsOf(template: SynthIdTemplate): number[] {
+  let channels = usedChannels.get(template);
+  if (!channels) {
+    const count = template.weights.length / 3;
+    channels = [0, 1, 2].filter((c) => template.weights.subarray(c * count, (c + 1) * count).some((w) => w > 0));
+    usedChannels.set(template, channels);
+  }
+  return channels;
+}
+
 const COS = Float64Array.from({ length: 256 }, (_, p) => Math.cos((p * 2 * Math.PI) / 256));
 const SIN = Float64Array.from({ length: 256 }, (_, p) => Math.sin((p * 2 * Math.PI) / 256));
 
@@ -215,6 +230,7 @@ function templateScore(spectrum: UnitSpectrum, template: SynthIdTemplate): numbe
   let signal = 0;
   let energy = 0;
   for (let c = 0; c < 3; c++) {
+    if (!spectrum.re[c].length) continue;
     const re = spectrum.re[c];
     const im = spectrum.im[c];
     for (let y = 0; y < size; y++) {
@@ -234,17 +250,21 @@ function templateScore(spectrum: UnitSpectrum, template: SynthIdTemplate): numbe
 
 export function synthIdScore(image: PixelImage, template: SynthIdTemplate): number {
   if (Math.min(image.width, image.height) < MIN_SIDE) return 0;
-  return templateScore(unitSpectrum(image, template.size), template);
+  return templateScore(unitSpectrum(image, template.size, channelsOf(template)), template);
 }
 
 export function detectSynthId(image: PixelImage, detectors: readonly SynthIdDetector[]): SynthIdProvider | null {
   if (Math.min(image.width, image.height) < MIN_SIDE) return null;
+  const applicable = detectors.filter(
+    (d) => !d.aspect || Math.abs(Math.log(image.width / image.height / d.aspect)) <= ASPECT_TOLERANCE,
+  );
   const spectra = new Map<number, UnitSpectrum>();
-  for (const detector of detectors) {
-    if (detector.aspect && Math.abs(Math.log(image.width / image.height / detector.aspect)) > ASPECT_TOLERANCE) continue;
+  for (const detector of applicable) {
     let spectrum = spectra.get(detector.size);
     if (!spectrum) {
-      spectrum = unitSpectrum(image, detector.size);
+      const sameSize = applicable.filter((d) => d.size === detector.size);
+      const wanted = [0, 1, 2].filter((c) => sameSize.some((d) => channelsOf(d).includes(c)));
+      spectrum = unitSpectrum(image, detector.size, wanted);
       spectra.set(detector.size, spectrum);
     }
     if (templateScore(spectrum, detector) >= detector.threshold) return detector.provider;
