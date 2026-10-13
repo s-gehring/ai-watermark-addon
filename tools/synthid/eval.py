@@ -57,8 +57,9 @@ def provider_scores(rgb, templates, ignore_aspect):
             continue
         meta = template["meta"]
         if meta["size"] not in spectra:
-            spectra[meta["size"]] = synthid.unit_spectrum(rgb, meta["size"])
-        z = synthid.score_spectrum(spectra[meta["size"]], height, width, template["weights"], template["phases"])
+            spectra[meta["size"]] = synthid.spectrum(rgb, meta["size"])
+        u, channel_std = spectra[meta["size"]]
+        z = synthid.score_spectrum(u, height, width, template["weights"], template["phases"], channel_std, meta.get("minChannelStd", 0))
         hit, best = scores.get(meta["provider"], (False, -np.inf))
         scores[meta["provider"]] = (hit or z >= meta["threshold"], max(best, z))
     return scores

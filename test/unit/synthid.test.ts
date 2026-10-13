@@ -118,6 +118,15 @@ describe('synthIdScore', () => {
     expect(Math.abs(synthIdScore(carrierImage(384, 256, 0, 40), template))).toBeLessThan(3);
   });
 
+  it('skips color channels without variation for templates that set a minimum', () => {
+    const chromaOnly = { ...arithmeticTemplate(64), minChannelStd: 0.5 };
+    chromaOnly.weights.fill(0, 0, 64 * 33);
+    const colored = patternedImage(150, 97);
+    const gray = { ...colored, data: Float64Array.from(colored.data, (_, i) => colored.data[i - (i % 3)]) };
+    expect(synthIdScore(gray, chromaOnly)).toBe(0);
+    expect(synthIdScore(colored, chromaOnly)).not.toBe(0);
+  });
+
   it('skips images that are too small to carry the pattern', () => {
     expect(synthIdScore(patternedImage(48, 300), arithmeticTemplate(64))).toBe(0);
   });

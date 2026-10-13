@@ -110,6 +110,28 @@ False positives (measured like `eval.py --ignore-aspect`, so every template on e
 - Real photos edited with Gemini carry SynthID as well and are flagged, those edited with ChatGPT probably too.
 - The Google template is computed from the Hugging Face dataset [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there), the OpenAI templates from [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0) and [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
 
+## Amazon Nova Canvas watermark
+
+Measured with `tools/synthid/crossval.py amazon` on 75 Nova Canvas PNGs whose C2PA manifest names the model, from 10 GitHub repositories (512 × 512 to 1280 × 720): the template is built from nine repositories and tested on the images of the tenth, in turn for each repository (z ≥ 8).
+
+| Nova Canvas images (75) | detected |
+|---|---|
+| originals (PNG) | 100 % |
+| downscaled to 50 % or 33 % | 23 % or 0 % |
+| JPEG 90 without or with chroma subsampling (4:4:4 or 4:2:0) | 81 % or 7 % |
+| WebP 80 | 0 % |
+| cropped to 95 % on all sides | 0 % |
+
+The shipped template, applied to images from AWS blog posts that are not part of it: 52 of 58 PNGs from the Nova Canvas visual guide (all with seed 0, partly downscaled by the blog), all 13 PNGs from five other posts, none of 9 JPEGs with chroma subsampling.
+
+False positives: none of 7,795 images without the Nova Canvas watermark (real photos from ImageNet, DOCCI, COCO and Reddit, YouTube thumbnails, paintings, charts, and images from Gemini, GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and other generators), nor any of 37 Titan images. The highest z-score was 4.5, the standard deviation 1.05. Without skipping images whose Cr channel hardly varies, a black-and-white GPT-Image 1.5 image reached z 12.9.
+
+### Limitations
+
+- The signal sits close to the resolution limit of the original. Downscaling to half the size, JPEG with chroma subsampling, WebP and cropping erase it, so in practice only unmodified PNGs from Nova Canvas are found. Unmodified Nova Canvas and Titan images also carry a C2PA manifest with `trainedAlgorithmicMedia`, which the metadata check reads first.
+- 46 of the 75 template images come from one repository. Output sizes other than 512 × 512, 1024 × 576, 1024 × 768, 1024 × 1024 and 1280 × 720 are untested, Nova 2 Omni is unverified.
+- The template images come from public GitHub repositories, pinned to commits in [`tools/synthid/amazon_sources.json`](../tools/synthid/amazon_sources.json); only images whose C2PA manifest from Amazon Bedrock names Nova Canvas count. Only averaged phases and weights are shipped, no images.
+
 ## Tested and not included
 
 - **Ensembles with other models** (Detectra v3, [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT), [ai-vs-human-SigLIP-ONNX](https://huggingface.co/neilxxx/ai-vs-human-SigLIP-ONNX)): on top of the fine-tuned model, these models, alone or together, add no hits at the same false positive rate, but cost 0.7 s per image each (155 MB together).

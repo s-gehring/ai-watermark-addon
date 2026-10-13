@@ -1,5 +1,5 @@
 import model from '../../model.json';
-import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Verdict, type VerdictError } from '../shared/messages';
+import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type InvisibleWatermarkScheme, type Verdict, type VerdictError } from '../shared/messages';
 
 const INSET = 6;
 const GAP = 6;
@@ -362,6 +362,12 @@ function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
   return fragment;
 }
 
+const SCHEME_NAMES: Record<InvisibleWatermarkScheme, string> = {
+  'stable-diffusion': 'Stable Diffusion',
+  sdxl: 'SDXL',
+  'nova-canvas': 'Amazon Nova Canvas',
+};
+
 function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
   return browser.i18n.getMessage(`reason_${verdict.reason.replace('-', '_')}`);
 }
@@ -400,7 +406,7 @@ function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
         ? row(
             message('detailsInvisibleWatermark'),
             'hit',
-            message('detailsWatermarkFound', [verdict.scheme === 'sdxl' ? 'SDXL' : 'Stable Diffusion']),
+            message('detailsWatermarkFound', [SCHEME_NAMES[verdict.scheme]]),
           )
       : provider
         ? row(message('detailsWatermark'), 'hit', message('detailsWatermarkFound', [provider]))

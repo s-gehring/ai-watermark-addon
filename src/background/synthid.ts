@@ -6,10 +6,13 @@ export interface SynthIdTemplate {
   weightScale: number;
   weights: Uint8Array;
   phases: Uint8Array;
+  minChannelStd?: number;
 }
 
+export type TemplateProvider = SynthIdProvider | 'amazon';
+
 export interface SynthIdDetector extends SynthIdTemplate {
-  provider: SynthIdProvider;
+  provider: TemplateProvider;
   threshold: number;
   aspect?: number;
 }
@@ -183,12 +186,14 @@ interface UnitSpectrum {
   size: number;
   rows: Uint8Array;
   cols: Uint8Array;
+  std: number[];
   re: Float64Array[];
   im: Float64Array[];
 }
 
 function unitSpectrum(image: PixelImage, size: number, wanted: readonly number[]): UnitSpectrum {
   const planes = resampledPlanes(image, size, wanted);
+  const std = planes.map((plane) => (plane.length ? Math.sqrt(plane.reduce((sum, v) => sum + v * v, 0) / plane.length) : 0));
   const channels = planes.map((plane) => {
     if (!plane.length) return { re: new Float64Array(0), im: new Float64Array(0) };
     const { re, im } = rfft2(plane, size);
@@ -203,6 +208,7 @@ function unitSpectrum(image: PixelImage, size: number, wanted: readonly number[]
     size,
     rows: usableFrequencies(image.height, size, size, true),
     cols: usableFrequencies(image.width, size / 2 + 1, size, false),
+    std,
     re: channels.map((c) => c.re),
     im: channels.map((c) => c.im),
   };
@@ -230,7 +236,7 @@ function templateScore(spectrum: UnitSpectrum, template: SynthIdTemplate): numbe
   let signal = 0;
   let energy = 0;
   for (let c = 0; c < 3; c++) {
-    if (!spectrum.re[c].length) continue;
+    if (!spectrum.re[c].length || spectrum.std[c] < (template.minChannelStd ?? 0)) continue;
     const re = spectrum.re[c];
     const im = spectrum.im[c];
     for (let y = 0; y < size; y++) {
@@ -253,7 +259,7 @@ export function synthIdScore(image: PixelImage, template: SynthIdTemplate): numb
   return templateScore(unitSpectrum(image, template.size, channelsOf(template)), template);
 }
 
-export function detectSynthId(image: PixelImage, detectors: readonly SynthIdDetector[]): SynthIdProvider | null {
+export function detectSynthId(image: PixelImage, detectors: readonly SynthIdDetector[]): TemplateProvider | null {
   if (Math.min(image.width, image.height) < MIN_SIDE) return null;
   const applicable = detectors.filter(
     (d) => !d.aspect || Math.abs(Math.log(image.width / image.height / d.aspect)) <= ASPECT_TOLERANCE,

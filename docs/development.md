@@ -41,7 +41,7 @@ The release workflow tests and lints the build, uploads it together with the sou
 
 Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
-The package is about 49 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
+The package is about 50 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
 
 ## Evaluate or swap the model
 
@@ -78,9 +78,10 @@ The weights are trained on OpenFake, which is licensed under CC BY-NC 4.0, so th
 
 ```bash
 .venv/bin/pip install numpy pillow pyarrow fsspec aiohttp huggingface_hub
-.venv/bin/python tools/synthid/build_templates.py   # 288 Gemini and 959 OpenAI images (about 3.3 GB) -> src/background/synthid-templates/, synthid.json
+.venv/bin/python tools/synthid/build_templates.py   # 288 Gemini, 959 OpenAI and 75 Nova Canvas images (about 3.4 GB) -> src/background/synthid-templates/, synthid.json
 .venv/bin/python tools/synthid/build_templates.py openai   # only the OpenAI templates
-.venv/bin/python tools/synthid/crossval.py --transforms   # OpenAI: template from two thirds, test on the remaining third
+.venv/bin/python tools/synthid/build_templates.py amazon   # only the Nova Canvas template, from the GitHub commits in tools/synthid/amazon_sources.json
+.venv/bin/python tools/synthid/crossval.py --transforms   # OpenAI: template from two thirds, test on the remaining third; Amazon: leave one repository out
 .venv/bin/python tools/synthid/fetch_openfake.py    # test images to tools/synthid/.cache/openfake (about 9 GB download)
 .venv/bin/python tools/synthid/eval.py --transforms tools/synthid/.cache/openfake/fake/nano-banana-pro
 .venv/bin/python tools/synthid/eval.py tools/synthid/.cache/openfake/real/* tools/synthid/.cache/openfake/fake/*
