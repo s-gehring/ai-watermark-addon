@@ -102,6 +102,7 @@ const PAGE = `<!doctype html>
   .raised { position: relative; z-index: 1; display: block; padding: 0; border: 0; background: none; }
   .strip { display: flex; width: 356px; overflow: hidden; }
   .strip img { flex: none; }
+  .dock { position: fixed; right: 0; bottom: 0; }
 </style></head><body>
   <header class="nav"></header>
   <img id="meta" class="box" src="/ai.jpg">
@@ -111,6 +112,7 @@ const PAGE = `<!doctype html>
   <img id="far" class="box" src="/ai.jpg?far">
   <button id="raised" class="raised"><img class="box" src="/ai.jpg?raised"></button>
   <div class="strip"><img id="shown" class="box" src="/ai.jpg?shown"><img id="clipped" class="box" src="/ai.jpg?clipped"></div>
+  <div class="dock"><img id="docked" class="box" src="/ai.jpg?docked"></div>
   <script>
     setTimeout(() => {
       const img = document.createElement('img');
@@ -314,6 +316,28 @@ describe('content script', () => {
     expect(kindOf(badges, 'far')).toBe('ai');
   }, 60_000);
 
+  it('keeps badges on their images while the page scrolls, before the layer catches up', async () => {
+    await waitForBadges({ far: ['ai'], docked: ['ai'] });
+    const drift = await driver.executeScript<Record<string, number>>(() => {
+      const badges = [...document.querySelector('ai-watermark-layer')!.shadowRoot!.querySelectorAll<HTMLElement>('.badge:not([hidden])')];
+      const pairs = ['far', 'docked'].map((id) => {
+        const image = document.getElementById(id)!;
+        const r = image.getBoundingClientRect();
+        const badge = badges.find((b) => {
+          const c = b.getBoundingClientRect();
+          return c.left >= r.left && c.right <= r.right && c.top >= r.top && c.bottom <= r.bottom;
+        })!;
+        return [id, image, badge] as const;
+      });
+      const offsets = () => pairs.map(([, image, badge]) => badge.getBoundingClientRect().top - image.getBoundingClientRect().top);
+      const before = offsets();
+      scrollBy(0, 60);
+      const after = offsets();
+      return Object.fromEntries(pairs.map(([id], i) => [id, after[i] - before[i]]));
+    });
+    expect(drift).toEqual({ far: 0, docked: 0 });
+  }, 60_000);
+
   it('keeps badges above positioned content, inside scroll containers and below sticky bars', async () => {
     await driver.executeScript(() => document.getElementById('raised')!.scrollIntoView({ block: 'center' }));
     const badges = await waitForBadges({ raised: ['ai'], shown: ['ai'] });
@@ -347,11 +371,11 @@ describe('background', () => {
           done({ ...total, badgeText });
         })();
       });
-      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 8;
+      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 9;
     }, 20_000).catch(() => {});
     expect(stats).toMatchObject({ pending: 0, failed: 0 });
-    expect(stats!.flagged).toBeGreaterThanOrEqual(7);
-    expect(stats!.flagged + stats!.clean).toBe(8);
+    expect(stats!.flagged).toBeGreaterThanOrEqual(8);
+    expect(stats!.flagged + stats!.clean).toBe(9);
     expect(stats!.badgeText).toBe(String(stats!.flagged));
     await driver.close();
     await driver.switchTo().window(pageHandle);
