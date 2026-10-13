@@ -20,13 +20,15 @@ function bitsOfBytes(text: string): Uint8Array {
   return bits;
 }
 
+function bitsOfNumber(value: bigint): Uint8Array {
+  return Uint8Array.from(Array.from(value.toString(2), Number));
+}
+
 const PAYLOADS: Payload[] = [
   { scheme: 'stable-diffusion', bits: bitsOfBytes('StableDiffusionV1') },
   { scheme: 'stable-diffusion', bits: bitsOfBytes('SDV2') },
-  {
-    scheme: 'sdxl',
-    bits: Uint8Array.from(Array.from(0b001010101111111010000111100111001111010100101110n.toString(2), Number)),
-  },
+  { scheme: 'sdxl', bits: bitsOfNumber(0b101100111110110010010000011110111011000110011110n) },
+  { scheme: 'flux', bits: bitsOfNumber(0b001010101111111010000111100111001111010100101110n) },
 ];
 
 function chromaPlane(image: PixelImage, swapped: boolean): { plane: Float64Array; width: number; height: number } {

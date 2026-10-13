@@ -365,6 +365,7 @@ function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
 const SCHEME_NAMES: Record<InvisibleWatermarkScheme, string> = {
   'stable-diffusion': 'Stable Diffusion',
   sdxl: 'SDXL',
+  flux: 'FLUX',
   'nova-canvas': 'Amazon Nova Canvas',
 };
 
