@@ -1,6 +1,6 @@
 {
   "name": "ai-watermark-addon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Firefox add-on that checks larger images on web pages locally for AI generation and marks hits with an AI badge.",
   "author": "Simon Gehring",
   "homepage": "https://github.com/s-gehring/ai-watermark-addon#readme",
