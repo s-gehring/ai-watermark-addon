@@ -42,10 +42,10 @@ function chromaPlane(image: PixelImage, swapped: boolean): { plane: Float64Array
     for (let r = 0; r < 2; r++) {
       for (let x = 0; x < w; x++) {
         const p = ((y + r) * width + x) * channels;
-        const red = data[p];
-        const blue = data[p + 2];
+        const red = data[swapped ? p + 2 : p];
+        const blue = data[swapped ? p : p + 2];
         const luma = 0.299 * red + 0.587 * data[p + 1] + 0.114 * blue;
-        const value = Math.round(((swapped ? red : blue) - luma) * 0.492 + 128);
+        const value = Math.round((blue - luma) * 0.492 + 128);
         u[r * w + x] = value < 0 ? 0 : value > 255 ? 255 : value;
       }
     }
