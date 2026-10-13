@@ -28,10 +28,7 @@ async function loadClassifier(model: ModelEntry): Promise<Classifier> {
 
 function load(): Promise<Classifier[]> {
   loading ??= (async () => {
-    ort.env.wasm.wasmPaths = {
-      mjs: assetUrl('ort/ort-wasm-simd-threaded.mjs'),
-      wasm: assetUrl('ort/ort-wasm-simd-threaded.wasm'),
-    };
+    ort.env.wasm.wasmPaths = { wasm: assetUrl('ort/ort-wasm-simd-threaded.wasm') };
     ort.env.wasm.numThreads = 1;
     return Promise.all(config.models.map(loadClassifier));
   })().catch((error) => {

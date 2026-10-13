@@ -19,7 +19,7 @@
     "typecheck": "tsc",
     "test": "vitest run test/unit",
     "test:e2e": "npm run build && vitest run test/e2e",
-    "lint": "web-ext lint --source-dir dist",
+    "lint": "web-ext lint --source-dir dist --warnings-as-errors",
     "package": "npm run build && web-ext build --source-dir dist --overwrite-dest",
     "eval": "node tools/eval/eval-models.mjs"
   },

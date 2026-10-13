@@ -17,7 +17,7 @@ npm start             # starts Firefox with the add-on (web-ext run)
 | `npm test` | unit tests (Vitest) |
 | `npm run test:e2e` | builds and tests the add-on in headless Firefox (Selenium/geckodriver) |
 | `npm run typecheck` | TypeScript check |
-| `npm run lint` | `web-ext lint` on `dist/` |
+| `npm run lint` | `web-ext lint` on `dist/`, fails on warnings |
 | `npm run package` | creates the ZIP in `web-ext-artifacts/` |
 
 ## Release
@@ -37,7 +37,7 @@ Releases are listed on addons.mozilla.org (AMO) and also published as GitHub rel
    git push origin v0.2.0
    ```
 
-The release workflow tests and lints the build, uploads it together with the source code and [`amo-metadata.json`](../amo-metadata.json) (categories, support URL, license) to AMO and creates a draft GitHub release. AMO reviews the version, which can take a few days. Every night the publish workflow asks AMO about each draft release. Once the version is approved, it attaches the signed `.xpi` to the release and publishes it. To check right away, start the publish workflow by hand under Actions → Publish → "Run workflow". A rejected version makes the publish workflow fail until the draft release is deleted.
+The release workflow tests and lints the build, uploads it together with the source code and [`amo-metadata.json`](../amo-metadata.json) (categories, support URL, license) to AMO. The release notes on AMO list the subjects of all commits since the previous tag, without PR numbers and without the `Release x.y.z` commit. The workflow then creates a draft GitHub release. AMO reviews the version, which can take a few days. Every night the publish workflow asks AMO about each draft release. Once the version is approved, it attaches the signed `.xpi` to the release and publishes it. To check right away, start the publish workflow by hand under Actions → Publish → "Run workflow". A rejected version makes the publish workflow fail until the draft release is deleted.
 
 Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
