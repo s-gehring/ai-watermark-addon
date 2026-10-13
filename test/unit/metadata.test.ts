@@ -46,6 +46,17 @@ describe('detectAiMetadata', () => {
     expect(detectAiMetadata(pngWith('invokeai_metadata', '{"model": "sdxl"}'))).toBe('invokeai');
   });
 
+  it('detects the EXIF fields and the C2PA manifest written by the Stability AI API', () => {
+    const exif = 'MM\x00*\x00\x00\x00\x08\x00\x06a cat in a hat\x00stability-diffusion\x00stability.ai\x00\x007Y+?H0sw#B004Kl8\x00';
+    expect(detectAiMetadata(latin1(`\x89PNG\r\n\x1a\n....eXIf${exif}....IDAT....IEND`))).toBe('stability-ai');
+    const manifest = 'jumdc2pa....claim_generatorx8Stability_ContentCredentials_Service/v0.1 c2pa-rs/0.31.3';
+    expect(detectAiMetadata(pngWith('caBX', manifest))).toBe('stability-ai');
+  });
+
+  it('does not treat a mention of Stability AI as its API metadata', () => {
+    expect(detectAiMetadata(pngWith('Comment', 'Upscaled with stability.ai, model stability-diffusion'))).toBeNull();
+  });
+
   it('detects the GB 45438 AIGC label in PNG text chunks, XMP and EXIF user comments', () => {
     const label = '{"Label":"1","ContentProducer":"kling","ProduceID":"SGP_PROD_ai_web_300000000123456"}';
     expect(detectAiMetadata(pngWith('AIGC', label))).toBe('aigc-label');

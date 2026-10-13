@@ -6,6 +6,7 @@ export type MetadataReason =
   | 'comfyui'
   | 'novelai'
   | 'invokeai'
+  | 'stability-ai'
   | 'aigc-label';
 
 export type SynthIdProvider = 'google' | 'openai';

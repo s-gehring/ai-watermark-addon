@@ -43,4 +43,4 @@ The files in [`src/background/synthid-templates/`](src/background/synthid-templa
 
 ## Trademarks
 
-SynthID, Gemini and Imagen are trademarks of Google LLC. OpenAI, ChatGPT and GPT-Image are trademarks of OpenAI. C2PA is a trademark of the Coalition for Content Provenance and Authenticity. They are used here only to describe what the add-on detects. This project is not affiliated with or endorsed by any of them.
+SynthID, Gemini and Imagen are trademarks of Google LLC. OpenAI, ChatGPT and GPT-Image are trademarks of OpenAI. Stability AI is a trademark of Stability AI Ltd. C2PA is a trademark of the Coalition for Content Provenance and Authenticity. They are used here only to describe what the add-on detects. This project is not affiliated with or endorsed by any of them.

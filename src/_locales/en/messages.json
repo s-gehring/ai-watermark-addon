@@ -11,6 +11,7 @@
   "reason_comfyui": { "message": "Contains a ComfyUI workflow." },
   "reason_novelai": { "message": "Created with NovelAI according to the image metadata." },
   "reason_invokeai": { "message": "Created with InvokeAI according to the image metadata." },
+  "reason_stability_ai": { "message": "Created with the Stability AI API according to the image metadata." },
   "reason_aigc_label": { "message": "AI-generated according to the image metadata (Chinese labeling standard GB 45438-2025)." },
   "popupFlagged": { "message": "AI images on this page" },
   "popupInactive": { "message": "Not active on this page." },

@@ -16,7 +16,7 @@ Every image whose shorter side is at least 200 px goes through up to three check
 
 | Check | Looks for | Badge |
 |---|---|---|
-| **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI and InvokeAI, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
+| **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI, InvokeAI and the Stability AI API, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
 | **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the Stable Diffusion/SDXL `invisible-watermark` in unmodified PNGs | AI · SynthID, AI · Watermark |
 | **Model** | a ViT classifier (Detectra fine-tuned on OpenFake) run with ONNX Runtime Web | AI 97 % |
 
@@ -71,7 +71,7 @@ The code is licensed under the [MIT License](LICENSE).
 
 The bundled model weights are licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) because they are trained on OpenFake. **A built add-on may therefore only be used and redistributed non-commercially.** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists all third-party components, their licenses and the required attributions.
 
-This project is not affiliated with Google, OpenAI or the C2PA.
+This project is not affiliated with Google, OpenAI, Stability AI or the C2PA.
 
 ## Acknowledgements
 
