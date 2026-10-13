@@ -18,6 +18,14 @@ describe('detectInvisibleWatermark', () => {
     expect(detectInvisibleWatermark(await load('sdxl'))).toBe('sdxl');
   });
 
+  it('finds the SDXL watermark written into swapped color channels', async () => {
+    expect(detectInvisibleWatermark(await load('sdxl-swapped'))).toBe('sdxl');
+  });
+
+  it('finds the FLUX watermark written by invisible-watermark', async () => {
+    expect(detectInvisibleWatermark(await load('flux'))).toBe('flux');
+  });
+
   it('ignores an image without the watermark', async () => {
     expect(detectInvisibleWatermark(await load('clean'))).toBeNull();
   });

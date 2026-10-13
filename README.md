@@ -17,7 +17,7 @@ Every image whose shorter side is at least 200 px goes through up to three check
 | Check | Looks for | Badge |
 |---|---|---|
 | **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI, InvokeAI and the Stability AI API, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
-| **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the watermark of Amazon Nova Canvas and the Stable Diffusion/SDXL `invisible-watermark` in unmodified PNGs | AI · SynthID, AI · Watermark |
+| **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the watermark of Amazon Nova Canvas and the Stable Diffusion, SDXL and FLUX `invisible-watermark` in unmodified PNGs | AI · SynthID, AI · Watermark |
 | **Model** | a ViT classifier (Detectra fine-tuned on OpenFake) run with ONNX Runtime Web | AI 97 % |
 
 There is no public SynthID detector. The add-on reconstructs a fixed part of the watermark from public sample images and compares image spectra against it. [docs/how-it-works.md](docs/how-it-works.md) explains all three checks.

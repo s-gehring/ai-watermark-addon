@@ -39,11 +39,11 @@ Measured in Node, the SynthID check takes about 0.25 s for a square 4-megapixel 
 
 [`tools/synthid/synthid.py`](../tools/synthid/synthid.py) is the reference implementation of [`src/background/synthid.ts`](../src/background/synthid.ts); a unit test checks that both produce the same z-scores. Detection rates and false positives are in [accuracy.md](accuracy.md#synthid-watermark).
 
-### Stable Diffusion watermark
+### Stable Diffusion, SDXL and FLUX watermark
 
-After the SynthID templates, the same step decodes the classic [invisible-watermark](https://pypi.org/project/invisible-watermark) (`dwtDct`) that the Stable Diffusion reference scripts (`StableDiffusionV1`, `SDV2`) and the SDXL pipelines (a fixed 46-bit pattern) write into the pixels. It is a fixed algorithm without a secret key: a Haar transform of the U channel, in each 4 × 4 block the largest coefficient modulo 36 gives one bit, and the bits are voted per payload position. A hit needs the decoded bits to match a payload at z ≥ 5 (about 1 false positive in 500,000 images with random bits; none in 977 real images tested). Badge "AI · Watermark".
+After the SynthID templates, the same step decodes the classic [invisible-watermark](https://pypi.org/project/invisible-watermark) (`dwtDct`) that the Stable Diffusion reference scripts (`StableDiffusionV1`, `SDV2`), SDXL (a fixed 48-bit pattern, written by the pipelines of Stability and diffusers and by the Stability API and Amazon Bedrock) and the FLUX reference code of Black Forest Labs (another fixed 46-bit pattern) write into the pixels. It is a fixed algorithm without a secret key: a Haar transform of the U channel, in each 4 × 4 block the largest coefficient modulo 36 gives one bit, and the bits are voted per payload position. diffusers before April 2024 handed RGB images to the encoder, which expects BGR, so the decoder also tries the U channel with red and blue swapped. A hit needs the decoded bits to match a payload at z ≥ 5 (about 1 false positive in 1.4 million images with random bits; none in 9,090 images without it). Badge "AI · Watermark". Detection rates are in [accuracy.md](accuracy.md#stable-diffusion-sdxl-and-flux-watermark).
 
-This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline.
+This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline or from the SDXL API.
 
 ## 3. Model
 
