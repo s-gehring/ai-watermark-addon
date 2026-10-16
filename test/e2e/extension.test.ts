@@ -142,6 +142,7 @@ beforeAll(async () => {
   const synthId = await synthIdPng('google.bin', 480, 360);
   const synthIdOpenai = await synthIdPng('openai-1254x1254.bin', 600, 600);
   const novaCanvas = await synthIdPng('amazon-nova-canvas.bin', 1280, 720, 48);
+  const geminiLogo = readFileSync(new URL('../unit/fixtures/visible-watermark/gemini-v1.jpg', import.meta.url));
   const synthIdC2pa = withC2paSynthId(await sharp(await photoLikeJpeg()).png().toBuffer());
   server = createServer((req, res) => {
     const path = new URL(req.url!, 'http://x').pathname;
@@ -158,6 +159,7 @@ beforeAll(async () => {
     else if (path === '/synthid.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthId);
     else if (path === '/synthid-openai.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdOpenai);
     else if (path === '/nova-canvas.png') res.writeHead(200, { 'content-type': 'image/png' }).end(novaCanvas);
+    else if (path === '/gemini-logo.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(geminiLogo);
     else if (path === '/synthid-c2pa.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthIdC2pa);
     else res.writeHead(404).end();
   });
@@ -412,6 +414,10 @@ describe('background', () => {
 
   it('reports the Amazon Nova Canvas pattern as an invisible watermark, not as SynthID', async () => {
     expect(await classify('/nova-canvas.png')).toEqual({ ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata: 'clear' });
+  }, 60_000);
+
+  it('reports the visible Gemini logo as a watermark', async () => {
+    expect(await classify('/gemini-logo.jpg')).toEqual({ ok: true, score: 1, source: 'watermark', scheme: 'gemini-visible', metadata: 'clear' });
   }, 60_000);
 
   it('reads a SynthID declaration from the C2PA manifest', async () => {

@@ -45,6 +45,19 @@ After the SynthID templates, the same step decodes the classic [invisible-waterm
 
 This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline or from the SDXL API.
 
+### Visible Gemini logo
+
+If no invisible watermark is found, the same step looks for the white four-pointed star that Gemini puts into the bottom right corner of generated images. Badge "AI · Watermark", and the details panel names the visible watermark and Gemini. Since August 2026 users can switch the logo off, reportedly except in countries that require a visible AI label. SynthID usually no longer survives in images that are shared with the logo (3 of 34 in the test sets), so the logo is often the only pixel evidence left.
+
+Gemini blends the logo onto the image as α · 255 + (1 − α) · original with a fixed alpha map. Size and distance to the corner depend on the output size: in the older layout the logo is 48 px with a margin of 32 px (96 px and 64 px if both sides exceed 1024 px), in the newer one 36 to 96 px with a margin of twice its size. Downscaled copies shrink both. The check therefore tries logo sizes from 16 to 96 px in steps of 5 % for both layouts (margin 2/3 or 2 times the logo size) and a search window of ±1/12 of the logo size around the expected position. For each candidate it averages the corner into a grid in which the logo is 24 px wide and compares it with the alpha map by normalized cross-correlation. A correlation of at least 0.88 counts as found.
+
+Two details from the blending model make this work on more backgrounds than a plain grayscale comparison:
+
+- The logo multiplies the distance to white, 255 − value, by 1 − α in every channel. After a logarithm the logo adds the same pattern on dark and bright parts of the background, so a logo that straddles an edge still matches.
+- The check uses the darkest channel (the minimum of red, green and blue), where a white logo stands out most on colored backgrounds, and removes a linear brightness gradient before correlating.
+
+The alpha map comes from [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool) (MIT). Both layouts use the same star and differ only in opacity, which the correlation ignores, so the add-on ships a single map, downscaled to 24 × 24 px ([`src/background/gemini-logo.json`](../src/background/gemini-logo.json), 576 bytes). The check reads only the bottom right corner and takes about 3 ms per image in Node, independent of the resolution. [`tools/visible/gemini_logo.py`](../tools/visible/gemini_logo.py) is the reference implementation of [`src/background/visible-watermark.ts`](../src/background/visible-watermark.ts); a unit test checks that both produce the same score. Detection rates are in [accuracy.md](accuracy.md#visible-gemini-logo).
+
 ## 3. Model
 
 Badge "AI 99 %". A classifier run with ONNX Runtime Web (WASM) in the worker: Detectra fine-tuned on OpenFake (44 MB, fp16).

@@ -91,3 +91,15 @@ The weights are trained on OpenFake, which is licensed under CC BY-NC 4.0, so th
 ```
 
 The thresholds are in [`synthid.json`](../synthid.json) (`threshold` per template).
+
+## Rebuild or check the Gemini logo check
+
+```bash
+.venv/bin/python tools/visible/gemini_logo.py build   # alpha map from GeminiWatermarkTool (pinned commit) -> src/background/gemini-logo.json
+.venv/bin/python tools/visible/gemini_logo.py score path/to/image.png   # score and verdict per image
+.venv/bin/python tools/visible/eval.py --transforms path/to/images-with-logo   # detection, also after re-encoding, downscaling and cropping
+.venv/bin/python tools/visible/eval.py --apply --transforms --sample 100 tools/eval/.cache/samples/research/fake tools/eval/.cache/samples/core/fake   # logo overlaid in five Gemini layouts
+.venv/bin/python tools/visible/eval.py tools/eval/.cache/samples/*/real   # false positives
+```
+
+The threshold is `THRESHOLD` in both [`tools/visible/gemini_logo.py`](../tools/visible/gemini_logo.py) and [`src/background/visible-watermark.ts`](../src/background/visible-watermark.ts).
