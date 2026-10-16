@@ -1,8 +1,8 @@
-import type { InvisibleWatermarkScheme } from '../shared/messages';
+import type { WatermarkScheme } from '../shared/messages';
 import type { PixelImage } from './preprocess';
 
 interface Payload {
-  scheme: InvisibleWatermarkScheme;
+  scheme: WatermarkScheme;
   bits: Uint8Array;
 }
 
@@ -85,7 +85,7 @@ export function decodeBits(blocks: Uint8Array, length: number): Uint8Array {
   return Uint8Array.from(sums, (sum, i) => (counts[i] > 0 && (sum / counts[i]) * 255 > 127 ? 1 : 0));
 }
 
-export function detectInvisibleWatermark(image: PixelImage): InvisibleWatermarkScheme | null {
+export function detectInvisibleWatermark(image: PixelImage): WatermarkScheme | null {
   if (image.width * image.height < MIN_PIXELS) return null;
   for (const swapped of [false, true]) {
     const { plane, width, height } = chromaPlane(image, swapped);

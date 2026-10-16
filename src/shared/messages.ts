@@ -11,7 +11,7 @@ export type MetadataReason =
 
 export type SynthIdProvider = 'google' | 'openai';
 
-export type InvisibleWatermarkScheme = 'stable-diffusion' | 'sdxl' | 'flux' | 'nova-canvas';
+export type WatermarkScheme = 'stable-diffusion' | 'sdxl' | 'flux' | 'nova-canvas' | 'gemini-visible';
 
 export type CheckStatus = 'clear' | 'off';
 
@@ -21,7 +21,7 @@ export type Verdict =
   | { ok: true; score: number; source: 'model'; models: number[]; metadata: CheckStatus; watermark: CheckStatus }
   | { ok: true; score: 1; source: 'metadata'; reason: MetadataReason }
   | { ok: true; score: 1; source: 'synthid'; provider: SynthIdProvider; metadata: CheckStatus }
-  | { ok: true; score: 1; source: 'watermark'; scheme: InvisibleWatermarkScheme; metadata: CheckStatus }
+  | { ok: true; score: 1; source: 'watermark'; scheme: WatermarkScheme; metadata: CheckStatus }
   | { ok: false; error: VerdictError };
 
 export interface FrameStats {

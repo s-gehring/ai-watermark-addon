@@ -6,6 +6,7 @@ import { detectAiMetadata } from './metadata';
 import { isScorable, type PixelImage } from './preprocess';
 import { SerialQueue } from './queue';
 import { detectSynthId, type SynthIdDetector, type TemplateProvider } from './synthid';
+import { detectVisibleWatermark } from './visible-watermark';
 
 export interface Checks {
   checkMetadata: boolean;
@@ -75,7 +76,7 @@ async function score(bytes: Uint8Array, type: string, checks: Checks): Promise<V
   const provider = checks.checkWatermark ? await findSynthId(image) : null;
   if (provider === 'amazon') return { ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata };
   if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
-  const scheme = checks.checkWatermark ? detectInvisibleWatermark(image) : null;
+  const scheme = checks.checkWatermark ? (detectInvisibleWatermark(image) ?? detectVisibleWatermark(image)) : null;
   if (scheme) return { ok: true, score: 1, source: 'watermark', scheme, metadata };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   try {

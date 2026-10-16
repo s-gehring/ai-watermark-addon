@@ -45,6 +45,7 @@
   "detailsNoMetadata": { "message": "No AI label" },
   "detailsWatermark": { "message": "SynthID watermark" },
   "detailsInvisibleWatermark": { "message": "Invisible watermark" },
+  "detailsVisibleWatermark": { "message": "Visible watermark" },
   "detailsWatermarkFound": { "message": "Found ($1)", "placeholders": { "1": { "content": "$1" } } },
   "detailsNoWatermark": { "message": "Not found" },
   "detailsModels": { "message": "AI score" },
