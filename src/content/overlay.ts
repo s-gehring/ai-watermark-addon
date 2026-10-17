@@ -389,7 +389,10 @@ const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   flux: 'FLUX',
   'nova-canvas': 'Amazon Nova Canvas',
   'gemini-visible': 'Gemini',
+  'kling-visible': 'Kling',
 };
+
+const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set(['gemini-visible', 'kling-visible']);
 
 function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
   return browser.i18n.getMessage(`reason_${verdict.reason.replace('-', '_')}`);
@@ -427,7 +430,7 @@ function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
       ? statusRow(message('detailsWatermark'), verdict.watermark, message('detailsNoWatermark'))
       : verdict.source === 'watermark'
         ? row(
-            message(verdict.scheme === 'gemini-visible' ? 'detailsVisibleWatermark' : 'detailsInvisibleWatermark'),
+            message(VISIBLE_SCHEMES.has(verdict.scheme) ? 'detailsVisibleWatermark' : 'detailsInvisibleWatermark'),
             'hit',
             message('detailsWatermarkFound', [SCHEME_NAMES[verdict.scheme]]),
           )

@@ -10,6 +10,7 @@ The source code in this repository is licensed under the [MIT License](LICENSE).
 | Model weights `detectra-openfake` | yes (`models/`), downloaded by `npm run fetch-model` | CC BY-NC 4.0 |
 | SynthID templates | yes (`synthid-templates/`) | derived data, see below |
 | Gemini logo alpha map | yes (in `worker.js`) | MIT |
+| Kling logo templates | yes (in `worker.js`) | derived data, see below |
 
 Because the bundled model weights are licensed for non-commercial use only, **a built add-on as a whole may only be used and redistributed non-commercially**. To use the code commercially, replace the model with one whose license allows it (see [docs/development.md](docs/development.md#evaluate-or-swap-the-model)).
 
@@ -71,6 +72,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Kling logo templates
+
+[`src/background/kling-logo.json`](src/background/kling-logo.json) contains the average contrast of the two visible Kling logos (48 × 12 and 64 × 18 values), computed by [`tools/visible/kling_logo.py`](tools/visible/kling_logo.py) from the bottom right corners of real Kling images. Averaged over many backgrounds, only the logo remains. Sources:
+
+- older logo: 1,005 images of [nyuuzyou/klingai](https://huggingface.co/datasets/nyuuzyou/klingai) (revision `4ae5e43`), CC0 1.0
+- current logo: 68 images on Kling's servers that are linked from [andreathar/Movies_Projects](https://github.com/andreathar/Movies_Projects) (commit `35f8447`, 65 images) and [newmemomedo2018-afk/cgi-generator-mongo](https://github.com/newmemomedo2018-afk/cgi-generator-mongo) (commit `09dcddd`, 3 images), no license stated
+
+The unit test fixture `test/unit/fixtures/visible-watermark/kling-2024.jpg` is image 130211779 of nyuuzyou/klingai, downscaled to 512 × 512 px. `kling-2026.jpg` is a synthetic background overlaid with the template of the current logo.
+
 ## Trademarks
 
-SynthID, Gemini and Imagen are trademarks of Google LLC. OpenAI, ChatGPT and GPT-Image are trademarks of OpenAI. Amazon, Amazon Bedrock, Amazon Nova and Amazon Titan are trademarks of Amazon.com, Inc. or its affiliates. Stability AI is a trademark of Stability AI Ltd. C2PA is a trademark of the Coalition for Content Provenance and Authenticity. They are used here only to describe what the add-on detects. This project is not affiliated with or endorsed by any of them.
+SynthID, Gemini and Imagen are trademarks of Google LLC. OpenAI, ChatGPT and GPT-Image are trademarks of OpenAI. Amazon, Amazon Bedrock, Amazon Nova and Amazon Titan are trademarks of Amazon.com, Inc. or its affiliates. Kling is a trademark of Kuaishou Technology. Stability AI is a trademark of Stability AI Ltd. C2PA is a trademark of the Coalition for Content Provenance and Authenticity. They are used here only to describe what the add-on detects. This project is not affiliated with or endorsed by any of them.

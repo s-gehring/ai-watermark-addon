@@ -11,7 +11,7 @@ export type MetadataReason =
 
 export type SynthIdProvider = 'google' | 'openai';
 
-export type WatermarkScheme = 'stable-diffusion' | 'sdxl' | 'flux' | 'nova-canvas' | 'gemini-visible';
+export type WatermarkScheme = 'stable-diffusion' | 'sdxl' | 'flux' | 'nova-canvas' | 'gemini-visible' | 'kling-visible';
 
 export type CheckStatus = 'clear' | 'off';
 
