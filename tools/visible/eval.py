@@ -9,6 +9,9 @@ import numpy as np
 from PIL import Image, ImageOps
 
 import gemini_logo
+import kling_logo
+
+LOGOS = {"gemini": gemini_logo, "kling": kling_logo}
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -61,7 +64,7 @@ def layouts():
 
 
 def job(args):
-    path, apply, transforms = args
+    path, logo, apply, transforms = args
     try:
         rgb = gemini_logo.load_rgb(path)
     except OSError:
@@ -72,17 +75,22 @@ def job(args):
             f"{layout:15s} ": gemini_logo.apply_logo(np.asarray(ImageOps.fit(Image.fromarray(rgb), size, Image.Resampling.LANCZOS)), alpha, margin)
             for layout, (size, alpha, margin) in layouts().items()
         }
-    t = gemini_logo.template()
-    return {prefix + name: gemini_logo.score(TRANSFORMS[name](base), t) for prefix, base in bases.items() for name in transforms}
+    module = LOGOS[logo]
+    t = module.template()
+    return {prefix + name: module.score(TRANSFORMS[name](base), t) for prefix, base in bases.items() for name in transforms}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Score image folders with the visible Gemini logo check.")
+    parser = argparse.ArgumentParser(description="Score image folders with a visible logo check.")
     parser.add_argument("folders", nargs="+")
+    parser.add_argument("--logo", choices=LOGOS, default="gemini")
     parser.add_argument("--transforms", action="store_true", help="also score re-encoded, rescaled and cropped copies")
-    parser.add_argument("--apply", action="store_true", help="overlay the logo in each Gemini layout before scoring")
+    parser.add_argument("--apply", action="store_true", help="overlay the Gemini logo in each Gemini layout before scoring")
     parser.add_argument("--sample", type=int, help="score a random sample of this many images per folder")
     args = parser.parse_args()
+    if args.apply and args.logo != "gemini":
+        parser.error("--apply needs --logo gemini")
+    threshold = LOGOS[args.logo].THRESHOLD
 
     transforms = list(TRANSFORMS) if args.transforms else ["original"]
     for folder in args.folders:
@@ -90,12 +98,12 @@ def main():
         if args.sample and len(paths) > args.sample:
             paths = sorted(random.Random(1).sample(paths, args.sample))
         with ProcessPoolExecutor() as pool:
-            results = [r for r in pool.map(job, [(p, args.apply, transforms) for p in paths], chunksize=4) if r]
+            results = [r for r in pool.map(job, [(p, args.logo, args.apply, transforms) for p in paths], chunksize=4) if r]
         print(f"{folder}: {len(results)} images")
         for key in results[0]:
             s = np.array([r[key] for r in results])
             print(
-                f"  {key:34s} hit rate {np.mean(s >= gemini_logo.THRESHOLD) * 100:5.1f} % ({np.sum(s >= gemini_logo.THRESHOLD)})"
+                f"  {key:34s} hit rate {np.mean(s >= threshold) * 100:5.1f} % ({np.sum(s >= threshold)})"
                 f"  median {np.median(s):.3f}  p99.9 {np.quantile(s, 0.999):.3f}  max {s.max():.3f}",
                 flush=True,
             )
