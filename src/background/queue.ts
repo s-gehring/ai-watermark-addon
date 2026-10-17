@@ -1,9 +1,18 @@
-export class SerialQueue {
-  private tail: Promise<unknown> = Promise.resolve();
+export class TaskQueue {
+  private active = 0;
+  private readonly waiting: (() => void)[] = [];
 
-  run<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.tail.then(task, task);
-    this.tail = result.catch(() => undefined);
-    return result;
+  constructor(private readonly concurrency = 1) {}
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.active < this.concurrency) this.active++;
+    else await new Promise<void>((resolve) => this.waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.active--;
+    }
   }
 }

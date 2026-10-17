@@ -32,7 +32,7 @@ export interface FrameStats {
 }
 
 export type BackgroundRequest =
-  | { type: 'classify'; url: string; bytes?: ArrayBuffer }
+  | { type: 'classify'; url: string; bytes?: ArrayBuffer; original?: string }
   | { type: 'page-stats'; stats: FrameStats; initial: boolean };
 
 export type ContentRequest = { type: 'get-status' };
