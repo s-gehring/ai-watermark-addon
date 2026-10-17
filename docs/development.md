@@ -91,3 +91,26 @@ The weights are trained on OpenFake, which is licensed under CC BY-NC 4.0, so th
 ```
 
 The thresholds are in [`synthid.json`](../synthid.json) (`threshold` per template).
+
+## Rebuild or check the visible logo checks
+
+Gemini:
+
+```bash
+.venv/bin/python tools/visible/gemini_logo.py build   # alpha map from GeminiWatermarkTool (pinned commit) -> src/background/gemini-logo.json
+.venv/bin/python tools/visible/gemini_logo.py score path/to/image.png   # score and verdict per image
+.venv/bin/python tools/visible/eval.py --transforms path/to/images-with-logo   # detection, also after re-encoding, downscaling and cropping
+.venv/bin/python tools/visible/eval.py --apply --transforms --sample 100 tools/eval/.cache/samples/research/fake tools/eval/.cache/samples/core/fake   # logo overlaid in five Gemini layouts
+.venv/bin/python tools/visible/eval.py tools/eval/.cache/samples/*/real   # false positives
+```
+
+Kling:
+
+```bash
+.venv/bin/python tools/visible/kling_logo.py build   # templates averaged from tools/visible/.cache/real/kling-2024 and kling-2026 -> src/background/kling-logo.json
+.venv/bin/python tools/visible/kling_logo.py score path/to/image.png   # score per layout and verdict per image
+.venv/bin/python tools/visible/eval.py --logo kling --transforms path/to/images-with-logo   # detection, also after re-encoding, downscaling and cropping
+.venv/bin/python tools/visible/eval.py --logo kling tools/eval/.cache/samples/*/real   # false positives
+```
+
+`build` needs the labeled images with the logo: `kling-2024` holds the images of [nyuuzyou/klingai](https://huggingface.co/datasets/nyuuzyou/klingai), `kling-2026` the current free-tier images listed in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md#kling-logo-templates). The thresholds are `THRESHOLD` in [`tools/visible/gemini_logo.py`](../tools/visible/gemini_logo.py) and [`tools/visible/kling_logo.py`](../tools/visible/kling_logo.py) and `GEMINI_THRESHOLD` and `KLING_THRESHOLD` in [`src/background/visible-watermark.ts`](../src/background/visible-watermark.ts).

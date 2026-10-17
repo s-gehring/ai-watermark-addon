@@ -1,5 +1,5 @@
 import model from '../../model.json';
-import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type InvisibleWatermarkScheme, type Verdict, type VerdictError } from '../shared/messages';
+import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
 
 const INSET = 6;
 const GAP = 6;
@@ -383,12 +383,16 @@ function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
   return fragment;
 }
 
-const SCHEME_NAMES: Record<InvisibleWatermarkScheme, string> = {
+const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   'stable-diffusion': 'Stable Diffusion',
   sdxl: 'SDXL',
   flux: 'FLUX',
   'nova-canvas': 'Amazon Nova Canvas',
+  'gemini-visible': 'Gemini',
+  'kling-visible': 'Kling',
 };
+
+const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set(['gemini-visible', 'kling-visible']);
 
 function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
   return browser.i18n.getMessage(`reason_${verdict.reason.replace('-', '_')}`);
@@ -426,7 +430,7 @@ function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
       ? statusRow(message('detailsWatermark'), verdict.watermark, message('detailsNoWatermark'))
       : verdict.source === 'watermark'
         ? row(
-            message('detailsInvisibleWatermark'),
+            message(VISIBLE_SCHEMES.has(verdict.scheme) ? 'detailsVisibleWatermark' : 'detailsInvisibleWatermark'),
             'hit',
             message('detailsWatermarkFound', [SCHEME_NAMES[verdict.scheme]]),
           )

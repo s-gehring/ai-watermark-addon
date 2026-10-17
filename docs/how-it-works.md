@@ -45,6 +45,32 @@ After the SynthID templates, the same step decodes the classic [invisible-waterm
 
 This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline or from the SDXL API.
 
+### Visible Gemini logo
+
+If no invisible watermark is found, the same step looks for the white four-pointed star that Gemini puts into the bottom right corner of generated images. Badge "AI · Watermark", and the details panel names the visible watermark and Gemini. Since August 2026 users can switch the logo off, reportedly except in countries that require a visible AI label. SynthID usually no longer survives in images that are shared with the logo (3 of 34 in the test sets), so the logo is often the only pixel evidence left.
+
+Gemini blends the logo onto the image as α · 255 + (1 − α) · original with a fixed alpha map. Size and distance to the corner depend on the output size: in the older layout the logo is 48 px with a margin of 32 px (96 px and 64 px if both sides exceed 1024 px), in the newer one 36 to 96 px with a margin of twice its size. Downscaled copies shrink both. The check therefore tries logo sizes from 16 to 96 px in steps of 5 % for both layouts (margin 2/3 or 2 times the logo size) and a search window of ±1/12 of the logo size around the expected position. For each candidate it averages the corner into a grid in which the logo is 24 px wide and compares it with the alpha map by normalized cross-correlation. A correlation of at least 0.88 counts as found.
+
+Two details from the blending model make this work on more backgrounds than a plain grayscale comparison:
+
+- The logo multiplies the distance to white, 255 − value, by 1 − α in every channel. After a logarithm the logo adds the same pattern on dark and bright parts of the background, so a logo that straddles an edge still matches.
+- The check uses the darkest channel (the minimum of red, green and blue), where a white logo stands out most on colored backgrounds, and removes a linear brightness gradient before correlating.
+
+The alpha map comes from [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool) (MIT). Both layouts use the same star and differ only in opacity, which the correlation ignores, so the add-on ships a single map, downscaled to 24 × 24 px ([`src/background/gemini-logo.json`](../src/background/gemini-logo.json), 576 bytes). The check reads only the bottom right corner and takes about 3 ms per image in Node, independent of the resolution. [`tools/visible/gemini_logo.py`](../tools/visible/gemini_logo.py) is the reference implementation of [`src/background/visible-watermark.ts`](../src/background/visible-watermark.ts); a unit test checks that both produce the same score. Detection rates are in [accuracy.md](accuracy.md#visible-gemini-logo).
+
+### Visible Kling logo
+
+If neither an invisible watermark nor the Gemini logo is found, the same step looks for the white logo that Kling (Kuaishou) puts into the bottom right corner of images from its free tier. Badge "AI · Watermark", and the details panel names the visible watermark and Kling. Many current Kling images also carry the AIGC label (see [Metadata](#1-metadata)), but platforms often strip it, and Kling images from 2024 carry none, so the logo is often the only evidence left.
+
+The check knows two layouts, both measured on real images:
+
+- **2024:** a round symbol and the text "KLING AI", about 8.4 % of the long side wide (86 px at 1024 × 1024), 2.3 % of the long side away from the right edge and 1.9 % from the bottom edge.
+- **current (2026):** an outlined symbol and the text "KlingAI", about 19.3 % of the short side wide (296 px at 2720 × 1536). The distance to the right edge is 1.65 % of the long side, but at most 2.9 % of the short side (45 px at 2720 × 1536), the distance to the bottom edge about 0.7 times that.
+
+Size and position scale with the image, so downscaled copies keep the proportions and the check needs no wide size search. Per layout it computes the expected box from the image size, tries five scales from −4 % to +4 % in steps of 2 % and a search window of ±2 grid cells in half-cell steps, averages the box into a grid of 48 × 12 (2024) or 64 × 18 cells (current) and correlates it with the logo after the same transformation as the Gemini check: darkest channel, −log(255 + 8 − value), linear brightness gradient removed. The half-cell steps matter because the strokes of the text are only about one cell wide. A correlation of at least 0.6 counts as found. Logos narrower than 24 px are not searched.
+
+Unlike Gemini's half-transparent star, Kling's logo is nearly opaque white with soft edges, so there is no alpha map to take over. The add-on instead ships the average contrast of the logo in this feature, measured on the real images: the mean grid at the expected position over 1,005 images from 2024 and 68 current images, minus the background level, with values below 5 % of the maximum set to zero ([`src/background/kling-logo.json`](../src/background/kling-logo.json), 1,728 bytes). Averaged over that many backgrounds, only the logo remains. The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the logo. [`tools/visible/kling_logo.py`](../tools/visible/kling_logo.py) is the reference implementation and rebuilds the templates from the labeled images; a unit test checks that both produce the same score. Detection rates are in [accuracy.md](accuracy.md#visible-kling-logo).
+
 ## 3. Model
 
 Badge "AI 99 %". A classifier run with ONNX Runtime Web (WASM) in the worker: Detectra fine-tuned on OpenFake (44 MB, fp16).

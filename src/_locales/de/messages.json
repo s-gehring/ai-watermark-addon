@@ -45,6 +45,7 @@
   "detailsNoMetadata": { "message": "Keine AI-Kennzeichnung" },
   "detailsWatermark": { "message": "SynthID-Wasserzeichen" },
   "detailsInvisibleWatermark": { "message": "Unsichtbares Wasserzeichen" },
+  "detailsVisibleWatermark": { "message": "Sichtbares Wasserzeichen" },
   "detailsWatermarkFound": { "message": "Gefunden ($1)", "placeholders": { "1": { "content": "$1" } } },
   "detailsNoWatermark": { "message": "Nicht gefunden" },
   "detailsModels": { "message": "AI-Score" },

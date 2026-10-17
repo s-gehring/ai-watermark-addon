@@ -151,6 +151,84 @@ False positives: none of 9,090 images without this watermark (real photos from I
 
 - Only images that are still byte-identical to the generator output: JPEG compression, scaling, cropping and grids erase the watermark. Many front ends (A1111, ComfyUI, Forge) and the FLUX API do not write it.
 
+## Visible Gemini logo
+
+Measured with `tools/visible/eval.py`; a hit needs a correlation of at least 0.88.
+
+Real images that carry the logo, labeled by eye: 12 of the 33 images in Wikimedia Commons' Nano Banana and Gemini categories (682 × 372 to 1264 × 843, mostly PNG) and 22 of the 188 AI images in OpenFake's Reddit test set (posts from AI subreddits, JPEG as downloaded, 572 × 1024 to 2816 × 1536).
+
+| Real images with the logo | Commons (12) | Reddit (22) |
+|---|---|---|
+| as downloaded | 10 | 19 |
+| JPEG 85 or WebP 80 | 10 | 19 |
+| downscaled to 800 px width, JPEG 75 | 9 | 19 |
+| downscaled to 50 %, JPEG 80 | 8 | 19 |
+| downscaled to 33 %, JPEG 80 | 8 | 18 |
+| cropped to 95 % on all sides | 0 | 0 |
+
+The misses as downloaded: two logos on graffiti and across the edge of a sheet of paper (0.82 and 0.77), one on wet asphalt (0.82), and two Reddit images that were cropped or letterboxed after generation, so the logo is no longer where the layout puts it. The Google SynthID template finds only 3 of these 34 images.
+
+Synthetic test: the logo overlaid with the alpha maps and positions of GeminiWatermarkTool in five layouts on 200 AI images without it (100 each from the OpenFake test split and bigdatamark/synthid-research):
+
+| Layout (logo, margin) | Original | JPEG 85 | WebP 80 | 800 px, JPEG 75 | 50 %, JPEG 80 | 33 %, JPEG 80 | Crop 95 % |
+|---|---|---|---|---|---|---|---|
+| older, 1024 × 1024 (48 px, 32 px) | 79 % | 78 % | 76 % | 76 % | 78 % | 75 % | 0 % |
+| older, 2816 × 1536 (96 px, 64 px) | 74 % | 74 % | 74 % | 70 % | 71 % | 71 % | 0 % |
+| newer, 1024 × 1024 (36 px, 71 px) | 58 % | 57 % | 56 % | 56 % | 52 % | 0 % | 0 % |
+| newer, 1376 × 768 (48 px, 96 px) | 50 % | 50 % | 49 % | 50 % | 51 % | 46 % | 0 % |
+| newer, 2816 × 1536 (96 px, 192 px) | 56 % | 55 % | 56 % | 52 % | 51 % | 52 % | 0 % |
+
+The newer logo is fainter (α at most 0.37 instead of 0.51) and disappears more often in bright or busy corners. At 33 % the 36 px logo shrinks to 12 px, below the smallest size the check tries. Plain grayscale correlation without the blending model found 56 to 66 % of the older and 30 to 40 % of the newer layout (thresholds 0.85 to 0.9, 120 of these images) and 8 of the 12 Commons images.
+
+False positives: none of 8,883 images without the logo, namely 4,458 real photos, paintings, charts and YouTube thumbnails (the model's test set and 642 photos from OpenFake) and 4,425 AI images, among them 732 Gemini images without the logo and images from GPT-Image 1.5, 2 and 2.5, FLUX.2, Qwen-Image, Z-Image, Midjourney 7, Sora 2 and Nova Canvas. The highest correlation was 0.84 for a round highlight 16 px wide in a Sora 2 image and 0.81 for a reflection in a COCO photo; small round highlights cause most high scores, which is why logos below 16 px are not searched.
+
+The check takes about 3 ms per image in Node, independent of the resolution.
+
+### Limitations
+
+- The logo has to be where Gemini put it. Cropping, added borders and mirroring move it away from the corner. Downscaled copies are found down to a logo of 16 px, which is a 1024 × 1024 image downscaled to about 340 px (older layout) or 460 px (newer layout).
+- On white or very bright corners the white logo leaves almost no trace, and on busy textures it drowns. Users can switch the logo off since August 2026, and removal tools such as GeminiWatermarkTool reverse the blending exactly.
+- Every image with a white four-pointed star of this shape in this place is flagged, for example a pasted Gemini icon.
+- The real test images come from two sources and are few (34); most carry the older layout.
+
+## Visible Kling logo
+
+Measured with `tools/visible/eval.py --logo kling`; a hit needs a correlation of at least 0.6.
+
+Real images with the logo, labeled by eye and downloaded unchanged from Kling's servers:
+
+- **2024, nyuuzyou (1,005):** text-to-image outputs from [nyuuzyou/klingai](https://huggingface.co/datasets/nyuuzyou/klingai) (CC0), one per user, July to December 2024, in seven output sizes of about one megapixel (1024 × 1024, 768 × 1344, 1344 × 768 and others).
+- **2024, GitHub (18):** Kling images linked from seven other GitHub repositories, among them the newer model version 1.5 and output sizes the template was not built from (832 × 1248, 1280 × 720, 1080 × 1964).
+- **current, GitHub (68):** free-tier outputs from 2026 linked from andreathar/Movies_Projects (65) and newmemomedo2018-afk/cgi-generator-mongo (3), eight output sizes from 896 × 992 to 4128 × 1024.
+
+The templates are averaged from the first and the third set. With templates averaged from one half of each set, the other half scores the same (983 of 1,005 and 68 of 68).
+
+| Real images with the logo | 2024, nyuuzyou (1,005) | 2024, GitHub (18) | current, GitHub (68) |
+|---|---|---|---|
+| as downloaded | 983 (97.8 %) | 17 | 68 |
+| JPEG 85 | 970 (96.5 %) | 17 | 68 |
+| WebP 80 | 971 (96.6 %) | 17 | 68 |
+| downscaled to 800 px width, JPEG 75 | 964 (95.9 %) | 17 | 68 |
+| downscaled to 50 %, JPEG 80 | 941 (93.6 %) | 17 | 68 |
+| downscaled to 33 %, JPEG 80 | 893 (88.9 %) | 17 | 68 |
+| cropped to 95 % on all sides | 0 | 0 | 0 |
+
+The median correlation as downloaded is 0.97 for both layouts; current logos score 0.87 to 0.98. Most of the 22 missed 2024 images have the logo on a white or very bright background, where the white letters leave only a thin gray outline, the rest on busy or strongly colored ones. The missed GitHub image has a second watermark painted over the logo. The AIGC label in the metadata is present in 16 of the 68 current images and in none of the 1,023 with the 2024 layout.
+
+Kling images without the logo: 1,627 images from the public explore pages of kling.ai (Kolors 1.5 to 3.0, 720 × 1280 to 3072 × 5440). 10 of them still show the current Kling logo, several of them visibly painted by the model itself, with a different symbol or misspelled as "KiingAI" or "KingAi". The check finds 9 of these 10 (0.64 to 0.94); the tenth, a logo away from the usual position, scores 0.52. The other 1,617 score at most 0.39.
+
+False positives: none of 10,534 images without the logo, namely the 8,917 images of the Gemini logo test (the 8,883 images without the Gemini logo and the 34 with it) and the 1,617 Kling images without a logo. The highest correlation was 0.40 for a GPT-Image 1.5 image, and 0.42 after downscaling all of them to 33 % with JPEG 80. White text of 20 other names written into the same place in 60 photos and AI images ("Hailuo AI", "Jimeng AI", "Midjourney", "Getty Images", "豆包AI生成" and others, in four fonts) scores at most 0.43 in either layout; only the word "KlingAI" without the symbol reaches 0.61.
+
+The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the logo.
+
+### Limitations
+
+- The logo has to be where Kling put it, in the proportions of the original output. Cropping, added borders and mirroring move it away. Logos narrower than 24 px are not searched, which for the 2024 layout means images whose long side is below about 270 px.
+- On white or very bright corners the white logo leaves almost no trace. Images from paid plans carry no logo.
+- Other variants are not covered: the logo of the Chinese site ("可灵AI") and logos with a model version such as "KLING AI 1.6", "可灵AI 2.1" or "KlingAI 3.0 Omni". The GitHub sets contain examples of them, but too few per variant to measure positions.
+- Every image with this logo in this place is flagged, also a copy that a model painted into an image.
+- The current layout is measured on 68 images from two GitHub repositories, most of them from a single project.
+
 ## Tested and not included
 
 - **Ensembles with other models** (Detectra v3, [CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT), [ai-vs-human-SigLIP-ONNX](https://huggingface.co/neilxxx/ai-vs-human-SigLIP-ONNX)): on top of the fine-tuned model, these models, alone or together, add no hits at the same false positive rate, but cost 0.7 s per image each (155 MB together).
@@ -159,4 +237,5 @@ False positives: none of 9,090 images without this watermark (real photos from I
 - **fev v13** ([angelhd25/ull-ai-image-detector](https://huggingface.co/angelhd25/ull-ai-image-detector), MIT), like Detectra a fine-tune of the Community Forensics ViT-S for a browser add-on: alone it detects 37–39 % of AI images under web conditions, but flags 7 % of paintings. In an ensemble with Detectra v3 it added no hits at no more than 5 % flagged paintings, but costs 88 MB and 0.7 s per image. It was also partly trained on the OpenFake validation split (CC BY-NC 4.0), whose generators and photo sources do not appear in the test split used here.
 - **Other detectors from Hugging Face** (capcheck/ai-image-detection, ai-image-detect-distilled, SMOGY and others): many are trained on small datasets like CIFAKE and separate AI images under web conditions hardly or not at all better than chance (AUC 0.46 to 0.62). Larger models like SwinV2-Large detectors or SigLIP-DINOv2 ensembles would be too big for the add-on at 200 MB to 2 GB.
 - **Amazon Titan Image Generator watermark:** Titan images (G1 and G1 v2, 35 images with C2PA from 12 GitHub repositories and 37 from an AWS blog post) share a phase pattern only when they were generated with the same seed (0 and 42 are common defaults). Images with random seeds from other repositories show none (z ≈ 0), so no fixed template is possible. Unmodified Titan images are recognized by their C2PA manifest.
+- **Other visible logos:** [remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks) (Apache 2.0) has alpha maps for the visible marks of Doubao, Jimeng, Qwen, Samsung Galaxy AI and others, captured over flat backgrounds (Kling's logo is checked, see [above](#visible-kling-logo)). Most of them are text labels such as "豆包AI生成" whose size and position depend on the output, and since One UI 6.1.1 Samsung's star comes with localized text ("AI-generated content", in Italian "Contenuti generati…"). None of the local test sets contains real examples, so positions and false positives could not be checked without collecting new images. A Grok and a Meta image from that project's captures show no visible mark.
 - **Stability AI on Amazon Bedrock:** the newer models (SD3 Large, SD3.5 Large, Stable Image Ultra) write no `invisible-watermark` and show no fixed phase pattern in 434 PNGs from 61 GitHub repositories and 23 PNGs from AWS blog posts. Only the SDXL outputs among them carry the SDXL watermark and the EXIF fields of the Stability API.
