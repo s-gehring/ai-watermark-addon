@@ -18,13 +18,13 @@ Every image whose shorter side is at least 200 px goes through up to three check
 |---|---|---|
 | **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI, InvokeAI and the Stability AI API, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
 | **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the watermark of Amazon Nova Canvas, the Stable Diffusion, SDXL and FLUX `invisible-watermark` in unmodified PNGs and the visible Gemini and Kling logos in the bottom right corner | AI · SynthID, AI · Watermark |
-| **Model** | a ViT classifier (Detectra fine-tuned on OpenFake) run with ONNX Runtime Web | AI 97 % |
+| **Model** | a ViT classifier ([Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake)) run with ONNX Runtime Web | AI 97 % |
 
 There is no public SynthID detector. The add-on reconstructs a fixed part of the watermark from public sample images and compares image spectra against it. [docs/how-it-works.md](docs/how-it-works.md) explains all three checks.
 
 ## How well it works
 
-- **Model:** at the default threshold it flags about 1 % of real photos and detects about half of all AI images under web conditions (downscaled and JPEG-compressed): 54–65 % from OpenFake and AI subreddits, 33–40 % from the newest generators (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1). It flagged none of 156 museum paintings, 5–7 % of WikiArt paintings and no charts.
+- **Model:** at the default threshold it flags about 1 % of real photos and detects about 60 % of all AI images under web conditions (downscaled and JPEG-compressed): 71–78 % from OpenFake and AI subreddits, 49–55 % from the newest generators (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1). It flagged none of 156 museum paintings, 5–7 % of WikiArt paintings and no charts.
 - **SynthID:** detects 95 % of Gemini 3.1 images as delivered and 75–94 % of ChatGPT images in the four supported output sizes. False positives are rare: the Google template triggered on 1 of about 1,700 real photos, the OpenAI templates on none of about 1,900 images without the watermark. Cropping destroys the signal and recompression weakens it. Amazon Nova Canvas images are found as unmodified PNGs (all 75 test images), rarely after downscaling or JPEG compression.
 - **Visible Gemini logo:** finds 29 of 34 real images that still carry the logo (SynthID finds 3 of them), also after downscaling and recompression, and none of about 8,900 images without it. Logos on bright or busy backgrounds and cropped images are missed.
 - **Visible Kling logo:** finds 98 % of 1,005 Kling images from 2024 and all 68 current free-tier images, also after downscaling and recompression, and none of about 10,500 images without it, among them 1,617 Kling images without the logo. Logos on white backgrounds, cropped images and the Chinese and versioned variants of the logo are missed.
