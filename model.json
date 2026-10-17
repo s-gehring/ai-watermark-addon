@@ -4,7 +4,7 @@
       "name": "detectra-openfake",
       "label": "Detectra (OpenFake)",
       "repo": "s-gehring/detectra-openfake",
-      "revision": "d723e6197075994b5d02ec504d09c084ffe10a14",
+      "revision": "750a0531f09b8089d42cffc2f392b80d44b4fab9",
       "license": "CC BY-NC 4.0",
       "dtype": "fp16",
       "output": "sigmoid",
