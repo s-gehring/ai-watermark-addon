@@ -18,7 +18,7 @@ AI-generated image detector bundled with the Firefox add-on [AI Watermark](https
 ## Model
 
 - **Base model:** [Detectra v3](https://huggingface.co/TensorFold/detectra-v1) (MIT), itself a fine-tune of the [Community Forensics ViT-S](https://huggingface.co/OwensLab/commfor-model-384) (MIT)
-- **Fine-tuning:** 3 epochs on 15 files of the `core/train` split of [OpenFake](https://huggingface.co/datasets/ComplexDataLab/OpenFake) (about 60,000 images, half real, half from many generators), plus about 3,500 paintings, 500 drawings and 500 prints from [The Met's Open Access collection](https://huggingface.co/datasets/metmuseum/openaccess) (CC0), 5,900 COCO photos and ChartQA charts as negatives. Every training image is randomly downscaled and recompressed as JPEG to match conditions on web pages. Batch 48, learning rate 3e-5 with layer decay 0.75, drop path 0.1, EMA 0.999.
+- **Fine-tuning:** 3 epochs on 15 files of the `core/train` split of [OpenFake](https://huggingface.co/datasets/ComplexDataLab/OpenFake) (about 60,000 images, half real, half from many generators), plus about 3,500 paintings, 500 drawings and 500 prints from [The Met's Open Access collection](https://huggingface.co/datasets/metmuseum/openaccess) (CC0), 5,900 COCO photos and ChartQA charts as negatives. Images from the newest generators (FLUX.2 dev and klein 4B, Qwen-Image, Nano Banana 2, Imagen 4, GPT-Image 1, Seedream 4, Grok Imagine) count more: the 2,916 in these files are shown two more times per epoch, and 6,768 more from 319 further files of the train split twice per epoch, together with 1,034 Pexels photos from the same files as negatives. Every training image is randomly downscaled and recompressed as JPEG to match conditions on web pages. Batch 48, learning rate 3e-5 with layer decay 0.75, drop path 0.1, EMA 0.999.
 - **Training code:** [`tools/train/`](https://github.com/s-gehring/ai-watermark-addon/tree/main/tools/train)
 
 ## Usage
@@ -26,14 +26,15 @@ AI-generated image detector bundled with the Firefox add-on [AI Watermark](https
 - **Input:** `pixel_values`, float32, 1 × 3 × 384 × 384. Resize the shortest edge to 440 px (bilinear), center-crop 384 px, scale to [0, 1], normalize with ImageNet mean `[0.485, 0.456, 0.406]` and std `[0.229, 0.224, 0.225]`.
 - **Output:** `logits`, float32, 1 × 1. `sigmoid(logit)` is the raw probability that the image is AI-generated.
 
-The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.4369 * logit + 1.4392)`) and flags images from 0.92, which marks about 1 % of real photos under web conditions.
+The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.4962 * logit + 1.132)`) and flags images from 0.93, which marks about 1 % of real photos under web conditions.
 
 ## Evaluation
 
 Measured on held-out test data (OpenFake test split with generators and photo sources not seen in training, OpenFake Reddit test set, newer generators, COCO, YouTube thumbnails, paintings, charts), downscaled to 1280 px or 800 px and recompressed as JPEG:
 
-- AUC 0.91–0.93
-- 46–47 % of AI images detected at 1 % flagged real photos (Detectra v3 without fine-tuning: 33–34 %)
+- AUC 0.94–0.95
+- 57–62 % of AI images detected at 1 % flagged real photos (previous version: 46–47 %, Detectra v3 without fine-tuning: 33–34 %)
+- 49–55 % of the newest generators' images detected (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1 Flash Image; previous version: 33–40 %)
 - at the add-on's threshold: 0 % of paintings from the Cleveland Museum of Art, 5–7 % of WikiArt paintings and 0 % of charts flagged
 
 Full results and limitations: [docs/accuracy.md](https://github.com/s-gehring/ai-watermark-addon/blob/main/docs/accuracy.md).

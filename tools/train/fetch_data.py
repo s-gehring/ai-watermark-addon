@@ -1,7 +1,9 @@
-"""Downloads the fine-tuning data: Detectra weights, 16 OpenFake train shards (with a copy of the newest generators' images) and photos, artworks and charts as negatives."""
+"""Downloads the fine-tuning data: Detectra weights, 16 OpenFake train shards, the newest generators' images and Pexels photos from 319 more shards, and photos, artworks and charts as negatives."""
 import argparse
 import io
+import itertools
 import json
+import shutil
 import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +13,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from huggingface_hub import HfFileSystem, hf_hub_download
 from PIL import Image
+
+from openfake_rows import read_rows
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -33,6 +37,7 @@ OPENFAKE = ("ComplexDataLab/OpenFake", "3247b942f18d39d1fd476b1077852af033d35d8c
             [f"core/train-{n:05d}-of-00032-00000.parquet" for n in range(16)])
 NEWEST = {"flux.2-dev", "flux.2-klein-4b", "flux.2-klein-base-4b", "qwen-image", "nano-banana-2", "imagen-4.0", "gpt-image-1",
           "seedream-v4.0", "seedream-v4.5", "grok-imagine"}
+OPENFAKE_ROWS = Path(__file__).with_name("openfake_rows.json")
 NEGATIVES = {
     "coco": ("detection-datasets/coco", "26ddc382fe75dfc2a0655b5977e296ea10efebce",
              ["default/train/0000.parquet", "default/train/0001.parquet"]),
@@ -141,7 +146,7 @@ def fetch_met(target):
 
 
 def extract_newest(sources, target):
-    if any(target.glob("*.parquet")):
+    if any(target.glob("local-*.parquet")):
         return
     images = defaultdict(list)
     for path in sources:
@@ -155,7 +160,61 @@ def extract_newest(sources, target):
                     images[rows[i]["model"]].append(column[i]["bytes"])
         print("newest", path.name, sum(map(len, images.values())), flush=True)
     for model, data in images.items():
-        pq.write_table(pa.table({"image": pa.array(data, pa.binary())}), target / f"{model}.parquet", row_group_size=16)
+        pq.write_table(pa.table({"image": pa.array(data, pa.binary())}), target / f"local-{model}.parquet", row_group_size=16)
+
+
+def write_images(target, images):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    part, writer = target.with_suffix(".part"), None
+    for batch in itertools.batched(images, 16):
+        table = pa.table({"image": pa.array(batch, pa.binary())})
+        writer = writer or pq.ParquetWriter(part, table.schema)
+        writer.write_table(table)
+    writer.close()
+    part.rename(target)
+
+
+def fetch_rows(repo, revision, data):
+    newest, photos = data / "openfake-newest" / "remote.parquet", data / "openfake-photos" / "pexels.parquet"
+    if newest.exists() and photos.exists():
+        return
+    parts = data / "openfake-rows"
+    parts.mkdir(parents=True, exist_ok=True)
+    jobs = defaultdict(list)
+    for model, files in json.loads(OPENFAKE_ROWS.read_text()).items():
+        for key, groups in files.items():
+            for group, rows in groups.items():
+                jobs[(f"core/train-{key}.parquet", int(group))] += [(row, model) for row in rows]
+
+    def part_path(filename, group):
+        return parts / f"{filename.replace('/', '_', 1)}__{group}.parquet"
+
+    def fetch(job):
+        (filename, group), rows = job
+        rows = sorted(rows)
+        images = read_rows(repo, revision, filename, group, [row for row, _ in rows])
+        kept = [(model, image) for (_, model), image in zip(rows, images) if image]
+        table = pa.table({"image": pa.array([image for _, image in kept], pa.binary()), "model": [model for model, _ in kept]})
+        target = part_path(filename, group)
+        pq.write_table(table, target.with_suffix(".part"))
+        target.with_suffix(".part").rename(target)
+
+    todo = [job for job in sorted(jobs.items()) if not part_path(*job[0]).exists()]
+    with ThreadPoolExecutor(40) as pool:
+        for n, _ in enumerate(pool.map(fetch, todo), 1):
+            if n % 100 == 0 or n == len(todo):
+                print("openfake rows", n, len(todo), flush=True)
+
+    def images(real):
+        for path in sorted(parts.glob("*.parquet")):
+            table = pq.read_table(path)
+            for image, model in zip(table.column("image").to_pylist(), table.column("model").to_pylist()):
+                if (model == "pexels") == real:
+                    yield image
+
+    write_images(newest, images(False))
+    write_images(photos, images(True))
+    shutil.rmtree(parts)
 
 
 def main():
@@ -170,6 +229,7 @@ def main():
     print("openfake", len(paths), "files", flush=True)
     (args.data / "openfake-newest").mkdir(parents=True, exist_ok=True)
     extract_newest(paths[:-1], args.data / "openfake-newest")
+    fetch_rows(repo, revision, args.data)
     (args.data / "met").mkdir(parents=True, exist_ok=True)
     fetch_met(args.data / "met")
     for name, (repo, revision, files) in NEGATIVES.items():

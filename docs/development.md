@@ -59,16 +59,16 @@ npm run eval -- members --members=detectra-openfake,angelhd25/ull-ai-image-detec
 
 ## Train the model
 
-Needs a CUDA GPU with 12 GB (measured on an RTX 4070 Ti) and about 95 GB of disk space.
+Needs a CUDA GPU with 12 GB (measured on an RTX 4070 Ti) and about 130 GB of disk space.
 
 ```bash
 .venv/bin/pip install torch timm safetensors pyarrow pillow numpy huggingface_hub onnx onnxruntime onnxconverter-common
-.venv/bin/python tools/train/fetch_data.py   # Detectra weights, 16 OpenFake files and negatives to tools/train/.cache/
+.venv/bin/python tools/train/fetch_data.py   # Detectra weights, 16 OpenFake files, single rows from 319 more and negatives to tools/train/.cache/
 .venv/bin/python tools/train/train.py --name full   # 3 epochs, about 1 h
 .venv/bin/python tools/train/export_onnx.py tools/train/.cache/runs/full/epoch3.safetensors   # -> vendor/models/detectra-openfake/model.onnx
 ```
 
-The datasets are pinned to fixed revisions. The last of the 16 OpenFake files is held out; `train.py` prints AUC and the detection rate at 1 % false positives on it after every epoch.
+The datasets are pinned to fixed revisions. The rows taken from the other OpenFake files are listed in [`openfake_rows.json`](../tools/train/openfake_rows.json); `fetch_data.py` reads only the pages of the image column that hold them (about 16 GB). The last of the 16 OpenFake files is held out; `train.py` prints AUC and the detection rate at 1 % false positives on it after every epoch.
 
 Training is not bit-for-bit reproducible. After a new run, put the SHA-256 printed by `export_onnx.py` into `model.json`, upload the model together with [`tools/train/MODEL_CARD.md`](../tools/train/MODEL_CARD.md) as `README.md` to the Hugging Face repository, update `revision` in `model.json`, and run `npm run eval -- bundled --calibrate` for the new calibration.
 

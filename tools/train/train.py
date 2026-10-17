@@ -212,7 +212,7 @@ def main():
     ap.add_argument("--drop-path", type=float, default=0.1)
     ap.add_argument("--ema", type=float, default=0.999)
     ap.add_argument("--workers", type=int, default=14)
-    ap.add_argument("--newest-weight", type=float, default=3.0)
+    ap.add_argument("--newest-weight", type=float, default=2.0)
     ap.add_argument("--max-openfake-files", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
@@ -223,6 +223,7 @@ def main():
     val_file, train_files = openfake[-1], openfake[:-1]
     groups = row_groups(train_files, "column", 1.0)
     groups += row_groups(complete(args.data, "openfake-newest/*.parquet"), 1, args.newest_weight)
+    groups += row_groups(complete(args.data, "openfake-photos/*.parquet"), 0, args.newest_weight)
     groups += row_groups(complete(args.data, "met/*.parquet"), 0, 1.0)
     groups += row_groups(complete(args.data, "coco/*.parquet"), 0, 0.6)
     groups += row_groups(complete(args.data, "chartqa/*.parquet"), 0, 0.3)
