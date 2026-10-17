@@ -1,4 +1,4 @@
-"""Downloads the fine-tuning data: Detectra weights, 16 OpenFake train shards and photos, artworks and charts as negatives."""
+"""Downloads the fine-tuning data: Detectra weights, 16 OpenFake train shards (with a copy of the newest generators' images) and photos, artworks and charts as negatives."""
 import argparse
 import io
 import json
@@ -31,6 +31,8 @@ DEFAULT_DATA = main_checkout() / "tools" / "train" / ".cache"
 DETECTRA = ("TensorFold/detectra-v1", "2bbc31161daa46932e05ee6f96e7016ee817bbde", "model.safetensors")
 OPENFAKE = ("ComplexDataLab/OpenFake", "3247b942f18d39d1fd476b1077852af033d35d8c",
             [f"core/train-{n:05d}-of-00032-00000.parquet" for n in range(16)])
+NEWEST = {"flux.2-dev", "flux.2-klein-4b", "flux.2-klein-base-4b", "qwen-image", "nano-banana-2", "imagen-4.0", "gpt-image-1",
+          "seedream-v4.0", "seedream-v4.5", "grok-imagine"}
 NEGATIVES = {
     "coco": ("detection-datasets/coco", "26ddc382fe75dfc2a0655b5977e296ea10efebce",
              ["default/train/0000.parquet", "default/train/0001.parquet"]),
@@ -138,6 +140,24 @@ def fetch_met(target):
         pq.write_table(pa.table({"image": pa.array(data, pa.binary())}), target / f"met-{kind}.parquet", row_group_size=64)
 
 
+def extract_newest(sources, target):
+    if any(target.glob("*.parquet")):
+        return
+    images = defaultdict(list)
+    for path in sources:
+        f = pq.ParquetFile(path)
+        for g in range(f.metadata.num_row_groups):
+            rows = f.read_row_group(g, columns=["label", "model", "type"]).to_pylist()
+            wanted = [i for i, r in enumerate(rows) if r["label"] == "fake" and r["type"] != "video" and r["model"] in NEWEST]
+            if wanted:
+                column = f.read_row_group(g, columns=["image"]).column("image").to_pylist()
+                for i in wanted:
+                    images[rows[i]["model"]].append(column[i]["bytes"])
+        print("newest", path.name, sum(map(len, images.values())), flush=True)
+    for model, data in images.items():
+        pq.write_table(pa.table({"image": pa.array(data, pa.binary())}), target / f"{model}.parquet", row_group_size=16)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--data", type=Path, default=DEFAULT_DATA)
@@ -146,8 +166,10 @@ def main():
     repo, revision, filename = DETECTRA
     download(repo, revision, filename, args.data / "detectra-v1", repo_type="model")
     repo, revision, files = OPENFAKE
-    for filename in files:
-        print("openfake", download(repo, revision, filename, args.data / "openfake"), flush=True)
+    paths = [download(repo, revision, filename, args.data / "openfake") for filename in files]
+    print("openfake", len(paths), "files", flush=True)
+    (args.data / "openfake-newest").mkdir(parents=True, exist_ok=True)
+    extract_newest(paths[:-1], args.data / "openfake-newest")
     (args.data / "met").mkdir(parents=True, exist_ok=True)
     fetch_met(args.data / "met")
     for name, (repo, revision, files) in NEGATIVES.items():
