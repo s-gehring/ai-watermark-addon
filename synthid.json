@@ -4,7 +4,7 @@
       "provider": "google",
       "file": "google.bin",
       "size": 512,
-      "weightScale": 0.003337023910302207,
+      "weightScale": 0.003755008637003095,
       "threshold": 12,
       "source": {
         "datasets": [
@@ -30,7 +30,7 @@
         1254,
         1254
       ],
-      "weightScale": 0.003208867638495871,
+      "weightScale": 0.0034099923203279084,
       "threshold": 8,
       "source": {
         "datasets": [
@@ -66,7 +66,7 @@
         1448,
         1086
       ],
-      "weightScale": 0.003208434244027142,
+      "weightScale": 0.0035432002280740026,
       "threshold": 8,
       "source": {
         "datasets": [
@@ -92,7 +92,7 @@
         1672,
         941
       ],
-      "weightScale": 0.003147064873651133,
+      "weightScale": 0.0034482568751567815,
       "threshold": 8,
       "source": {
         "datasets": [
@@ -118,7 +118,7 @@
         1122,
         1402
       ],
-      "weightScale": 0.0031209500505969706,
+      "weightScale": 0.0036731005081628186,
       "threshold": 8,
       "source": {
         "datasets": [
@@ -141,7 +141,7 @@
       "file": "amazon-nova-canvas.bin",
       "size": 1024,
       "minChannelStd": 0.5,
-      "weightScale": 0.0034057388523643676,
+      "weightScale": 0.00408272120727058,
       "threshold": 8,
       "source": {
         "repositories": [
