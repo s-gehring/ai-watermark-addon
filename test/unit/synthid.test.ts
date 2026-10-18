@@ -152,6 +152,19 @@ describe('detectSynthId', () => {
     expect(detectSynthId(portrait, [detector('openai', 64, 1.5), detector('google', 128)])).toBe('google');
   });
 
+  it('applies templates for another aspect ratio whose spectrum is already computed', () => {
+    const portrait = carrierImage(256, 384, 2, 40);
+    const seed = { ...detector('google', 64), threshold: Infinity };
+    expect(detectSynthId(portrait, [seed, detector('openai', 64, 1.5)])).toBe('openai');
+  });
+
+  it('applies templates for another aspect ratio once the same provider scored at least 3', () => {
+    const portrait = carrierImage(256, 384, 2, 40);
+    const seed = (provider: SynthIdProvider) => ({ ...detector(provider, 64), threshold: Infinity });
+    expect(detectSynthId(portrait, [seed('openai'), detector('openai', 128, 1.5)])).toBe('openai');
+    expect(detectSynthId(portrait, [seed('google'), detector('openai', 128, 1.5)])).toBeNull();
+  });
+
   it('finds nothing in images without the pattern', () => {
     expect(detectSynthId(carrierImage(384, 256, 0, 40), [detector('openai', 64, 1.5), detector('google', 128)])).toBeNull();
   });

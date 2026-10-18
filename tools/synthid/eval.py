@@ -9,6 +9,7 @@ import synthid
 
 ROOT = Path(__file__).resolve().parents[2]
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+PRESCREEN_SCORE = 3
 
 
 def reencode(rgb, fmt, **options):
@@ -47,21 +48,33 @@ def images_by_format(folder):
     return {name: group for name, group in groups.items() if group}
 
 
+def channels(template):
+    return {c for c in range(3) if template["weights"][c].any()}
+
+
 def provider_scores(rgb, templates, ignore_aspect):
     height, width, _ = rgb.shape
-    spectra, scores = {}, {}
+    spectra, computed, scores = {}, {}, {}
     if min(height, width) < synthid.MIN_SIDE:
         return scores
-    for template in templates:
-        if not ignore_aspect and not synthid.fits(template, height, width):
-            continue
-        meta = template["meta"]
-        if meta["size"] not in spectra:
-            spectra[meta["size"]] = synthid.spectrum(rgb, meta["size"])
-        u, channel_std = spectra[meta["size"]]
-        z = synthid.score_spectrum(u, height, width, template["weights"], template["phases"], channel_std, meta.get("minChannelStd", 0))
-        hit, best = scores.get(meta["provider"], (False, -np.inf))
-        scores[meta["provider"]] = (hit or z >= meta["threshold"], max(best, z))
+
+    def run(group):
+        for template in group:
+            meta = template["meta"]
+            if meta["size"] not in spectra:
+                spectra[meta["size"]] = synthid.spectrum(rgb, meta["size"])
+            computed.setdefault(meta["size"], set()).update(channels(template))
+            u, channel_std = spectra[meta["size"]]
+            z = synthid.score_spectrum(u, height, width, template["weights"], template["phases"], channel_std, meta.get("minChannelStd", 0))
+            hit, best = scores.get(meta["provider"], (False, -np.inf))
+            scores[meta["provider"]] = (hit or z >= meta["threshold"], max(best, z))
+
+    fitting = [ignore_aspect or synthid.fits(t, height, width) for t in templates]
+    run(t for t, f in zip(templates, fitting) if f)
+    others = [t for t, f in zip(templates, fitting) if not f]
+    cheap = [channels(t) <= computed.get(t["meta"]["size"], set()) for t in others]
+    run(t for t, c in zip(others, cheap) if c)
+    run([t for t, c in zip(others, cheap) if not c and scores.get(t["meta"]["provider"], (False, -np.inf))[1] >= PRESCREEN_SCORE])
     return scores
 
 

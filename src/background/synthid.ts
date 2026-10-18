@@ -22,6 +22,7 @@ const NYQUIST_MARGIN = 0.45;
 const GRID_PERIODS = [8, 16];
 const GRID_TOLERANCE = 1.5;
 const ASPECT_TOLERANCE = 0.02;
+const PRESCREEN_SCORE = 3;
 const LOCAL_CONTRAST_OFFSET = 0.5;
 const YCBCR = [
   [0.299, 0.587, 0.114],
@@ -292,19 +293,37 @@ export function synthIdScore(image: PixelImage, template: SynthIdTemplate): numb
 
 export function detectSynthId(image: PixelImage, detectors: readonly SynthIdDetector[]): TemplateProvider | null {
   if (Math.min(image.width, image.height) < MIN_SIDE) return null;
-  const applicable = detectors.filter(
-    (d) => !d.aspect || Math.abs(Math.log(image.width / image.height / d.aspect)) <= ASPECT_TOLERANCE,
-  );
+  const fits = (d: SynthIdDetector) => !d.aspect || Math.abs(Math.log(image.width / image.height / d.aspect)) <= ASPECT_TOLERANCE;
   const spectra = new Map<number, UnitSpectrum>();
-  for (const detector of applicable) {
-    let spectrum = spectra.get(detector.size);
-    if (!spectrum) {
-      const sameSize = applicable.filter((d) => d.size === detector.size);
-      const wanted = [0, 1, 2].filter((c) => sameSize.some((d) => channelsOf(d).includes(c)));
-      spectrum = unitSpectrum(image, detector.size, wanted);
-      spectra.set(detector.size, spectrum);
+  const best = new Map<TemplateProvider, number>();
+  const ready = (d: SynthIdDetector) => channelsOf(d).every((c) => spectra.get(d.size)?.re[c].length);
+
+  const matches = (detector: SynthIdDetector, group: readonly SynthIdDetector[]) => {
+    const have = spectra.get(detector.size);
+    const missing = [0, 1, 2].filter(
+      (c) => !have?.re[c].length && group.some((d) => d.size === detector.size && channelsOf(d).includes(c)),
+    );
+    if (missing.length) {
+      const fresh = unitSpectrum(image, detector.size, missing);
+      if (have) {
+        for (const c of missing) {
+          have.re[c] = fresh.re[c];
+          have.im[c] = fresh.im[c];
+          have.std[c] = fresh.std[c];
+        }
+      } else spectra.set(detector.size, fresh);
     }
-    if (templateScore(spectrum, detector) >= detector.threshold) return detector.provider;
-  }
+    const score = templateScore(spectra.get(detector.size)!, detector);
+    best.set(detector.provider, Math.max(score, best.get(detector.provider) ?? -Infinity));
+    return score >= detector.threshold;
+  };
+
+  const fitting = detectors.filter(fits);
+  for (const d of fitting) if (matches(d, fitting)) return d.provider;
+  const others = detectors.filter((d) => !fits(d));
+  const cheap = others.filter(ready);
+  for (const d of cheap) if (matches(d, cheap)) return d.provider;
+  const prescreened = others.filter((d) => !cheap.includes(d) && (best.get(d.provider) ?? -Infinity) >= PRESCREEN_SCORE);
+  for (const d of prescreened) if (matches(d, prescreened)) return d.provider;
   return null;
 }
