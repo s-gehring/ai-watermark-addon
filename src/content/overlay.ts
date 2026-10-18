@@ -388,6 +388,7 @@ const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   sdxl: 'SDXL',
   flux: 'FLUX',
   'nova-canvas': 'Amazon Nova Canvas',
+  bytedance: 'ByteDance (Doubao, Jimeng)',
   'gemini-visible': 'Gemini',
   'kling-visible': 'Kling',
   'grok-visible': 'Grok',

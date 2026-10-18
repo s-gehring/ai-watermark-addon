@@ -48,6 +48,10 @@ After the SynthID templates, the same step decodes the classic [invisible-waterm
 
 This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline or from the SDXL API.
 
+### ByteDance tile pattern
+
+Doubao and Jimeng (ByteDance) add a faint pattern to the Cb channel that repeats every 112 × 96 pixels from the top left corner. The add-on folds the Cb channel of images with at least 24 whole tiles onto one tile, removes the local mean and correlates the result with the pattern averaged over flat black and gray calibration images from [pagedMark](https://github.com/doofzoff/pagedMark) ([`src/background/bytedance-tile.json`](../src/background/bytedance-tile.json)). From a correlation of 0.5 on, the badge reads "AI · Watermark" and the details panel names ByteDance. Watermarked images score 0.86 to 0.89, images without the pattern at most 0.16. The check survives JPEG compression at the original size, but not scaling or cropping, and the Seedream API and images downloaded without the watermark do not carry it.
+
 ### Visible Gemini logo
 
 If no invisible watermark is found, the same step looks for the white four-pointed star that Gemini puts into the bottom right corner of generated images. Badge "AI · Watermark", and the details panel names the visible watermark and Gemini. Since August 2026 users can switch the logo off, reportedly except in countries that require a visible AI label. SynthID usually no longer survives in images that are shared with the logo (3 of 34 in the test sets), so the logo is often the only pixel evidence left.

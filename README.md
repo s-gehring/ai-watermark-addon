@@ -17,7 +17,7 @@ Every image whose shorter side is at least 200 px goes through up to three check
 | Check | Looks for | Badge |
 |---|---|---|
 | **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI, InvokeAI and the Stability AI API, the Grok and Ideogram EXIF tags, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
-| **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the watermark of Amazon Nova Canvas, the Stable Diffusion, SDXL and FLUX `invisible-watermark` in unmodified PNGs and the visible marks of Gemini, Kling, Grok, Doubao, Jimeng and Qwen in the bottom right corner | AI · SynthID, AI · Watermark |
+| **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the watermark of Amazon Nova Canvas, the Stable Diffusion, SDXL and FLUX `invisible-watermark` in unmodified PNGs, the tiled pattern of ByteDance (Doubao, Jimeng) at the original size and the visible marks of Gemini, Kling, Grok, Doubao, Jimeng and Qwen in the bottom right corner | AI · SynthID, AI · Watermark |
 | **Model** | a ViT classifier ([Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake)) run with ONNX Runtime Web | AI 97 % |
 
 There is no public SynthID detector. The add-on reconstructs a fixed part of the watermark from public sample images and compares image spectra against it. [docs/how-it-works.md](docs/how-it-works.md) explains all three checks.
@@ -84,4 +84,5 @@ This project is not affiliated with Google, OpenAI, Amazon, Kuaishou, Stability 
 - [GeminiWatermarkTool](https://github.com/allenk/GeminiWatermarkTool) by AllenK, the alpha map and positions of the visible Gemini logo
 - [nyuuzyou/klingai](https://huggingface.co/datasets/nyuuzyou/klingai) by nyuuzyou, the Kling images from 2024 that the template of the older Kling logo is averaged from
 - [remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks) by wiltodelta, the alpha maps of the Doubao and Jimeng labels, and [Rapidata/xAI_Aurora_t2i_human_preferences](https://huggingface.co/datasets/Rapidata/xAI_Aurora_t2i_human_preferences), the Grok images that the template of the "GROK xAI" mark is averaged from
+- [pagedMark](https://github.com/doofzoff/pagedMark) by doofzoff, the Doubao and Jimeng calibration images that the ByteDance tile pattern is averaged from
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime), which runs the model in the browser

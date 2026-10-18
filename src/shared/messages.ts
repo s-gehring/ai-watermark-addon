@@ -18,6 +18,7 @@ export type WatermarkScheme =
   | 'sdxl'
   | 'flux'
   | 'nova-canvas'
+  | 'bytedance'
   | 'gemini-visible'
   | 'kling-visible'
   | 'grok-visible'
