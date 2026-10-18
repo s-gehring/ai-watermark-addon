@@ -73,6 +73,15 @@ Size and position scale with the image, so downscaled copies keep the proportion
 
 Unlike Gemini's half-transparent star, Kling's logo is nearly opaque white with soft edges, so there is no alpha map to take over. The add-on instead ships the average contrast of the logo in this feature, measured on the real images: the mean grid at the expected position over 1,005 images from 2024 and 68 current images, minus the background level, with values below 5 % of the maximum set to zero ([`src/background/kling-logo.json`](../src/background/kling-logo.json), 1,728 bytes). Averaged over that many backgrounds, only the logo remains. The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the logo. [`tools/visible/kling_logo.py`](../tools/visible/kling_logo.py) is the reference implementation and rebuilds the templates from the labeled images; a unit test checks that both produce the same score. Detection rates are in [accuracy.md](accuracy.md#visible-kling-logo).
 
+### Further visible marks
+
+If no Kling logo is found either, the same step looks for seven more marks in the bottom right corner. Badge "AI · Watermark", and the details panel names the generator.
+
+- **Chinese labels:** since September 2025 GB 45438-2025 requires a visible AI label whose text is at least 5 % of the short side high, so these marks scale with the short side: "豆包AI生成" (Doubao, about 16 % of the short side wide), "即梦AI" with its symbol (Jimeng, 20 %), "千问AI生成" with its symbol (Qwen, 25 %) and "可灵AI 3.0" with its symbol (Kling's Chinese site, 16 %, reported as Kling). The check works like the current Kling layout: expected box from the short side, five scales from −4 % to +4 % and half-cell steps.
+- **Grok:** the free tier on X draws its mark at a fixed pixel size (66 to 89 px wide, 5 to 11 px from the edges) into images of every size, in three variants: "GROK" with a slash (2024), "GROK xAI" (Aurora, January 2025) and "⊘ Grok" (since 2025). Since only the size of the original is unknown, the check scans logo widths from 4 % to 10 % of the long side in steps of 4 %, with the margins in proportion to the width, and half-cell steps. Paid plans and the API add no mark.
+
+All templates are 48 cells wide. Doubao and Jimeng come from the alpha maps of [remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks), the others are average contrasts of real images like the Kling templates ([`src/background/visible-marks.json`](../src/background/visible-marks.json), about 8 KB). A correlation of at least 0.6 counts as found for the Chinese labels, 0.65 for the two current Grok marks and 0.8 for the 2024 Grok mark, which comes closer to random corners (up to 0.69 in images without it). [`tools/visible/marks.py`](../tools/visible/marks.py) is the reference implementation; a unit test checks that both produce the same scores. Detection rates are in [accuracy.md](accuracy.md#further-visible-marks).
+
 ## 3. Model
 
 Badge "AI 99 %". A classifier run with ONNX Runtime Web (WASM) in the worker: [Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake) (44 MB, fp16).

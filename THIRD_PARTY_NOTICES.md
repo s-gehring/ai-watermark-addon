@@ -81,6 +81,17 @@ SOFTWARE.
 
 The unit test fixture `test/unit/fixtures/visible-watermark/kling-2024.jpg` is image 130211779 of nyuuzyou/klingai, downscaled to 512 × 512 px. `kling-2026.jpg` is a synthetic background overlaid with the template of the current logo.
 
+## Further visible mark templates
+
+[`src/background/visible-marks.json`](src/background/visible-marks.json) contains the templates of the visible Doubao, Jimeng, Qwen, Kling (Chinese) and Grok marks (48 values wide each), computed by [`tools/visible/marks.py`](tools/visible/marks.py). Sources:
+
+- Doubao and Jimeng: `doubao_alpha.png` and `jimeng_alpha.png` from [remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks) by wiltodelta (`src/remove_ai_watermarks/assets/`, commit `5677c22`), [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), downscaled to 48 values wide and converted to contrast
+- Qwen and Kling (Chinese): average contrast of 21 Qwen and 4 Kling images in [NanmiCoder/OpenNoMark](https://github.com/NanmiCoder/OpenNoMark) (commit `9455d2d`), CC BY-NC-SA 4.0
+- Grok "GROK xAI": average contrast of 247 images of [Rapidata/xAI_Aurora_t2i_human_preferences](https://huggingface.co/datasets/Rapidata/xAI_Aurora_t2i_human_preferences) (revision `8f32b40`), CDLA-Permissive-2.0
+- Grok "⊘ Grok" and "GROK" with a slash: average contrast of 4 public domain images on Wikimedia Commons ("Great Sea Serpent Andersen literary fairy tale.jpg", "Man using laptop during sunset (Grok Aurora 2025).webp", "Tesla Cybertruck on a Snowy Landscape Under the Aurora Borealis (Grok Aurora 2025).webp", "Astronaut Riding a Horse (Grok Aurora).webp") and 3 images of [WildAIGC-Bench](https://github.com/yuzj1997yzj/WildAIGC-Bench) (commit `96bb4e8`), no license stated for the images
+
+The unit test fixture `test/unit/fixtures/visible-watermark/grok-aurora.jpg` is image `21eb1bb54253987e` (shard `train-00010`) of the Rapidata dataset, downscaled to 512 × 384 px. `doubao.jpg`, `jimeng.jpg`, `qwen.jpg`, `kling-cjk.jpg`, `grok.jpg` and `grok-2024.jpg` are synthetic backgrounds overlaid with these templates.
+
 ## Trademarks
 
-SynthID, Gemini and Imagen are trademarks of Google LLC. OpenAI, ChatGPT and GPT-Image are trademarks of OpenAI. Amazon, Amazon Bedrock, Amazon Nova and Amazon Titan are trademarks of Amazon.com, Inc. or its affiliates. Kling is a trademark of Kuaishou Technology. Stability AI is a trademark of Stability AI Ltd. C2PA is a trademark of the Coalition for Content Provenance and Authenticity. They are used here only to describe what the add-on detects. This project is not affiliated with or endorsed by any of them.
+SynthID, Gemini and Imagen are trademarks of Google LLC. OpenAI, ChatGPT and GPT-Image are trademarks of OpenAI. Amazon, Amazon Bedrock, Amazon Nova and Amazon Titan are trademarks of Amazon.com, Inc. or its affiliates. Kling is a trademark of Kuaishou Technology. Doubao and Jimeng are trademarks of ByteDance, Qwen of Alibaba and Grok of xAI. Stability AI is a trademark of Stability AI Ltd. C2PA is a trademark of the Coalition for Content Provenance and Authenticity. They are used here only to describe what the add-on detects. This project is not affiliated with or endorsed by any of them.

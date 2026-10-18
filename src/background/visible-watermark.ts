@@ -2,6 +2,7 @@ import type { WatermarkScheme } from '../shared/messages';
 import geminiLogo from './gemini-logo.json';
 import klingLogo from './kling-logo.json';
 import type { PixelImage } from './preprocess';
+import visibleMarks from './visible-marks.json';
 
 const PAD = 2;
 const HEADROOM = 8;
@@ -19,7 +20,28 @@ const KLING_OFFSETS = [0, 0.5];
 const KLING_MIN_LOGO = 24;
 const KLING_THRESHOLD = 0.6;
 
-type Box = (width: number, height: number) => [logo: number, right: number, bottom: number];
+const MARK_MIN_LOGO = 20;
+const MARK_SCAN_RANGE = [0.04, 0.1];
+const MARK_SCAN_STEP = 1.04;
+const MARK_THRESHOLDS: Record<keyof typeof visibleMarks.marks, number> = {
+  doubao: 0.6,
+  jimeng: 0.6,
+  qwen: 0.6,
+  'kling-cjk': 0.6,
+  'grok-2024': 0.8,
+  'grok-aurora': 0.65,
+  grok: 0.65,
+};
+
+type Placement = [logo: number, right: number, bottom: number];
+type Box = (width: number, height: number) => Placement;
+
+interface Layout {
+  template: Template;
+  placements: (width: number, height: number) => Placement[];
+  scales: number;
+  minLogo: number;
+}
 
 const KLING_BOXES: Record<keyof typeof klingLogo.layouts, Box> = {
   '2024': (width, height) => {
@@ -50,7 +72,8 @@ interface Taps {
 }
 
 let geminiTemplate: Template | null = null;
-let klingTemplates: { box: Box; template: Template }[] | null = null;
+let klingLayouts: Layout[] | null = null;
+let markLayouts: { name: keyof typeof visibleMarks.marks; scheme: WatermarkScheme; layout: Layout }[] | null = null;
 
 function decode(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -90,10 +113,46 @@ function loadGemini(): Template {
   return makeTemplate(values, GEMINI_SIZE, GEMINI_SIZE);
 }
 
-function loadKling(): { box: Box; template: Template }[] {
-  return Object.entries(klingLogo.layouts).map(([name, { width, height, contrast }]) => ({
-    box: KLING_BOXES[name as keyof typeof klingLogo.layouts],
-    template: makeTemplate(Float64Array.from(decode(contrast)), width, height),
+function loadKling(): Layout[] {
+  return Object.entries(klingLogo.layouts).map(([name, { width, height, contrast }]) => {
+    const box = KLING_BOXES[name as keyof typeof klingLogo.layouts];
+    return {
+      template: makeTemplate(Float64Array.from(decode(contrast)), width, height),
+      placements: (w, h) => [box(w, h)],
+      scales: KLING_SCALES,
+      minLogo: KLING_MIN_LOGO,
+    };
+  });
+}
+
+function scanPlacements([right, bottom]: number[]): (width: number, height: number) => Placement[] {
+  return (width, height) => {
+    const long = Math.max(width, height);
+    const out: Placement[] = [];
+    for (let logo = Math.max(MARK_MIN_LOGO, MARK_SCAN_RANGE[0] * long); logo <= MARK_SCAN_RANGE[1] * long; logo *= MARK_SCAN_STEP) {
+      out.push([logo, right * logo, bottom * logo]);
+    }
+    return out;
+  };
+}
+
+function shortSidePlacements([logo, right, bottom]: number[]): (width: number, height: number) => Placement[] {
+  return (width, height) => {
+    const short = Math.min(width, height);
+    return [[logo * short, right * short, bottom * short]];
+  };
+}
+
+function loadMarks(): NonNullable<typeof markLayouts> {
+  return Object.entries(visibleMarks.marks).map(([name, mark]) => ({
+    name: name as keyof typeof visibleMarks.marks,
+    scheme: mark.scheme as WatermarkScheme,
+    layout: {
+      template: makeTemplate(Float64Array.from(decode(mark.contrast)), mark.width, mark.height),
+      placements: 'short' in mark ? shortSidePlacements(mark.short) : scanPlacements(mark.scan),
+      scales: 'short' in mark ? KLING_SCALES : 0,
+      minLogo: MARK_MIN_LOGO,
+    },
   }));
 }
 
@@ -186,14 +245,12 @@ export function geminiLogoScore(image: PixelImage): number {
   return best;
 }
 
-export function klingLogoScore(image: PixelImage): number {
-  klingTemplates ??= loadKling();
+function layoutScore(image: PixelImage, { template, placements, scales, minLogo }: Layout): number {
   const { width, height } = image;
   let best = -1;
-  for (const { box, template } of klingTemplates) {
-    const [logo, right, bottom] = box(width, height);
-    if (logo < KLING_MIN_LOGO) continue;
-    for (let e = -KLING_SCALES; e <= KLING_SCALES; e++) {
+  for (const [logo, right, bottom] of placements(width, height)) {
+    if (logo < minLogo) continue;
+    for (let e = -scales; e <= scales; e++) {
       const factor = KLING_STEP ** e;
       const scale = (logo * factor) / template.columns;
       for (const dy of KLING_OFFSETS) {
@@ -209,7 +266,28 @@ export function klingLogoScore(image: PixelImage): number {
   return best;
 }
 
+export function klingLogoScore(image: PixelImage): number {
+  klingLayouts ??= loadKling();
+  return Math.max(...klingLayouts.map((layout) => layoutScore(image, layout)));
+}
+
+export function visibleMarkScores(image: PixelImage): Record<keyof typeof visibleMarks.marks, number> {
+  markLayouts ??= loadMarks();
+  return Object.fromEntries(markLayouts.map(({ name, layout }) => [name, layoutScore(image, layout)])) as Record<keyof typeof visibleMarks.marks, number>;
+}
+
+function visibleMark(image: PixelImage): WatermarkScheme | null {
+  markLayouts ??= loadMarks();
+  let best: { ratio: number; scheme: WatermarkScheme } | null = null;
+  for (const { name, scheme, layout } of markLayouts) {
+    const ratio = layoutScore(image, layout) / MARK_THRESHOLDS[name];
+    if (ratio >= 1 && (!best || ratio > best.ratio)) best = { ratio, scheme };
+  }
+  return best?.scheme ?? null;
+}
+
 export function detectVisibleWatermark(image: PixelImage): WatermarkScheme | null {
   if (geminiLogoScore(image) >= GEMINI_THRESHOLD) return 'gemini-visible';
-  return klingLogoScore(image) >= KLING_THRESHOLD ? 'kling-visible' : null;
+  if (klingLogoScore(image) >= KLING_THRESHOLD) return 'kling-visible';
+  return visibleMark(image);
 }

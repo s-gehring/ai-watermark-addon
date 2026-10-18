@@ -113,4 +113,15 @@ Kling:
 .venv/bin/python tools/visible/eval.py --logo kling tools/eval/.cache/samples/*/real   # false positives
 ```
 
-`build` needs the labeled images with the logo: `kling-2024` holds the images of [nyuuzyou/klingai](https://huggingface.co/datasets/nyuuzyou/klingai), `kling-2026` the current free-tier images listed in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md#kling-logo-templates). The thresholds are `THRESHOLD` in [`tools/visible/gemini_logo.py`](../tools/visible/gemini_logo.py) and [`tools/visible/kling_logo.py`](../tools/visible/kling_logo.py) and `GEMINI_THRESHOLD` and `KLING_THRESHOLD` in [`src/background/visible-watermark.ts`](../src/background/visible-watermark.ts).
+Doubao, Jimeng, Qwen, Kling (Chinese) and Grok:
+
+```bash
+.venv/bin/python tools/visible/marks.py build   # alpha maps from remove-ai-watermarks (pinned commit) and averages of tools/visible/.cache/real/{qwen,kling-cjk,grok,grok-2024,grok-aurora} -> src/background/visible-marks.json
+.venv/bin/python tools/visible/marks.py score path/to/image.png   # score per mark and verdict per image
+.venv/bin/python tools/visible/eval.py --logo marks --transforms path/to/images-with-mark   # detection, also after re-encoding, downscaling and cropping
+.venv/bin/python tools/visible/eval.py --logo marks tools/eval/.cache/samples/*/real   # false positives
+```
+
+With `--logo marks`, `eval.py` reports the highest ratio of score to threshold over all marks, so a hit is a value of at least 1.
+
+`build` needs the labeled images with the logo: `kling-2024` holds the images of [nyuuzyou/klingai](https://huggingface.co/datasets/nyuuzyou/klingai), `kling-2026` the current free-tier images listed in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md#kling-logo-templates). The labeled images of the further marks are listed in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md#further-visible-mark-templates). The thresholds are `THRESHOLD` in [`tools/visible/gemini_logo.py`](../tools/visible/gemini_logo.py) and [`tools/visible/kling_logo.py`](../tools/visible/kling_logo.py), `threshold` per mark in [`tools/visible/marks.py`](../tools/visible/marks.py) and `GEMINI_THRESHOLD`, `KLING_THRESHOLD` and `MARK_THRESHOLDS` in [`src/background/visible-watermark.ts`](../src/background/visible-watermark.ts).
