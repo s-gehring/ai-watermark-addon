@@ -16,7 +16,7 @@ Every image whose shorter side is at least 200 px goes through up to three check
 
 | Check | Looks for | Badge |
 |---|---|---|
-| **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI, InvokeAI and the Stability AI API, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
+| **Metadata** | AI labels in C2PA manifests and IPTC/XMP, generation parameters from Stable Diffusion, ComfyUI, NovelAI, InvokeAI and the Stability AI API, the Grok and Ideogram EXIF tags, the Chinese AIGC label (GB 45438-2025) | AI · Metadata |
 | **SynthID watermark** | the invisible watermark that Google (Gemini, Imagen) and, since May 2026, OpenAI (ChatGPT, API) embed in generated images, measured in the pixels; also the watermark of Amazon Nova Canvas, the Stable Diffusion, SDXL and FLUX `invisible-watermark` in unmodified PNGs and the visible marks of Gemini, Kling, Grok, Doubao, Jimeng and Qwen in the bottom right corner | AI · SynthID, AI · Watermark |
 | **Model** | a ViT classifier ([Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake)) run with ONNX Runtime Web | AI 97 % |
 

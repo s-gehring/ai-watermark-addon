@@ -7,6 +7,8 @@ export type MetadataReason =
   | 'novelai'
   | 'invokeai'
   | 'stability-ai'
+  | 'grok'
+  | 'ideogram'
   | 'aigc-label';
 
 export type SynthIdProvider = 'google' | 'openai';

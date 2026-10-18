@@ -20,6 +20,7 @@ Badge "AI · Metadata". A metadata hit is treated as certain. Detected labels:
 
 - IPTC Digital Source Type `trainedAlgorithmicMedia` or `compositeWithTrainedAlgorithmicMedia` in XMP or in C2PA manifests (OpenAI, Google, Adobe Firefly, Midjourney, Amazon Bedrock and others)
 - Stable Diffusion generation parameters (A1111/Forge), ComfyUI workflows, NovelAI, InvokeAI
+- EXIF tags of Grok (`ImageDescription: Signature: <base64>` in original JPEG downloads) and Ideogram (`Make: Ideogram AI`)
 - metadata from the Stability AI API: the EXIF fields `Model: stability-diffusion` and `Software: stability.ai` (SDXL on Amazon Bedrock, v1 API) and the C2PA manifest of Stability's Content Credentials service, which carries no IPTC source type
 - the AIGC label required by the Chinese labeling standard GB 45438-2025 (JSON with `Label`, `ContentProducer`, `ProduceID` and so on, as PNG text chunk `AIGC`, in the XMP namespace `http://www.tc260.org.cn/ns/AIGC/1.0/` or in the EXIF comment; mandatory for providers in China since September 2025, for example Kling)
 
