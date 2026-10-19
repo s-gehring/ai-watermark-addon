@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SerialQueue } from '../../src/background/queue';
+import { TaskQueue } from '../../src/background/queue';
 import { LruCache } from '../../src/shared/lru';
 
 describe('LruCache', () => {
@@ -15,9 +15,9 @@ describe('LruCache', () => {
   });
 });
 
-describe('SerialQueue', () => {
+describe('TaskQueue', () => {
   it('runs tasks one at a time in order and survives failures', async () => {
-    const queue = new SerialQueue();
+    const queue = new TaskQueue();
     const log: string[] = [];
     const task = (name: string, ms: number, fail = false) => () =>
       new Promise<string>((resolve, reject) =>
@@ -33,5 +33,18 @@ describe('SerialQueue', () => {
     ]);
     expect(log).toEqual(['slow', 'broken', 'fast']);
     expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+  });
+
+  it('never runs more tasks at once than its concurrency allows', async () => {
+    const queue = new TaskQueue(2);
+    let running = 0;
+    let peak = 0;
+    const task = (ms: number) => async () => {
+      peak = Math.max(peak, ++running);
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      running--;
+    };
+    await Promise.all([5, 1, 3, 1, 2].map((ms) => queue.run(task(ms))));
+    expect(peak).toBe(2);
   });
 });

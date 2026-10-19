@@ -132,6 +132,14 @@ const STRICT_PAGE = `<!doctype html>
   </script>
 </body></html>`;
 
+const variantsPage = (foreignOrigin: string) => `<!doctype html>
+<html><head><meta charset="utf-8"><style>img { display: block; width: 320px; height: 240px; }</style></head><body>
+  <img id="srcset" srcset="/variant.jpg?srcset 480w, /variant-large.jpg?srcset 1280w" sizes="320px">
+  <a href="/variant-large.jpg?link"><img id="link" src="/variant.jpg?link"></a>
+  <img id="cropped" srcset="/variant.jpg?cropped 480w, /square-large.jpg 1280w" sizes="320px">
+  <a href="${foreignOrigin}/variant-large.jpg?foreign"><img id="foreign" src="/variant.jpg?foreign"></a>
+</body></html>`;
+
 let server: Server;
 let origin: string;
 let driver: firefox.Driver;
@@ -145,6 +153,8 @@ beforeAll(async () => {
   const geminiLogo = readFileSync(new URL('../unit/fixtures/visible-watermark/gemini-v1.jpg', import.meta.url));
   const klingLogo = readFileSync(new URL('../unit/fixtures/visible-watermark/kling-2024.jpg', import.meta.url));
   const synthIdC2pa = withC2paSynthId(await sharp(await photoLikeJpeg()).png().toBuffer());
+  const variantLarge = withXmp(await sharp(plain).resize(1280, 960).jpeg().toBuffer(), XMP_AI);
+  const squareLarge = withXmp(await sharp(plain).resize(1280, 1280, { fit: 'fill' }).jpeg().toBuffer(), XMP_AI);
   server = createServer((req, res) => {
     const path = new URL(req.url!, 'http://x').pathname;
     if (path === '/') res.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
@@ -155,6 +165,10 @@ beforeAll(async () => {
           'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'",
         })
         .end(STRICT_PAGE);
+    else if (path === '/variants') res.writeHead(200, { 'content-type': 'text/html' }).end(variantsPage(origin.replace('127.0.0.1', 'localhost')));
+    else if (path === '/variant.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
+    else if (path === '/variant-large.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(variantLarge);
+    else if (path === '/square-large.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(squareLarge);
     else if (path === '/ai.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(ai);
     else if (path === '/plain.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
     else if (path === '/synthid.png') res.writeHead(200, { 'content-type': 'image/png' }).end(synthId);
@@ -283,6 +297,17 @@ async function openDetails(): Promise<DetailsInfo | null> {
   });
 }
 
+async function classify(path: string): Promise<Record<string, unknown>> {
+  return driver.executeAsyncScript<Record<string, unknown>>(
+    (url: string, done: (v: unknown) => void) => {
+      browser.runtime
+        .sendMessage({ type: 'classify', url })
+        .then(done, (e: Error) => done({ thrown: String(e) }));
+    },
+    `${origin}${path}`,
+  );
+}
+
 describe('content script', () => {
   it('marks images with AI metadata, including CSS backgrounds and late additions', async () => {
     await driver.get(`${origin}/`);
@@ -385,17 +410,6 @@ describe('background', () => {
     await driver.switchTo().window(pageHandle);
   }, 60_000);
 
-  async function classify(path: string): Promise<Record<string, unknown>> {
-    return driver.executeAsyncScript<Record<string, unknown>>(
-      (url: string, done: (v: unknown) => void) => {
-        browser.runtime
-          .sendMessage({ type: 'classify', url })
-          .then(done, (e: Error) => done({ thrown: String(e) }));
-      },
-      `${origin}${path}`,
-    );
-  }
-
   it('scores an image without metadata with the bundled model', async () => {
     await openExtensionPage('options.html');
     await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
@@ -436,5 +450,18 @@ describe('page with a strict content security policy', () => {
     await driver.get(`${origin}/strict`);
     const badges = await waitForBadges({ blob: ['ai'] });
     expect(kindOf(badges, 'blob')).toBe('ai');
+  }, 60_000);
+});
+
+describe('page that offers larger variants', () => {
+  it('reads metadata from the largest variant of the same image on the same origin, not from other crops', async () => {
+    await driver.get(`${origin}/variants`);
+    await waitForBadges({ srcset: ['ai', 'clean'], link: ['ai', 'clean'], cropped: ['ai', 'clean'], foreign: ['ai', 'clean'] });
+    await openExtensionPage('options.html');
+    await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
+    expect(await classify('/variant.jpg?srcset')).toMatchObject({ ok: true, source: 'metadata' });
+    expect(await classify('/variant.jpg?link')).toMatchObject({ ok: true, source: 'metadata' });
+    expect(await classify('/variant.jpg?cropped')).toMatchObject({ ok: true, source: 'model' });
+    expect(await classify('/variant.jpg?foreign')).toMatchObject({ ok: true, source: 'model' });
   }, 60_000);
 });

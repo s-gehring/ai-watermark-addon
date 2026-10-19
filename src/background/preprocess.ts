@@ -81,6 +81,11 @@ export function isScorable(image: Pick<PixelImage, 'width' | 'height'>): boolean
   return short >= 32 && long / short <= 8;
 }
 
+export function couldBeSourceOf(candidate: Pick<PixelImage, 'width' | 'height'>, image: Pick<PixelImage, 'width' | 'height'>): boolean {
+  const aspect = candidate.width / candidate.height / (image.width / image.height);
+  return candidate.width >= image.width && candidate.height >= image.height && Math.abs(aspect - 1) <= 0.02;
+}
+
 export function resizedSize(width: number, height: number, shortestEdge: number): [number, number] {
   const scale = shortestEdge / Math.min(width, height);
   return [Math.trunc(width * scale), Math.trunc(height * scale)];

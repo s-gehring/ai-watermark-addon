@@ -3,8 +3,8 @@ import type { Verdict } from '../shared/messages';
 import { decodeImage, scoreImage } from './classifier';
 import { detectInvisibleWatermark } from './invisible-watermark';
 import { detectAiMetadata } from './metadata';
-import { isScorable, type PixelImage } from './preprocess';
-import { SerialQueue } from './queue';
+import { couldBeSourceOf, isScorable, type PixelImage } from './preprocess';
+import { TaskQueue } from './queue';
 import { detectSynthId, type SynthIdDetector, type TemplateProvider } from './synthid';
 import { detectVisibleWatermark } from './visible-watermark';
 
@@ -13,10 +13,14 @@ export interface Checks {
   checkWatermark: boolean;
 }
 
-export interface WorkerRequest extends Checks {
-  id: number;
+export interface EncodedImage {
   bytes: ArrayBuffer;
   type: string;
+}
+
+export interface WorkerRequest extends Checks, EncodedImage {
+  id: number;
+  original: EncodedImage | null;
 }
 
 export interface WorkerResponse {
@@ -28,7 +32,7 @@ const scope = self as unknown as {
   postMessage(message: WorkerResponse): void;
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
 };
-const queue = new SerialQueue();
+const queue = new TaskQueue();
 let detectors: Promise<SynthIdDetector[]> | null = null;
 
 async function loadDetector(entry: (typeof synthIdConfig.templates)[number]): Promise<SynthIdDetector> {
@@ -65,18 +69,27 @@ async function findSynthId(image: PixelImage): Promise<TemplateProvider | null> 
   }
 }
 
-async function score(bytes: Uint8Array, type: string, checks: Checks): Promise<Verdict> {
-  let image;
+async function decode({ bytes, type }: EncodedImage): Promise<PixelImage | null> {
   try {
-    image = await decodeImage(new Blob([bytes as BlobPart], { type }));
+    return await decodeImage(new Blob([bytes], { type }));
   } catch {
-    return { ok: false, error: 'decode' };
+    return null;
   }
+}
+
+async function score(displayed: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict> {
+  const image = await decode(displayed);
+  if (!image) return { ok: false, error: 'decode' };
+  const decoded = original && (await decode(original));
+  const source = decoded && couldBeSourceOf(decoded, image) ? decoded : null;
+  const reason = original && source && checks.checkMetadata ? detectAiMetadata(new Uint8Array(original.bytes)) : null;
+  if (reason) return { ok: true, score: 1, source: 'metadata', reason };
   const metadata = checks.checkMetadata ? 'clear' : 'off';
-  const provider = checks.checkWatermark ? await findSynthId(image) : null;
+  const target = source ?? image;
+  const provider = checks.checkWatermark ? await findSynthId(target) : null;
   if (provider === 'amazon') return { ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata };
   if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
-  const scheme = checks.checkWatermark ? (detectInvisibleWatermark(image) ?? detectVisibleWatermark(image)) : null;
+  const scheme = checks.checkWatermark ? (detectInvisibleWatermark(target) ?? detectVisibleWatermark(target)) : null;
   if (scheme) return { ok: true, score: 1, source: 'watermark', scheme, metadata };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   try {
@@ -89,10 +102,9 @@ async function score(bytes: Uint8Array, type: string, checks: Checks): Promise<V
 }
 
 scope.onmessage = ({ data }) => {
-  const bytes = new Uint8Array(data.bytes);
-  const reason = data.checkMetadata ? detectAiMetadata(bytes) : null;
+  const reason = data.checkMetadata ? detectAiMetadata(new Uint8Array(data.bytes)) : null;
   const verdict: Promise<Verdict> = reason
     ? Promise.resolve({ ok: true, score: 1, source: 'metadata', reason })
-    : queue.run(() => score(bytes, data.type, data));
+    : queue.run(() => score(data, data.original, data));
   void verdict.then((v) => scope.postMessage({ id: data.id, verdict: v }));
 };

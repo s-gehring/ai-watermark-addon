@@ -1,5 +1,5 @@
 import type { Verdict } from '../shared/messages';
-import type { Checks, WorkerRequest, WorkerResponse } from './worker';
+import type { Checks, EncodedImage, WorkerRequest, WorkerResponse } from './worker';
 
 let worker: Worker | null = null;
 let nextId = 0;
@@ -27,11 +27,11 @@ function ensureWorker(): Worker {
   return created;
 }
 
-export function evaluate(bytes: ArrayBuffer, type: string, checks: Checks): Promise<Verdict> {
+export function evaluate(image: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict> {
   return new Promise((resolve) => {
     const id = nextId++;
     pending.set(id, resolve);
-    const request: WorkerRequest = { id, bytes, type, ...checks };
-    ensureWorker().postMessage(request, [bytes]);
+    const request: WorkerRequest = { id, ...image, original, ...checks };
+    ensureWorker().postMessage(request, original ? [image.bytes, original.bytes] : [image.bytes]);
   });
 }

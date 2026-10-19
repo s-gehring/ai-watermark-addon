@@ -1,10 +1,11 @@
 import { isFlagged, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
 import type { Settings } from '../shared/settings';
-import { hasBackgroundImage, imageUrlOf, isLargeEnough } from './candidates';
+import { hasBackgroundImage, imageUrlOf, isLargeEnough, largerVariantOf } from './candidates';
 import { BadgeLayer } from './overlay';
 
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const DISCOVERY_CHUNK = 400;
+const MAX_ORIGINALS = 20;
 
 export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
@@ -15,6 +16,7 @@ export class Scanner {
   private readonly mo: MutationObserver;
   private pendingRoots: Element[] = [];
   private discovering = false;
+  private originals = 0;
 
   constructor(
     private settings: Settings,
@@ -157,13 +159,21 @@ export class Scanner {
   private verdictFor(url: string, element: Element): Promise<Verdict> {
     let verdict = this.verdicts.get(url);
     if (!verdict) {
-      verdict = requestVerdict(url, element).then((result) => {
+      verdict = requestVerdict(url, element, this.originalFor(url, element)).then((result) => {
         if (!result.ok && result.error !== 'unsupported' && result.error !== 'decode') this.verdicts.delete(url);
         return result;
       });
       this.verdicts.set(url, verdict);
     }
     return verdict;
+  }
+
+  private originalFor(url: string, element: Element): string | undefined {
+    const { checkMetadata, checkWatermark } = this.settings;
+    if (this.originals >= MAX_ORIGINALS || !(checkMetadata || checkWatermark) || !(element instanceof HTMLImageElement)) return undefined;
+    const original = largerVariantOf(element, url);
+    if (original) this.originals++;
+    return original ?? undefined;
   }
 }
 
@@ -175,11 +185,11 @@ async function send(request: BackgroundRequest): Promise<Verdict> {
   }
 }
 
-async function requestVerdict(url: string, element: Element): Promise<Verdict> {
-  const verdict = url.startsWith('blob:') ? await classifyBlob(url) : await send({ type: 'classify', url });
+async function requestVerdict(url: string, element: Element, original?: string): Promise<Verdict> {
+  const verdict = url.startsWith('blob:') ? await classifyBlob(url) : await send({ type: 'classify', url, original });
   if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
   const bytes = await pixelsOf(element);
-  return bytes ? send({ type: 'classify', url, bytes }) : verdict;
+  return bytes ? send({ type: 'classify', url, bytes, original }) : verdict;
 }
 
 async function classifyBlob(url: string): Promise<Verdict> {
