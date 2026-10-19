@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   detectSynthId,
   fft,
+  localContrast,
   resampledPlanes,
   rfft2,
   synthIdScore,
@@ -72,7 +73,7 @@ function templateFrom(image: PixelImage, size: number): SynthIdTemplate {
   const half = size / 2 + 1;
   const weights = new Uint8Array(3 * size * half);
   const phases = new Uint8Array(3 * size * half);
-  const { re, im } = rfft2(resampledPlanes(image, size)[2], size);
+  const { re, im } = rfft2(localContrast(resampledPlanes(image, size)[2], size), size);
   for (const [ky, kx] of CARRIERS) {
     const row = (ky + size) % size;
     const t = (2 * size + row) * half + kx;
@@ -104,9 +105,9 @@ describe('fft', () => {
 
 describe('synthIdScore', () => {
   it.each([
-    [64, 150, 97, -0.4065262120278294],
-    [128, 100, 90, 1.6569971577432618],
-    [64, 300, 64, -0.8326223599417779],
+    [64, 150, 97, -0.31185490612821987],
+    [128, 100, 90, 0.6851699121893623],
+    [64, 300, 64, -0.16965899414319735],
   ])('matches the Python reference (template %i, image %ix%i)', (size, width, height, expected) => {
     expect(synthIdScore(patternedImage(width, height), arithmeticTemplate(size))).toBeCloseTo(expected, 5);
   });
@@ -149,6 +150,19 @@ describe('detectSynthId', () => {
     const portrait = carrierImage(256, 384, 2, 40);
     expect(detectSynthId(portrait, [detector('openai', 64, 1.5)])).toBeNull();
     expect(detectSynthId(portrait, [detector('openai', 64, 1.5), detector('google', 128)])).toBe('google');
+  });
+
+  it('applies templates for another aspect ratio whose spectrum is already computed', () => {
+    const portrait = carrierImage(256, 384, 2, 40);
+    const seed = { ...detector('google', 64), threshold: Infinity };
+    expect(detectSynthId(portrait, [seed, detector('openai', 64, 1.5)])).toBe('openai');
+  });
+
+  it('applies templates for another aspect ratio once the same provider scored at least 3', () => {
+    const portrait = carrierImage(256, 384, 2, 40);
+    const seed = (provider: SynthIdProvider) => ({ ...detector(provider, 64), threshold: Infinity });
+    expect(detectSynthId(portrait, [seed('openai'), detector('openai', 128, 1.5)])).toBe('openai');
+    expect(detectSynthId(portrait, [seed('google'), detector('openai', 128, 1.5)])).toBeNull();
   });
 
   it('finds nothing in images without the pattern', () => {

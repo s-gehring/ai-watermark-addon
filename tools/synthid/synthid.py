@@ -12,6 +12,7 @@ NYQUIST_MARGIN = 0.45
 GRID_PERIODS = (8, 16)
 GRID_TOLERANCE = 1.5
 ASPECT_TOLERANCE = 0.02
+LOCAL_CONTRAST_OFFSET = 0.5
 TEMPLATE_DIR = Path("src") / "background" / "synthid-templates"
 YCBCR = np.array(
     [[0.299, 0.587, 0.114], [-0.168736, -0.331264, 0.5], [0.5, -0.418688, -0.081312]],
@@ -55,9 +56,19 @@ def planes(rgb, size=SIZE):
     return out - out.mean(axis=(1, 2), keepdims=True)
 
 
+def local_contrast(p):
+    n = p.shape[1]
+    padded = np.pad(p, ((0, 0), (1, 1), (1, 1)), mode="reflect")
+    windows = [padded[:, dy : dy + n, dx : dx + n] for dy in range(3) for dx in range(3)]
+    mean = sum(windows) / 9
+    variance = sum(w * w for w in windows) / 9 - mean * mean
+    q = (p - mean) / (np.sqrt(np.maximum(variance, 0)) + LOCAL_CONTRAST_OFFSET)
+    return q - q.mean(axis=(1, 2), keepdims=True)
+
+
 def spectrum(rgb, size=SIZE):
     p = planes(rgb, size)
-    f = np.fft.rfft2(p)
+    f = np.fft.rfft2(local_contrast(p))
     return f / (np.abs(f) + 1e-6), p.std(axis=(1, 2))
 
 

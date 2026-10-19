@@ -67,25 +67,23 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 
 ### Google
 
-Measured with `tools/synthid/eval.py` on a sample from the OpenFake test split (`tools/synthid/fetch_openfake.py`). None of these images is part of the template.
+Measured with `tools/synthid/eval.py` on [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0, images from September 2026, `tools/synthid/fetch_research.py`), same prompts for all generators. None of these images is part of the template.
 
-| Gemini images (Nano Banana Pro) | detected |
+| Gemini 3.1 Flash Image (200 JPEGs, 2048 × 2048 as delivered by Gemini) | detected |
 |---|---|
-| originals as PNG (32 images, 848 × 1264 up to 4K) | 88 % |
-| the same, downscaled to 50 % or 33 % | 88 % or 84 % |
-| the same as JPEG, quality 90, without or with chroma subsampling (4:4:4 or 4:2:0) | 69 % or 47 % |
-| the same as WebP, quality 80 | 3 % |
-| the same, cropped to 95 % on all sides | 0 % |
-| already re-encoded as JPEG/WebP in the dataset (28 images) | 11 % |
-
-Second measurement on [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0, images from September 2026, `tools/synthid/fetch_research.py`), same prompts for all generators:
+| as delivered | 100 % |
+| downscaled to 50 % or 33 % | 100 % or 100 % |
+| re-encoded as JPEG 90, without or with chroma subsampling (4:4:4 or 4:2:0) | 100 % or 99 % |
+| re-encoded as JPEG 75 with chroma subsampling | 91 % |
+| re-encoded as WebP 80 | 0 % |
+| cropped to 95 % on all sides | 0 % |
 
 | Images | flagged by the Google template |
 |---|---|
-| Gemini 3.1 Flash Image, JPEG 2048 × 2048 as delivered by Gemini (700) | 95 % |
+| Gemini 3.1 Flash Image, all 700 JPEGs as delivered | 699 of 700 |
 | gpt-image-2 (400), FLUX.2 (400), Qwen-Image-2.1 (700) | 0 % |
 
-False positives: 0 of 1,067 real photos (ImageNet, DOCCI) and 0 of 417 images from other generators (DALL·E 3, GPT-Image 1.5 and 2, Sora 2, Seedream 5, FLUX.2, Z-Image, ERNIE-Image, Illustrious). The highest z-score of a real photo was 9.4. Three more images that OpenFake attributes to other generators triggered. One carries a C2PA manifest from Google, the other two have exactly the resolution of Nano Banana Pro outputs (2528 × 1696 and 3392 × 5056); they are probably Gemini images. In a second sample from OpenFake (642 real photos), the Google template triggered on one DOCCI photo (z 15.4).
+False positives (measured like `eval.py --ignore-aspect`): 1 of 4,457 real photos, paintings, charts and YouTube thumbnails (ImageNet, DOCCI, COCO, OpenFake's Reddit photos, Cleveland Museum of Art, WikiArt), a 3302 × 4922 photo from a photography subreddit (z 37), possibly edited with Gemini. Otherwise the highest z-score of a real image was 3.6, the standard deviation 1.0. None of 1,711 images from other generators (GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7, Sora 2, Seedream 5, ERNIE-Image, Illustrious and others) reached more than z 5.7. Three more images that OpenFake attributes to GPT-Image 1.5 triggered; they have exactly the resolution of Nano Banana Pro outputs (2752 × 1536 and 1696 × 2528) and are probably Gemini images.
 
 ### OpenAI
 
@@ -93,22 +91,24 @@ Measured with `tools/synthid/crossval.py`: each template is built from two third
 
 | Output size (test images) | Original (PNG) | downscaled to 50 % / 33 % | JPEG 90, 4:4:4 / 4:2:0 | WebP 80 |
 |---|---|---|---|---|
-| 1254 × 1254 (141) | 94 % | 94 % / 87 % | 93 % / 94 % | 84 % |
-| 1448 × 1086 (73) | 93 % | 88 % / 30 % | 81 % / 78 % | 59 % |
-| 1672 × 941 (41) | 88 % | 85 % / 41 % | 71 % / 63 % | 61 % |
-| 1122 × 1402 (64) | 75 % | 67 % / 11 % | 56 % / 36 % | 25 % |
+| 1254 × 1254 (141) | 100 % | 100 % / 100 % | 100 % / 100 % | 97 % |
+| 1448 × 1086 (73) | 100 % | 100 % / 100 % | 100 % / 100 % | 99 % |
+| 1672 × 941 (41) | 100 % | 100 % / 100 % | 100 % / 100 % | 98 % |
+| 1122 × 1402 (64) | 100 % | 100 % / 100 % | 100 % / 100 % | 95 % |
 
 Cropped to 95 % on all sides: 0 %. The shipped templates are built from all images (424, 219, 123 and 193).
 
-Two probes show that the component depends on the size and not on the account: a template built only from the 420 images in bigdatamark detects three of the four 1254 × 1254 images from the second source (z 8 to 18), but none of the other sizes from the same source (at most z 3.1). And in a third, independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](https://huggingface.co/datasets/Sarim-Hash/liars-dividend-GPT-image-2-photoreal), 80 images at 1024 × 1024 without C2PA), one image reaches z 69 with the 1254 template, probably a downscaled copy. The other 79 have the uncovered size 1024 × 1024 and do not trigger.
+Other output sizes: ChatGPT picks the size from the aspect ratio of the input image, so many images have no template of their own. Of 2,165 GPT-Image 2 PNGs with a C2PA watermark assertion in 67 other sizes (1086 × 1448, 1559 × 1009, 1537 × 1023, 1024 × 1536, 1536 × 1024 and others; from the MLLM dataset [zr-zhang/MLLM-Generated-Image-Detection-Dataset](https://huggingface.co/datasets/zr-zhang/MLLM-Generated-Image-Detection-Dataset), wafflefan/felix-chatgpt-generated-images, mramazan/Synthetic-Character-Dataset-for-FLUX-LORA and winrisef), 99 % trigger.
 
-False positives (measured like `eval.py --ignore-aspect`, so every template on every image): none of 1,933 images without an OpenAI watermark (642 real photos from ImageNet and DOCCI, 1,291 images from Gemini, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and GPT-Image 1.5), not even when every image is additionally cropped to each template's aspect ratio and scaled to its exact size. Likewise none of 456 further OpenAI images from Hugging Face datasets without C2PA evidence, mostly in uncovered sizes. The highest z-score was 6.6, the standard deviation 1.1 (ideal would be 1).
+In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](https://huggingface.co/datasets/Sarim-Hash/liars-dividend-GPT-image-2-photoreal), 80 images at 1024 × 1024 without C2PA), one image reaches z 195 with the 1254 template, probably a downscaled copy. The other 79 have the uncovered size 1024 × 1024 and do not trigger.
+
+False positives (measured like `eval.py --ignore-aspect`, so every template on every image): none of 8,830 images without an OpenAI watermark (the 4,457 real images above, 1,873 images from Gemini, GPT-Image 1.5, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and other generators, and 1,500 real photos and 1,000 FLUX.2, Qwen-Image 2.1 and Nano Banana 2 images from the MLLM dataset). The highest z-score was 4.4, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 110 trigger, all GPT-Image 2 images from one dataset (110 of 120, mostly JPEGs at 900 × 1200); the 300 images of the other three datasets do not. In OpenFake, 14 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
 
 ### Limitations
 
 - This is a reconstruction from public sample images, not Google's decoder. Only images from Gemini 3 Pro Image (Nano Banana Pro), Gemini 3.1 Flash Image and GPT-Image 2 (ChatGPT and API) are tested, other models are unverified.
-- OpenAI images are only detected in the four template sizes and as downscaled copies of them. Fixed API sizes like 1024 × 1024 or 1536 × 1024 and rare sizes are missing because there are no or too few images with a verified watermark. The 1122 × 1402 template detects less reliably, and every template is based on at most two sources. OpenAI images from before May 2026 carry no SynthID.
-- Cropping destroys the signal completely. Lossy re-encoding weakens it, strongly for Gemini images. Images from social networks are therefore often not detected; then the model takes over.
+- OpenAI images in sizes without their own template are found less reliably once they are downscaled and saved as JPEG (102 of 109 JPEGs at 900 × 1200, 14 of 30 OpenFake images at 1024 × 1536 and 1536 × 1024). Images at 1024 × 1024 without C2PA are almost never found, and there are no such images with a verified watermark. Every template is based on at most two sources. OpenAI images from before May 2026 carry no SynthID.
+- Cropping destroys the signal completely, and WebP erases it in Gemini images. Gemini images that are downscaled and then saved as JPEG, as under the model's web conditions (1280 or 800 px, JPEG 80 or 75), are no longer detected, ChatGPT images in the template sizes still are. Images from social networks are therefore often not detected; then the model takes over.
 - Real photos edited with Gemini carry SynthID as well and are flagged, those edited with ChatGPT probably too.
 - The Google template is computed from the Hugging Face dataset [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there), the OpenAI templates from [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0) and [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
 
@@ -119,18 +119,18 @@ Measured with `tools/synthid/crossval.py amazon` on 75 Nova Canvas PNGs whose C2
 | Nova Canvas images (75) | detected |
 |---|---|
 | originals (PNG) | 100 % |
-| downscaled to 50 % or 33 % | 23 % or 0 % |
-| JPEG 90 without or with chroma subsampling (4:4:4 or 4:2:0) | 81 % or 7 % |
+| downscaled to 50 % or 33 % | 45 % or 0 % |
+| JPEG 90 without or with chroma subsampling (4:4:4 or 4:2:0) | 93 % or 11 % |
 | WebP 80 | 0 % |
 | cropped to 95 % on all sides | 0 % |
 
-The shipped template, applied to images from AWS blog posts that are not part of it: 52 of 58 PNGs from the Nova Canvas visual guide (all with seed 0, partly downscaled by the blog), all 13 PNGs from five other posts, none of 9 JPEGs with chroma subsampling.
+The shipped template, applied to images from AWS blog posts that are not part of it: 57 of 58 PNGs from the Nova Canvas visual guide (all with seed 0, partly downscaled by the blog), all 13 PNGs from five other posts plus a virtual try-on result (z 11), none of 9 JPEGs with chroma subsampling.
 
-False positives: none of 7,795 images without the Nova Canvas watermark (real photos from ImageNet, DOCCI, COCO and Reddit, YouTube thumbnails, paintings, charts, and images from Gemini, GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and other generators), nor any of 37 Titan images. The highest z-score was 4.5, the standard deviation 1.05. Without skipping images whose Cr channel hardly varies, a black-and-white GPT-Image 1.5 image reached z 12.9.
+False positives: none of 6,672 images without the Nova Canvas watermark (real photos from ImageNet, DOCCI, COCO and Reddit, YouTube thumbnails, paintings, charts, and images from Gemini, GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and other generators), nor any of 348 images from AWS posts and guides on Titan, among them 37 Titan images. The highest z-score was 4.9, the standard deviation 1.07.
 
 ### Limitations
 
-- The signal sits close to the resolution limit of the original. Downscaling to half the size, JPEG with chroma subsampling, WebP and cropping erase it, so in practice only unmodified PNGs from Nova Canvas are found. Unmodified Nova Canvas and Titan images also carry a C2PA manifest with `trainedAlgorithmicMedia`, which the metadata check reads first.
+- The signal sits close to the resolution limit of the original. Downscaling to a third, JPEG with chroma subsampling, WebP and cropping erase it, downscaling to half the size leaves about half detectable. In practice mostly unmodified PNGs from Nova Canvas are found. Unmodified Nova Canvas and Titan images also carry a C2PA manifest with `trainedAlgorithmicMedia`, which the metadata check reads first.
 - 46 of the 75 template images come from one repository. Output sizes other than 512 × 512, 1024 × 576, 1024 × 768, 1024 × 1024 and 1280 × 720 are untested, Nova 2 Omni is unverified.
 - The template images come from public GitHub repositories, pinned to commits in [`tools/synthid/amazon_sources.json`](../tools/synthid/amazon_sources.json); only images whose C2PA manifest from Amazon Bedrock names Nova Canvas count. Only averaged phases and weights are shipped, no images.
 
@@ -184,7 +184,7 @@ Real images that carry the logo, labeled by eye: 12 of the 33 images in Wikimedi
 | downscaled to 33 %, JPEG 80 | 8 | 18 |
 | cropped to 95 % on all sides | 0 | 0 |
 
-The misses as downloaded: two logos on graffiti and across the edge of a sheet of paper (0.82 and 0.77), one on wet asphalt (0.82), and two Reddit images that were cropped or letterboxed after generation, so the logo is no longer where the layout puts it. The Google SynthID template finds only 3 of these 34 images.
+The misses as downloaded: two logos on graffiti and across the edge of a sheet of paper (0.82 and 0.77), one on wet asphalt (0.82), and two Reddit images that were cropped or letterboxed after generation, so the logo is no longer where the layout puts it. The Google SynthID template finds 8 of these 34 images.
 
 Synthetic test: the logo overlaid with the alpha maps and positions of GeminiWatermarkTool in five layouts on 200 AI images without it (100 each from the OpenFake test split and bigdatamark/synthid-research):
 
