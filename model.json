@@ -4,9 +4,9 @@
       "name": "detectra-openfake",
       "label": "Detectra (OpenFake)",
       "repo": "s-gehring/detectra-openfake",
-      "revision": "750a0531f09b8089d42cffc2f392b80d44b4fab9",
+      "revision": "0000000000000000000000000000000000000000",
       "license": "CC BY-NC 4.0",
-      "dtype": "fp16",
+      "dtype": "q4",
       "output": "sigmoid",
       "input": {
         "shortestEdge": 440,
@@ -16,7 +16,7 @@
         "std": [0.229, 0.224, 0.225]
       },
       "files": {
-        "model.onnx": "af08ae097ce09e2f9b33e7de523cb90f2254ba110d79b561a5e208eb4dd2b219"
+        "model.onnx": "2036c58523bcfa42e836e9b5282d66c4fccdcd045a30928871dfb6577dceb0f5"
       }
     }
   ],

@@ -13,7 +13,7 @@ tags:
 
 # Detectra fine-tuned on OpenFake
 
-AI-generated image detector bundled with the Firefox add-on [AI Watermark](https://github.com/s-gehring/ai-watermark-addon). A ViT-S/16 at 384 px binary classifier, exported to fp16 ONNX for ONNX Runtime Web.
+AI-generated image detector bundled with the Firefox add-on [AI Watermark](https://github.com/s-gehring/ai-watermark-addon). A ViT-S/16 at 384 px binary classifier, exported to ONNX for ONNX Runtime Web with the weights quantized to 4 bits (MatMulNBits, block size 16, asymmetric).
 
 ## Model
 
@@ -26,16 +26,16 @@ AI-generated image detector bundled with the Firefox add-on [AI Watermark](https
 - **Input:** `pixel_values`, float32, 1 × 3 × 384 × 384. Resize the shortest edge to 440 px (bilinear), center-crop 384 px, scale to [0, 1], normalize with ImageNet mean `[0.485, 0.456, 0.406]` and std `[0.229, 0.224, 0.225]`.
 - **Output:** `logits`, float32, 1 × 1. `sigmoid(logit)` is the raw probability that the image is AI-generated.
 
-The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.4962 * logit + 1.132)`) and flags images from 0.93, which marks about 1 % of real photos under web conditions.
+The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.4962 * logit + 1.132)`) scores images between 0.5 and 0.95 again on center crops with a shorter edge of 576 and 768 px, keeps the highest score and flags images from 0.95, which marks about 1 % of real photos under web conditions.
 
 ## Evaluation
 
 Measured on held-out test data (OpenFake test split with generators and photo sources not seen in training, OpenFake Reddit test set, newer generators, COCO, YouTube thumbnails, paintings, charts), downscaled to 1280 px or 800 px and recompressed as JPEG:
 
-- AUC 0.94–0.95
-- 57–62 % of AI images detected at 1 % flagged real photos (Detectra v3 without fine-tuning: 33–34 %)
-- 49–55 % of the newest generators' images detected (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1 Flash Image)
-- at the add-on's threshold: 0 % of paintings from the Cleveland Museum of Art, 5–7 % of WikiArt paintings and 0 % of charts flagged
+- AUC 0.95–0.96
+- 61–66 % of AI images detected at 1 % flagged real photos (Detectra v3 without fine-tuning: 33–34 %), 66–69 % with the add-on's second pass on larger crops
+- 59–60 % of the newest generators' images detected at the add-on's threshold (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1 Flash Image)
+- at the add-on's threshold: 0 % of paintings from the Cleveland Museum of Art, 3–7 % of WikiArt paintings and 0 % of charts flagged
 
 Full results and limitations: [docs/accuracy.md](https://github.com/s-gehring/ai-watermark-addon/blob/main/docs/accuracy.md).
 
