@@ -53,6 +53,17 @@ describe('detectAiMetadata', () => {
     expect(detectAiMetadata(pngWith('caBX', manifest))).toBe('stability-ai');
   });
 
+  it('detects the EXIF signature written by Grok and the EXIF make written by Ideogram', () => {
+    const signature = 'R4e3GBwF6cxj8ZhUQFpJt1MRd67IC/+'.repeat(10);
+    expect(detectAiMetadata(jpegWith(`Exif\x00\x00II*\x00ASCII\x00\x00\x00Signature: ${signature}==\x00`))).toBe('grok');
+    expect(detectAiMetadata(jpegWith('Exif\x00\x00II*\x00\x00\x00\x00\x00Ideogram AI\x002025:11:16 11:28:42\x00'))).toBe('ideogram');
+  });
+
+  it('does not treat short signatures or captions naming Ideogram as generator metadata', () => {
+    expect(detectAiMetadata(jpegWith('Exif\x00\x00II*\x00Signature: John Doe\x00'))).toBeNull();
+    expect(detectAiMetadata(jpegWith('<dc:description>Logo made with Ideogram AI tools</dc:description>'))).toBeNull();
+  });
+
   it('does not treat a mention of Stability AI as its API metadata', () => {
     expect(detectAiMetadata(pngWith('Comment', 'Upscaled with stability.ai, model stability-diffusion'))).toBeNull();
   });

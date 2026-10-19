@@ -20,6 +20,7 @@ Badge "AI · Metadata". A metadata hit is treated as certain. Detected labels:
 
 - IPTC Digital Source Type `trainedAlgorithmicMedia` or `compositeWithTrainedAlgorithmicMedia` in XMP or in C2PA manifests (OpenAI, Google, Adobe Firefly, Midjourney, Amazon Bedrock and others)
 - Stable Diffusion generation parameters (A1111/Forge), ComfyUI workflows, NovelAI, InvokeAI
+- EXIF tags of Grok (`ImageDescription: Signature: <base64>` in original JPEG downloads) and Ideogram (`Make: Ideogram AI`)
 - metadata from the Stability AI API: the EXIF fields `Model: stability-diffusion` and `Software: stability.ai` (SDXL on Amazon Bedrock, v1 API) and the C2PA manifest of Stability's Content Credentials service, which carries no IPTC source type
 - the AIGC label required by the Chinese labeling standard GB 45438-2025 (JSON with `Label`, `ContentProducer`, `ProduceID` and so on, as PNG text chunk `AIGC`, in the XMP namespace `http://www.tc260.org.cn/ns/AIGC/1.0/` or in the EXIF comment; mandatory for providers in China since September 2025, for example Kling)
 
@@ -46,6 +47,10 @@ Measured in Node, the SynthID check takes about 0.25 s for a square 4-megapixel 
 After the SynthID templates, the same step decodes the classic [invisible-watermark](https://pypi.org/project/invisible-watermark) (`dwtDct`) that the Stable Diffusion reference scripts (`StableDiffusionV1`, `SDV2`), SDXL (a fixed 48-bit pattern, written by the pipelines of Stability and diffusers and by the Stability API and Amazon Bedrock) and the FLUX reference code of Black Forest Labs (another fixed 46-bit pattern) write into the pixels. It is a fixed algorithm without a secret key: a Haar transform of the U channel, in each 4 × 4 block the largest coefficient modulo 36 gives one bit, and the bits are voted per payload position. diffusers before April 2024 handed RGB images to the encoder, which expects BGR, so the decoder also tries the U channel with red and blue swapped. A hit needs the decoded bits to match a payload at z ≥ 5 (about 1 false positive in 1.4 million images with random bits; none in 9,090 images without it). Badge "AI · Watermark". Detection rates are in [accuracy.md](accuracy.md#stable-diffusion-sdxl-and-flux-watermark).
 
 This only works on images that are still byte-identical to the generator output: the scheme does not survive JPEG compression (not even at quality 90), scaling or cropping, and many front ends (A1111, ComfyUI, Forge) switch it off. In practice it only matches PNGs straight from a local pipeline or from the SDXL API.
+
+### ByteDance tile pattern
+
+Doubao and Jimeng (ByteDance) add a faint pattern to the Cb channel that repeats every 112 × 96 pixels from the top left corner. The add-on folds the Cb channel of images with at least 24 whole tiles onto one tile, removes the local mean and correlates the result with the pattern averaged over flat black and gray calibration images from [pagedMark](https://github.com/doofzoff/pagedMark) ([`src/background/bytedance-tile.json`](../src/background/bytedance-tile.json)). From a correlation of 0.5 on, the badge reads "AI · Watermark" and the details panel names ByteDance. Watermarked images score 0.86 to 0.89, images without the pattern at most 0.16. The check survives JPEG compression down to about quality 80 at the original size, but not scaling or cropping, and the Seedream API and images downloaded without the watermark do not carry it. Detection rates are in [accuracy.md](accuracy.md#bytedance-tile-pattern).
 
 ### Visible Gemini logo
 

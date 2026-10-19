@@ -17,6 +17,8 @@ const PATTERNS: ReadonlyArray<[MetadataReason, RegExp]> = [
   ['novelai', /Software\x00NovelAI/],
   ['invokeai', /(?:invokeai_metadata|invokeai_graph|sd-metadata)\x00/],
   ['stability-ai', /stability-diffusion\x00stability\.ai\x00|Stability_ContentCredentials_Service/],
+  ['grok', /Signature: [A-Za-z0-9+/]{200,}={0,2}\x00/],
+  ['ideogram', /Ideogram AI\x00/],
   ['aigc-label', AIGC_LABEL],
 ];
 

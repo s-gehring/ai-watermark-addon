@@ -7,6 +7,8 @@ export type MetadataReason =
   | 'novelai'
   | 'invokeai'
   | 'stability-ai'
+  | 'grok'
+  | 'ideogram'
   | 'aigc-label';
 
 export type SynthIdProvider = 'google' | 'openai';
@@ -16,6 +18,7 @@ export type WatermarkScheme =
   | 'sdxl'
   | 'flux'
   | 'nova-canvas'
+  | 'bytedance'
   | 'gemini-visible'
   | 'kling-visible'
   | 'grok-visible'

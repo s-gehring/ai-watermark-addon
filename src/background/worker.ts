@@ -1,6 +1,7 @@
 import synthIdConfig from '../../synthid.json';
 import type { Verdict } from '../shared/messages';
 import { decodeImage, scoreImage } from './classifier';
+import { detectBytedanceWatermark } from './bytedance-watermark';
 import { detectInvisibleWatermark } from './invisible-watermark';
 import { detectAiMetadata } from './metadata';
 import { couldBeSourceOf, isScorable, type PixelImage } from './preprocess';
@@ -89,7 +90,9 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
   const provider = checks.checkWatermark ? await findSynthId(target) : null;
   if (provider === 'amazon') return { ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata };
   if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
-  const scheme = checks.checkWatermark ? (detectInvisibleWatermark(target) ?? detectVisibleWatermark(target)) : null;
+  const scheme = checks.checkWatermark
+    ? (detectInvisibleWatermark(target) ?? detectBytedanceWatermark(target) ?? detectVisibleWatermark(target))
+    : null;
   if (scheme) return { ok: true, score: 1, source: 'watermark', scheme, metadata };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   try {
