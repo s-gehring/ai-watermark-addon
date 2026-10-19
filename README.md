@@ -29,6 +29,7 @@ There is no public SynthID detector. The add-on reconstructs a fixed part of the
 - **Visible Gemini logo:** finds 29 of 34 real images that still carry the logo (SynthID finds 3 of them), also after downscaling and recompression, and none of about 8,900 images without it. Logos on bright or busy backgrounds and cropped images are missed.
 - **Visible Kling logo:** finds 98 % of 1,005 Kling images from 2024 and all 68 current free-tier images, also after downscaling and recompression, and none of about 10,500 images without it, among them 1,617 Kling images without the logo. Logos on white backgrounds, cropped images and most logos with a model version are missed.
 - **Visible Doubao, Jimeng, Qwen and Grok marks:** find 44 of 45 real images with a Chinese AI label and 228 of 254 with a Grok mark, most of them also after downscaling and recompression, and none of about 10,400 images without them. The Chinese test sets are small (4 to 21 images per label), and marks on bright backgrounds and cropped images are missed.
+- **ByteDance tile pattern:** finds all 8 Doubao and Jimeng images with the pattern at the original size, also after JPEG 80, and none of about 9,100 images without it. Scaled or cropped copies are missed.
 - **Metadata:** reliable when present, but many platforms strip metadata on upload.
 
 The badge is a hint, not proof. Full numbers and limitations are in [docs/accuracy.md](docs/accuracy.md).

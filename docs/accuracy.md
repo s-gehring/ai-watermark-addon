@@ -153,6 +153,22 @@ False positives: none of 9,090 images without this watermark (real photos from I
 
 - Only images that are still byte-identical to the generator output: JPEG compression, scaling, cropping and grids erase the watermark. Many front ends (A1111, ComfyUI, Forge) and the FLUX API do not write it.
 
+## ByteDance tile pattern
+
+Measured on 8 images with the pattern at the original size: 7 Jimeng PNGs (936 × 1664) and one Doubao PNG (2048 × 2048) from [pagedMark](https://github.com/doofzoff/pagedMark).
+
+| condition | detected | correlation |
+|---|---|---|
+| as delivered | 8 of 8 | 0.86–0.89 |
+| JPEG 90 or 80 | 8 of 8 | 0.70–0.74 |
+| JPEG 70 | 4 of 8 | 0.41–0.51 |
+
+False positives: none of 9,093 images large enough for the check (real photos, Kling, Amazon Nova, OpenFake and Reddit AI images and others); the highest correlation was 0.16. Seedream 3, 4.5 and 5.0 images from APIs and datasets and Doubao images downloaded without the visible label carry no pattern (0 of 67).
+
+### Limitations
+
+- Only images at the original size and position: scaling and cropping erase the pattern. Images need at least 24 whole tiles of 112 × 96 pixels.
+
 ## Visible Gemini logo
 
 Measured with `tools/visible/eval.py`; a hit needs a correlation of at least 0.88.
