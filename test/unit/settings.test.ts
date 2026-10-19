@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import model from '../../model.json';
 import { DEFAULT_SETTINGS, fromStorage, isActiveOn, normalizeSettings, toStorage } from '../../src/shared/settings';
 
 describe('normalizeSettings', () => {
@@ -29,6 +30,11 @@ describe('fromStorage', () => {
     const legacy = { ...DEFAULT_SETTINGS, threshold: 0.5, minSize: 300 };
     expect(fromStorage(legacy)).toMatchObject({ threshold: DEFAULT_SETTINGS.threshold, minSize: 300 });
     expect(fromStorage({ ...toStorage(legacy), calibration: 'other' }).threshold).toBe(DEFAULT_SETTINGS.threshold);
+  });
+
+  it('resets a threshold saved before the cascade was added', () => {
+    const saved = { ...DEFAULT_SETTINGS, threshold: 0.5, calibration: JSON.stringify(model.calibration) };
+    expect(fromStorage(saved).threshold).toBe(DEFAULT_SETTINGS.threshold);
   });
 });
 

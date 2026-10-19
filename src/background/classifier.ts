@@ -1,6 +1,6 @@
 import * as ort from 'onnxruntime-web/wasm';
 import config from '../../model.json';
-import { inputShape, toModelInput, type InputSpec, type PixelImage } from './preprocess';
+import { extraViews, inputShape, toModelInput, type InputSpec, type PixelImage } from './preprocess';
 import { aiLogit, calibratedProbability, modelProbabilities, type OutputSpec } from './score';
 
 type ModelEntry = (typeof config.models)[number];
@@ -51,16 +51,26 @@ export async function decodeImage(blob: Blob): Promise<PixelImage> {
   }
 }
 
+async function modelLogit(classifier: Classifier, model: ModelEntry, input: Float32Array): Promise<number> {
+  const [width, height] = inputShape(model.input as InputSpec);
+  const { session, id2label } = classifier;
+  const output = await session.run({ [session.inputNames[0]]: new ort.Tensor('float32', input, [1, 3, height, width]) });
+  return aiLogit(output[session.outputNames[0]].data as Float32Array, model.output as OutputSpec, id2label);
+}
+
 export async function scoreImage(image: PixelImage): Promise<{ score: number; models: number[] }> {
   const classifiers = await load();
   const logits: number[] = [];
   for (const [i, model] of config.models.entries()) {
-    const spec = model.input as InputSpec;
-    const [width, height] = inputShape(spec);
-    const { session, id2label } = classifiers[i];
-    const input = new ort.Tensor('float32', toModelInput(image, spec), [1, 3, height, width]);
-    const output = await session.run({ [session.inputNames[0]]: input });
-    logits.push(aiLogit(output[session.outputNames[0]].data as Float32Array, model.output as OutputSpec, id2label));
+    logits.push(await modelLogit(classifiers[i], model, toModelInput(image, model.input as InputSpec)));
+  }
+  const { cascade } = config;
+  const score = calibratedProbability(logits, config.calibration);
+  if (config.models.length === 1 && score >= cascade.band[0] && score < cascade.band[1]) {
+    const [model] = config.models;
+    for (const input of extraViews(image, model.input as InputSpec, cascade.shortestEdges)) {
+      logits[0] = Math.max(logits[0], await modelLogit(classifiers[0], model, input));
+    }
   }
   return { score: calibratedProbability(logits, config.calibration), models: modelProbabilities(logits, config.calibration) };
 }

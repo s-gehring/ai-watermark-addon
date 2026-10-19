@@ -95,9 +95,12 @@ export function inputShape(spec: InputSpec): [width: number, height: number] {
   return 'size' in spec ? spec.size : [spec.crop, spec.crop];
 }
 
-export function toModelInput(image: PixelImage, spec: InputSpec): Float32Array {
+export function toModelInput(
+  image: PixelImage,
+  spec: InputSpec,
+  [outW, outH] = 'size' in spec ? spec.size : resizedSize(image.width, image.height, spec.shortestEdge),
+): Float32Array {
   const { width, height, channels, data } = image;
-  const [outW, outH] = 'size' in spec ? spec.size : resizedSize(width, height, spec.shortestEdge);
   const [cropW, cropH] = inputShape(spec);
   const left = Math.floor((outW - cropW) / 2);
   const top = Math.floor((outH - cropH) / 2);
@@ -159,4 +162,20 @@ export function toModelInput(image: PixelImage, spec: InputSpec): Float32Array {
     }
   }
   return out;
+}
+
+export function extraViews(image: PixelImage, spec: InputSpec, shortestEdges: number[]): Float32Array[] {
+  if ('size' in spec) return [];
+  const { width, height } = image;
+  const short = Math.min(width, height);
+  const seen = new Set([Math.min(...resizedSize(width, height, spec.shortestEdge))]);
+  const views: Float32Array[] = [];
+  for (const edge of shortestEdges) {
+    const target = Math.max(spec.crop, Math.min(short, edge));
+    if (seen.has(target)) continue;
+    seen.add(target);
+    const long = Math.trunc((Math.max(width, height) * target) / short);
+    views.push(toModelInput(image, spec, width <= height ? [target, long] : [long, target]));
+  }
+  return views;
 }
