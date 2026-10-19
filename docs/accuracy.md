@@ -227,9 +227,44 @@ The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the lo
 
 - The logo has to be where Kling put it, in the proportions of the original output. Cropping, added borders and mirroring move it away. Logos narrower than 24 px are not searched, which for the 2024 layout means images whose long side is below about 270 px.
 - On white or very bright corners the white logo leaves almost no trace. Images from paid plans carry no logo.
-- Other variants are not covered: the logo of the Chinese site ("可灵AI") and logos with a model version such as "KLING AI 1.6", "可灵AI 2.1" or "KlingAI 3.0 Omni". The GitHub sets contain examples of them, but too few per variant to measure positions.
+- Logos with a model version such as "KLING AI 1.6", "可灵AI 2.1" or "KlingAI 3.0 Omni" are not covered; the GitHub sets contain too few examples per variant to measure positions. The label "可灵AI 3.0" of the Chinese site is checked with the [further visible marks](#further-visible-marks).
 - Every image with this logo in this place is flagged, also a copy that a model painted into an image.
 - The current layout is measured on 68 images from two GitHub repositories, most of them from a single project.
+
+## Further visible marks
+
+Measured with `tools/visible/eval.py --logo marks`; a hit needs a correlation of at least 0.6 for the Chinese labels, 0.65 for the current Grok marks and 0.8 for the 2024 Grok mark.
+
+Real images with the mark, labeled by eye:
+
+- **Doubao (13), Jimeng (7), Qwen (21), Kling "可灵AI 3.0" (4):** sample outputs in [NanmiCoder/OpenNoMark](https://github.com/NanmiCoder/OpenNoMark), in two output sizes each for Doubao and Qwen.
+- **Grok "GROK xAI" (247):** Aurora outputs from January 2025 in [Rapidata/xAI_Aurora_t2i_human_preferences](https://huggingface.co/datasets/Rapidata/xAI_Aurora_t2i_human_preferences), 1024 × 768.
+- **Grok "⊘ Grok" (5) and "GROK" with a slash (2):** public domain images on Wikimedia Commons and viral images from [WildAIGC-Bench](https://github.com/yuzj1997yzj/WildAIGC-Bench).
+
+The Doubao and Jimeng templates come from alpha maps and are independent of these images. The others are averaged from them; left out of the average, each image still scores 0.97 or more for Kling, 0.83 or more for "⊘ Grok", 0.88 for "GROK" and a median of 0.96 for Qwen (minimum 0.57).
+
+| Real images with the mark | Doubao (13) | Jimeng (7) | Qwen (21) | Kling (4) | GROK xAI (247) | ⊘ Grok (5) | GROK (2) |
+|---|---|---|---|---|---|---|---|
+| as downloaded | 12 | 7 | 21 | 4 | 221 (89.5 %) | 5 | 2 |
+| JPEG 85 | 12 | 7 | 21 | 4 | 216 (87.4 %) | 5 | 2 |
+| WebP 80 | 12 | 7 | 21 | 4 | 214 (86.6 %) | 5 | 2 |
+| downscaled to 800 px width, JPEG 75 | 12 | 7 | 21 | 4 | 209 (84.6 %) | 5 | 2 |
+| downscaled to 50 %, JPEG 80 | 12 | 6 | 21 | 4 | 194 (78.5 %) | 5 | 2 |
+| downscaled to 33 %, JPEG 80 | 12 | 6 | 20 | 4 | 169 (68.4 %) | 4 | 2 |
+| cropped to 95 % on all sides | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Missed marks sit on bright backgrounds, where the white text leaves little contrast; this hits Grok's small mark on Aurora's often bright scenes most. Of the 406 WildAIGC images, the check finds 5 Grok images (3 of them in the templates) and nothing else; it misses a screenshot of a Grok image and a very faint mark. Images with one provider's mark score at most 0.44 for the templates of the other providers, and the 1,091 Kling images of the Kling logo test at most 0.56.
+
+False positives: none of 10,432 images without these marks (the images of the Kling logo test without duplicates and without 8 Aurora images, all of which carry the Grok mark and are found), as downloaded and after downscaling to 50 % with JPEG 80. The highest correlations are 0.52 for the Chinese labels, 0.53 for the current Grok marks and 0.70 for the 2024 Grok mark.
+
+All seven marks together take about 9 times as long as the Kling check, mostly for the Grok scan.
+
+### Limitations
+
+- The test sets are small: 4 to 21 images per Chinese label, most from a single source, and 7 images of the two older Grok marks.
+- The Chinese labels have to be in the size and place that GB 45438-2025 makes the providers use; cropping and added borders move them away. Other providers (Yuanbao, Baidu and others) and Kling's labels with other versions are not covered.
+- Grok's marks are searched only between 4 % and 10 % of the long side, which covers originals with a long side of about 660 to 1,650 px (890 to 2,200 px for the 2024 mark). Marks narrower than 20 px are not searched.
+- Every image with such a mark in this place is flagged, also a copy that a model painted into an image.
 
 ## Tested and not included
 
@@ -241,5 +276,5 @@ The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the lo
 - **fev v13** ([angelhd25/ull-ai-image-detector](https://huggingface.co/angelhd25/ull-ai-image-detector), MIT), like Detectra a fine-tune of the Community Forensics ViT-S for a browser add-on: alone it detects 37–39 % of AI images under web conditions, but flags 7 % of paintings. In an ensemble with Detectra v3 it added no hits at no more than 5 % flagged paintings, but costs 88 MB and 0.7 s per image. It was also partly trained on the OpenFake validation split (CC BY-NC 4.0), whose generators and photo sources do not appear in the test split used here.
 - **Other detectors from Hugging Face** (capcheck/ai-image-detection, ai-image-detect-distilled, SMOGY and others): many are trained on small datasets like CIFAKE and separate AI images under web conditions hardly or not at all better than chance (AUC 0.46 to 0.62). Larger models like SwinV2-Large detectors or SigLIP-DINOv2 ensembles would be too big for the add-on at 200 MB to 2 GB.
 - **Amazon Titan Image Generator watermark:** Titan images (G1 and G1 v2, 35 images with C2PA from 12 GitHub repositories and 37 from an AWS blog post) share a phase pattern only when they were generated with the same seed (0 and 42 are common defaults). Images with random seeds from other repositories show none (z ≈ 0), so no fixed template is possible. Unmodified Titan images are recognized by their C2PA manifest.
-- **Other visible logos:** [remove-ai-watermarks](https://github.com/wiltodelta/remove-ai-watermarks) (Apache 2.0) has alpha maps for the visible marks of Doubao, Jimeng, Qwen, Samsung Galaxy AI and others, captured over flat backgrounds (Kling's logo is checked, see [above](#visible-kling-logo)). Most of them are text labels such as "豆包AI生成" whose size and position depend on the output, and since One UI 6.1.1 Samsung's star comes with localized text ("AI-generated content", in Italian "Contenuti generati…"). None of the local test sets contains real examples, so positions and false positives could not be checked without collecting new images. A Grok and a Meta image from that project's captures show no visible mark.
+- **Other visible marks:** Meta AI has shown no visible mark since Muse Image (July 2026), and there are no public examples of its older "Imagined with AI" label. Samsung Galaxy AI marks come with localized text, Hailuo (MiniMax) marks only videos, and Grok's paid plans and API add no mark. For Samsung and the older Meta label no real examples were found to measure positions and false positives.
 - **Stability AI on Amazon Bedrock:** the newer models (SD3 Large, SD3.5 Large, Stable Image Ultra) write no `invisible-watermark` and show no fixed phase pattern in 434 PNGs from 61 GitHub repositories and 23 PNGs from AWS blog posts. Only the SDXL outputs among them carry the SDXL watermark and the EXIF fields of the Stability API.

@@ -10,8 +10,9 @@ from PIL import Image, ImageOps
 
 import gemini_logo
 import kling_logo
+import marks
 
-LOGOS = {"gemini": gemini_logo, "kling": kling_logo}
+LOGOS = {"gemini": gemini_logo, "kling": kling_logo, "marks": marks}
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 

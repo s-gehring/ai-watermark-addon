@@ -390,9 +390,20 @@ const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   'nova-canvas': 'Amazon Nova Canvas',
   'gemini-visible': 'Gemini',
   'kling-visible': 'Kling',
+  'grok-visible': 'Grok',
+  'doubao-visible': 'Doubao',
+  'jimeng-visible': 'Jimeng',
+  'qwen-visible': 'Qwen',
 };
 
-const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set(['gemini-visible', 'kling-visible']);
+const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set([
+  'gemini-visible',
+  'kling-visible',
+  'grok-visible',
+  'doubao-visible',
+  'jimeng-visible',
+  'qwen-visible',
+]);
 
 function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
   return browser.i18n.getMessage(`reason_${verdict.reason.replace('-', '_')}`);
