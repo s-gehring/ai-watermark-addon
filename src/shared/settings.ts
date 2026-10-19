@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   disabledHosts: [],
 };
 
-const CALIBRATION = JSON.stringify(model.calibration);
+const CALIBRATION = JSON.stringify({ ...model.calibration, cascade: model.cascade });
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 

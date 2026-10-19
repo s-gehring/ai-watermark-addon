@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inputShape, isScorable, resizedSize, toModelInput } from '../../src/background/preprocess';
+import { extraViews, inputShape, isScorable, resizedSize, toModelInput, type InputSpec } from '../../src/background/preprocess';
 import cases from './fixtures/pil-bicubic.json';
 import bilinearCases from './fixtures/pil-bilinear.json';
 
@@ -37,6 +37,42 @@ describe('toModelInput', () => {
       { shortestEdge: 4, crop: 2, mean: [0.5, 0.5, 0.5], std: [0.25, 0.5, 1] },
     );
     expect(Array.from(out)).toEqual([2, 2, 2, 2, 1, 1, 1, 1, 0.5, 0.5, 0.5, 0.5]);
+  });
+});
+
+describe('extraViews', () => {
+  const spec: InputSpec = { shortestEdge: 440, crop: 384, resample: 'bilinear', mean: [0, 0, 0], std: [1, 1, 1] };
+  const image = (width: number, height: number) => ({
+    width,
+    height,
+    channels: 3 as const,
+    data: Uint8Array.from({ length: width * height * 3 }, (_, i) => (i * 7) % 256),
+  });
+
+  it('adds one center crop per distinct shorter edge, capped at the native size', () => {
+    expect(extraViews(image(1280, 853), spec, [576, 768])).toHaveLength(2);
+    expect(extraViews(image(800, 533), spec, [576, 768])).toHaveLength(1);
+    expect(extraViews(image(440, 600), spec, [576, 768])).toHaveLength(0);
+  });
+
+  it('resizes larger images to each shorter edge before the center crop', () => {
+    const img = image(1280, 853);
+    const views = extraViews(img, spec, [576, 768]);
+    expect(views[0]).toEqual(toModelInput(img, { ...spec, shortestEdge: 576 }));
+    expect(views[1]).toEqual(toModelInput(img, { ...spec, shortestEdge: 768 }));
+  });
+
+  it('crops natively without resampling when the image is smaller than the edge', () => {
+    const img = image(500, 400);
+    const [view] = extraViews(img, spec, [576]);
+    const plane = 384 * 384;
+    expect(view).toHaveLength(3 * plane);
+    expect(view[0]).toBeCloseTo(img.data[(8 * 500 + 58) * 3] / 255, 6);
+  });
+
+  it('upscales images below the crop size to exactly the crop size', () => {
+    const [view] = extraViews(image(800, 365), spec, [576]);
+    expect(view.every(Number.isFinite)).toBe(true);
   });
 });
 

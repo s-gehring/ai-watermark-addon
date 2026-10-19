@@ -10,7 +10,7 @@ import {
   RawImage,
   env,
 } from '@huggingface/transformers';
-import { inputShape, toModelInput } from '../../src/background/preprocess.ts';
+import { extraViews, inputShape, toModelInput } from '../../src/background/preprocess.ts';
 import { aiLogit, calibratedProbability } from '../../src/background/score.ts';
 
 const root = new URL('../../', import.meta.url).pathname;
@@ -124,12 +124,17 @@ async function sessionScorer(path, m, id2label) {
     extra: { session: { intra_op: { allow_spinning: '0' } } },
   });
   const [width, height] = inputShape(m.input);
+  const run = async (data) => {
+    const output = await session.run({ [session.inputNames[0]]: new ort.Tensor('float32', data, [1, 3, height, width]) });
+    return aiLogit(output[session.outputNames[0]].data, m.output, id2label);
+  };
   return {
     model: { dispose: () => session.release() },
-    async logit(image) {
-      const input = new ort.Tensor('float32', toModelInput(image, m.input), [1, 3, height, width]);
-      const output = await session.run({ [session.inputNames[0]]: input });
-      return aiLogit(output[session.outputNames[0]].data, m.output, id2label);
+    logit: (image) => run(toModelInput(image, m.input)),
+    async extraLogit(image, shortestEdges) {
+      let best = null;
+      for (const view of extraViews(image, m.input, shortestEdges)) best = Math.max(best ?? -Infinity, await run(view));
+      return best;
     },
   };
 }
@@ -202,9 +207,35 @@ async function scoreMember(m, samples) {
   return { cached, ms: (performance.now() - t0) / missing.length };
 }
 
+async function cascadeMember(m, samples, base, { calibration, cascade }) {
+  const file = join(SCORES, cacheName(m).replace(/\.json$/, `-views-${cascade.shortestEdges.join('-')}.json`));
+  const cached = JSON.parse(await readFile(file, 'utf8').catch(() => '{}'));
+  const inBand = (z) => {
+    const p = calibratedProbability([z], calibration);
+    return p >= cascade.band[0] && p < cascade.band[1];
+  };
+  const missing = samples.flatMap((s) =>
+    Object.keys(CONDITIONS)
+      .filter((k) => base[`${s.key}|${k}`] != null && inBand(base[`${s.key}|${k}`]) && cached[`${s.key}|${k}`] === undefined)
+      .map((k) => [s, k]),
+  );
+  if (missing.length) {
+    const scorer = await localScorer(m);
+    for (const [s, k] of missing) cached[`${s.key}|${k}`] = await scorer.extraLogit(await loadPixels(s.path, CONDITIONS[k]), cascade.shortestEdges);
+    await writeFile(file, JSON.stringify(cached));
+    await scorer.model.dispose();
+  }
+  return Object.fromEntries(
+    Object.entries(base).map(([key, z]) => [key, z != null && inBand(z) && cached[key] != null ? Math.max(z, cached[key]) : z]),
+  );
+}
+
 async function scoreAll(c, samples) {
   const results = [];
   for (const m of c.members) results.push(await scoreMember(m, samples));
+  if (c.config?.cascade && c.members.length === 1) {
+    results[0] = { ...results[0], cached: await cascadeMember(c.members[0], samples, results[0].cached, c.config) };
+  }
   const scored = [];
   for (const s of samples) {
     for (const condition of Object.keys(CONDITIONS)) {
