@@ -41,7 +41,7 @@ The release workflow tests and lints the build, uploads it together with the sou
 
 Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
-The package is about 50 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
+The package is about 27 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
 
 ## Evaluate or swap the model
 
@@ -62,7 +62,7 @@ npm run eval -- members --members=detectra-openfake,angelhd25/ull-ai-image-detec
 Needs a CUDA GPU with 12 GB (measured on an RTX 4070 Ti) and about 130 GB of disk space.
 
 ```bash
-.venv/bin/pip install torch timm safetensors pyarrow pillow numpy huggingface_hub onnx onnxruntime onnxconverter-common
+.venv/bin/pip install torch timm safetensors pyarrow pillow numpy huggingface_hub onnx onnxruntime
 .venv/bin/python tools/train/fetch_data.py   # Detectra weights, 16 OpenFake files, single rows from 319 more and negatives to tools/train/.cache/
 .venv/bin/python tools/train/train.py --name full   # 3 epochs, about 1 h
 .venv/bin/python tools/train/export_onnx.py tools/train/.cache/runs/full/epoch3.safetensors   # -> vendor/models/detectra-openfake/model.onnx

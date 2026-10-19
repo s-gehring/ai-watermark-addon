@@ -89,7 +89,7 @@ All templates are 48 cells wide. Doubao and Jimeng come from the alpha maps of [
 
 ## 3. Model
 
-Badge "AI 99 %". A classifier run with ONNX Runtime Web (WASM) in the worker: [Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake) (44 MB, fp16).
+Badge "AI 99 %". A classifier run with ONNX Runtime Web (WASM) in the worker: [Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake) (19 MB, weights quantized to 4 bits).
 
 The starting point is [Detectra v3](https://huggingface.co/TensorFold/detectra-v1) (MIT), a fine-tune of the Community Forensics ViT-S on newer generators (DALL·E 3, Midjourney, FLUX, SD 3.5, Recraft, HiDream), on images from social networks ([WildRF](https://github.com/barcavia/RealTime-DeepfakeDetection-in-the-RealWorld)), and with real paintings, anime drawings, memes and screenshots as negatives.
 
@@ -97,4 +97,4 @@ With [`tools/train/`](../tools/train/) it is trained for three more epochs on 15
 
 Preprocessing: bilinear resize to 440 px, center crop to 384 px. [`src/background/preprocess.ts`](../src/background/preprocess.ts) reimplements it and matches Pillow bit for bit. Images that score between 50 % and the default threshold are scored again on center crops with a shorter edge of 576 and 768 px (at most the image's own size), and the highest score counts. At the same false positive rate this detects 3 percentage points more AI images of the measurement under web conditions (6 more from the newest generators, 1 to 2 more on the further test images in [accuracy.md](accuracy.md)), and costs about 14 % more model time on photos. The raw output is calibrated with Platt scaling ([`model.json`](../model.json)); the raw value would be unsuitable as a percentage because it is often below 0.1 % for real photos.
 
-Under web conditions, at the same false positive rate on photos, the model finds more than twice as many AI images as Community Forensics (63–67 % instead of 23 %). It flags no paintings from the Cleveland Museum of Art and 4 to 9 % of WikiArt paintings (Community Forensics: 8 to 15 % and 11 %). Details are in [accuracy.md](accuracy.md).
+Under web conditions, at the same false positive rate on photos, the model finds more than twice as many AI images as Community Forensics (66–69 % instead of 23 %). It flags no paintings from the Cleveland Museum of Art and 3 to 7 % of WikiArt paintings (Community Forensics: 8 to 15 % and 11 %). Details are in [accuracy.md](accuracy.md).
