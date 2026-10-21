@@ -1,4 +1,4 @@
-"""Exports a fine-tuned checkpoint as 4-bit ONNX (MatMulNBits, block 16, asymmetric) with fp32 input and output, as the addon loads it."""
+"""Exports a fine-tuned checkpoint as 8-bit ONNX (MatMulNBits, block 16, asymmetric) with fp32 input and output, as the addon loads it."""
 import argparse
 import hashlib
 import os
@@ -31,7 +31,7 @@ def main():
         fp32 = Path(tmp) / "model.fp32.onnx"
         torch.onnx.export(model, x, fp32, input_names=["pixel_values"], output_names=["logits"], opset_version=17,
                           dynamo=False, dynamic_axes={"pixel_values": {0: "batch"}, "logits": {0: "batch"}})
-        quantizer = MatMulNBitsQuantizer(onnx.load(fp32), block_size=16, is_symmetric=False)
+        quantizer = MatMulNBitsQuantizer(onnx.load(fp32), bits=8, block_size=16, is_symmetric=False)
         quantizer.process()
         quantizer.model.save_model_to_file(str(args.target), use_external_data_format=False)
 
