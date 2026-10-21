@@ -34,6 +34,9 @@ Fine-tuning data (not shipped):
 - [The Metropolitan Museum of Art Open Access](https://huggingface.co/datasets/metmuseum/openaccess): public domain paintings, drawings and prints, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Changes: images larger than 2048 px were downscaled.
 - [COCO](https://huggingface.co/datasets/detection-datasets/coco) train images: Flickr images under their individual licenses
 - [ChartQA](https://huggingface.co/datasets/HuggingFaceM4/ChartQA) train split, GPL-3.0
+- [LAION-Mobile](https://huggingface.co/datasets/laionmobile/laion-mobile): metadata [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the 11,497 photos used are web images from re-LAION-5B URLs without individual licenses
+- [Unsplash Lite](https://unsplash.com/data): 7,966 photos under the [Unsplash License](https://unsplash.com/license)
+- 10,348 images generated locally with [FLUX.2 klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B), [FLUX.2 klein base 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B) and [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image) (Apache 2.0) and with [Qwen-Image 2.1 Turbo](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo) and [Qwen-Image 2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) (Qwen Research License, non-commercial). Improved using Qwen.
 
 ## SynthID templates
 

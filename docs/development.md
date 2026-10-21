@@ -41,7 +41,7 @@ The release workflow tests and lints the build, uploads it together with the sou
 
 Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
-The package is about 27 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
+The package is about 38 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
 
 ## Evaluate or swap the model
 
@@ -68,7 +68,7 @@ Needs a CUDA GPU with 12 GB (measured on an RTX 4070 Ti) and about 130 GB of dis
 .venv/bin/python tools/train/export_onnx.py tools/train/.cache/runs/full/epoch3.safetensors   # -> vendor/models/detectra-openfake/model.onnx
 ```
 
-The datasets are pinned to fixed revisions. The rows taken from the other OpenFake files are listed in [`openfake_rows.json`](../tools/train/openfake_rows.json); `fetch_data.py` reads only the pages of the image column that hold them (about 16 GB). The last of the 16 OpenFake files is held out; `train.py` prints AUC and the detection rate at 1 % false positives on it after every epoch.
+The datasets are pinned to fixed revisions. The rows taken from the other OpenFake files are listed in [`openfake_rows.json`](../tools/train/openfake_rows.json); `fetch_data.py` reads only the pages of the image column that hold them (about 16 GB). Self-generated images, modern photos and mined hard negatives are not downloaded; `train.py` adds Parquet files from `selfgen/`, `modern-photos/` and `hard-negatives/` in the data folder when they exist. The last of the 16 OpenFake files is held out; `train.py` prints AUC and the detection rate at 1 % false positives on it after every epoch.
 
 Training is not bit-for-bit reproducible. After a new run, put the SHA-256 printed by `export_onnx.py` into `model.json`, upload the model together with [`tools/train/MODEL_CARD.md`](../tools/train/MODEL_CARD.md) as `README.md` to the Hugging Face repository, update `revision` in `model.json`, and run `npm run eval -- bundled --calibrate` for the new calibration.
 
