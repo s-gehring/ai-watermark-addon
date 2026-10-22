@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const PENDING = 3;
+const DISABLED = 4;
 
 const root = new URL('..', import.meta.url).pathname;
 const [version, dest] = process.argv.slice(2);
@@ -35,7 +36,7 @@ const url = `https://addons.mozilla.org/api/v5/addons/addon/${encodeURIComponent
 const { file } = await (await get(url)).json();
 console.log(`${version}: ${file?.status ?? 'no file yet'}`);
 
-if (file?.status === 'disabled') process.exit(1);
+if (file?.status === 'disabled') process.exit(DISABLED);
 if (file?.status !== 'public') process.exit(PENDING);
 
 const buf = Buffer.from(await (await get(file.url)).arrayBuffer());

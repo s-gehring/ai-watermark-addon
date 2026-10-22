@@ -1,0 +1,6 @@
+- Recognizes the visible marks of Gemini, Kling, Doubao, Jimeng, Qwen and Grok.
+- Reads the EXIF tags of Grok and Ideogram and finds the faint tile pattern of Doubao and Jimeng.
+- Finds SynthID more reliably after JPEG and WebP compression and in all ChatGPT output sizes.
+- Checks the largest version of an image the page offers for metadata and watermarks.
+- Scores borderline images again at higher resolution.
+- New classifier, trained with images from the newest generators and self-generated images, shipped with 8-bit weights (12 MB smaller download). The default threshold is 0.95; a threshold you set yourself is reset to it.
