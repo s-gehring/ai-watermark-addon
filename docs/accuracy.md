@@ -8,24 +8,24 @@ Measured with `npm run eval` on 4,906 images. One half is used for calibration, 
 - **real photos:** 943 from OpenFake (ImageNet, DOCCI), 375 from photography subreddits (OpenFake Reddit test set), 1,000 from [COCO](https://huggingface.co/datasets/detection-datasets/coco) and 600 YouTube video thumbnails from the [AudioSet](https://research.google.com/audioset/) eval set (uploaded until early 2017, 300 with and 300 without music), cropped to 16:9 the way YouTube shows them in lists
 - **graphics and art:** 300 charts from [ChartQA](https://huggingface.co/datasets/HuggingFaceM4/ChartQA), 300 paintings from [WikiArt](https://huggingface.co/datasets/huggan/wikiart) and 300 paintings from the [Cleveland Museum of Art Open Access](https://openaccess-api.clevelandart.org/) collection (CC0)
 
-Every image is scored three times: as the original file and the way images typically arrive on web pages, downscaled to at most 1280 px or 800 px and saved as JPEG with quality 80 or 75. The calibration is fitted on one half, and the default threshold of 92 % flags at most 1 % of that half's real photos under web conditions.
+Every image is scored three times: as the original file and the way images typically arrive on web pages, downscaled to at most 1280 px or 800 px and saved as JPEG with quality 80 or 75. The calibration is fitted on one half, and the default threshold of 95 % flags at most 1 % of that half's real photos under web conditions.
 
-At the default threshold of 92 %:
+At the default threshold of 95 %:
 
 | | Original file | Web 1280 px | Web 800 px |
 |---|---|---|---|
-| AI images detected (OpenFake) | 84 % | 76 % | 71 % |
-| AI images detected (Reddit) | 78 % | 75 % | 66 % |
-| AI images detected (newer generators) | 92 % | 77 % | 74 % |
-| real photos flagged (all) | 1.7 % | 1.2 % | 0.4 % |
-| real photos flagged (photography subreddits) | 3.7 % | 3.7 % | 1.6 % |
-| real photos flagged (DOCCI camera photos) | 7.5 % | 5.6 % | 1.3 % |
-| YouTube thumbnails flagged | 0.7 % | 0.3 % | 0.3 % |
-| paintings flagged (Cleveland Museum of Art) | 1.3 % | 0 % | 0 % |
-| paintings flagged (WikiArt) | 11.9 % | 9.9 % | 3.3 % |
+| AI images detected (OpenFake) | 80 % | 74 % | 66 % |
+| AI images detected (Reddit) | 76 % | 72 % | 62 % |
+| AI images detected (newer generators) | 91 % | 71 % | 65 % |
+| real photos flagged (all) | 1.2 % | 0.7 % | 0.2 % |
+| real photos flagged (photography subreddits) | 2.7 % | 2.1 % | 0.5 % |
+| real photos flagged (DOCCI camera photos) | 6.3 % | 3.8 % | 0.6 % |
+| YouTube thumbnails flagged | 0.3 % | 0 % | 0.3 % |
+| paintings flagged (Cleveland Museum of Art) | 0 % | 0 % | 0 % |
+| paintings flagged (WikiArt) | 8.6 % | 6.0 % | 3.3 % |
 | charts flagged | 0 % | 0 % | 0 % |
 
-On 2,320 further images that are neither in the training data nor in this measurement (GPT-Image 2 and other OpenAI images from six Hugging Face datasets, Gemini and OpenAI images from Wikimedia Commons, further OpenFake test images, ImageNet and DOCCI photos), it detects 70 % and 60 % of the AI images under web conditions (1280 px and 800 px) and flags 2.3 % and 0.8 % of the photos.
+On 2,320 further images that are neither in the training data nor in this measurement (GPT-Image 2 and other OpenAI images from six Hugging Face datasets, Gemini and OpenAI images from Wikimedia Commons, further OpenFake test images, ImageNet and DOCCI photos), it detects 64 % and 53 % of the AI images under web conditions (1280 px and 800 px) and flags 1.1 % and 0.5 % of the photos.
 
 Other thresholds (web 1280 px, all AI images against real photos):
 
@@ -35,14 +35,14 @@ Other thresholds (web 1280 px, all AI images against real photos):
 | 70 % | 86 % | 4.7 % |
 | 80 % | 84 % | 3.1 % |
 | 90 % | 78 % | 1.5 % |
-| **92 % (default)** | **77 %** | **1.2 %** |
-| 97 % | 61 % | 0.4 % |
+| **95 % (default)** | **72 %** | **0.7 %** |
+| 97 % | 63 % | 0.4 % |
 
 Comparison with other local models under web conditions (1280 px and 800 px), AI images detected at exactly 1 % flagged photos:
 
 | Model | AUC | AI images detected |
 |---|---|---|
-| **[Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake) (bundled)** | **0.97–0.98** | **74–77 %** |
+| **[Detectra fine-tuned on OpenFake](https://huggingface.co/s-gehring/detectra-openfake) (bundled)** | **0.97–0.98** | **75–77 %** |
 | [Detectra v3](https://huggingface.co/TensorFold/detectra-v1) without fine-tuning (fp16) | 0.89–0.90 | 33–34 % |
 | [fev v13](https://huggingface.co/angelhd25/ull-ai-image-detector) (fp32, 88 MB), see below | 0.90 | 37–39 % |
 | Community Forensics (int8) | 0.85 | 23 % |
@@ -55,10 +55,10 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 
 ### Limitations
 
-- The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about a quarter of the AI images without metadata or watermark stay unmarked under web conditions. To catch more, lower the threshold in the settings and accept more false positives.
-- The model is weaker on the newest generators. Under web conditions (1280 px) it finds 69 of 78 FLUX.2 images, 60 of 70 GPT-Image 2 images, 37 of 73 Qwen-Image 2.1 images and 69 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 92 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
-- Heavily edited photos from photography subreddits are flagged at up to 4 %, camera photos from DOCCI at up to 6 % under web conditions and YouTube thumbnails at up to 1 %. 3D renderings are not in the test set.
-- The fine-tuning uses public domain artworks from the Met as negatives, mostly from before 1900. The paintings from the Cleveland Museum of Art are similar and are hardly flagged (2 of 156 as original file), WikiArt contains more modern and abstract art and is flagged at 3 to 10 % under web conditions. Detectra, the base model, was itself trained with WikiArt paintings.
+- The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about 30 % of the AI images without metadata or watermark stay unmarked under web conditions. To catch more, lower the threshold in the settings and accept more false positives.
+- The model is weaker on the newest generators. Under web conditions (1280 px) it finds 69 of 78 FLUX.2 images, 53 of 70 GPT-Image 2 images, 32 of 73 Qwen-Image 2.1 images and 63 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 91 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
+- Heavily edited photos from photography subreddits are flagged at up to 3 %, camera photos from DOCCI at up to 4 % under web conditions and YouTube thumbnails at up to 1 %. 3D renderings are not in the test set.
+- The fine-tuning uses public domain artworks from the Met as negatives, mostly from before 1900. The paintings from the Cleveland Museum of Art are similar and are not flagged, WikiArt contains more modern and abstract art and is flagged at 3 to 6 % under web conditions. Detectra, the base model, was itself trained with WikiArt paintings.
 - The fine-tuning uses the OpenFake train split, COCO train, Met artworks and self-generated images, none of which appear in the measurement. The train split contains some of the newest generators measured here or their siblings (FLUX.2 dev and klein 4B, Qwen-Image, and 1,095 images from Nano Banana 2, which is Gemini 3.1 Flash Image), but other images and prompts. The self-generated images come from FLUX.2 klein, Qwen-Image 2.1 and Z-Image, also with other prompts. The measurement uses the test split with other generators and other photo sources (ImageNet and DOCCI instead of LAION and Pexels). The checkpoint was, however, selected based on this measurement (out of a few variants), so the numbers are slightly optimistic. On the independent images above it detects about as many.
 - Compression and downscaling cost detection (AUC 0.99 as original files, 0.97–0.98 under web conditions).
 - Calibration and measurement use separate images but the same sources; the threshold also uses the measured photos. Sites with a different image mix or their own compression may differ.

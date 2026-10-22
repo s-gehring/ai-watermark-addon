@@ -4,7 +4,7 @@
       "name": "detectra-openfake",
       "label": "Detectra (OpenFake)",
       "repo": "s-gehring/detectra-openfake",
-      "revision": "PLACEHOLDER-UNTIL-UPLOAD",
+      "revision": "c84565e5bf8969d95908e12844f551e77ae87105",
       "license": "CC BY-NC 4.0",
       "dtype": "q8",
       "output": "sigmoid",
@@ -25,8 +25,8 @@
     "bias": 0.1933
   },
   "cascade": {
-    "band": [0.5, 0.92],
+    "band": [0.5, 0.95],
     "shortestEdges": [576, 768]
   },
-  "threshold": 0.92
+  "threshold": 0.95
 }
