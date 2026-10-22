@@ -26,12 +26,14 @@ jobs:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
+          failed=0
           for tag in $(gh release list --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | sort -V); do
             xpi="ai-watermark-$tag.xpi"
             status=0
             node scripts/amo-download.mjs "${tag#v}" "$xpi" || status=$?
             [ "$status" = 3 ] && continue
-            [ "$status" = 0 ] || exit "$status"
+            [ "$status" = 0 ] || { failed=1; continue; }
             gh release upload "$tag" "$xpi"
             gh release edit "$tag" --draft=false
           done
+          exit "$failed"

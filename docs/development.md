@@ -26,7 +26,7 @@ Release Firefox only installs add-ons signed by Mozilla. Without a signature, `d
 
 Releases are listed on addons.mozilla.org (AMO) and also published as GitHub releases by [`.github/workflows/release.yml`](../.github/workflows/release.yml) and [`.github/workflows/publish.yml`](../.github/workflows/publish.yml). To release:
 
-1. Raise `version` in `package.json` and merge the change into `main`.
+1. Raise `version` in `package.json`, write the release notes into [`RELEASE_NOTES.md`](../RELEASE_NOTES.md) and merge the change into `main`.
 2. Tag the merge commit and push the tag:
 
    ```bash
@@ -37,7 +37,7 @@ Releases are listed on addons.mozilla.org (AMO) and also published as GitHub rel
    git push origin v0.2.0
    ```
 
-The release workflow tests and lints the build, uploads it together with the source code and [`amo-metadata.json`](../amo-metadata.json) (categories, support URL, license) to AMO. The release notes on AMO list the subjects of all commits since the previous tag, without PR numbers and without the `Release x.y.z` commit. The workflow then creates a draft GitHub release. AMO reviews the version, which can take a few days. Every night the publish workflow asks AMO about each draft release. Once the version is approved, it attaches the signed `.xpi` to the release and publishes it. To check right away, start the publish workflow by hand under Actions → Publish → "Run workflow". A rejected version makes the publish workflow fail until the draft release is deleted.
+The release workflow tests and lints the build, uploads it together with the source code and [`amo-metadata.json`](../amo-metadata.json) (categories, support URL, license) to AMO. The release notes on AMO come from `RELEASE_NOTES.md` if it changed since the previous tag, otherwise they list the subjects of all commits since then, without PR numbers and without the `Release x.y.z` commit. The workflow then creates a draft GitHub release with the same notes. AMO reviews the version, which can take a few days. Every night the publish workflow asks AMO about each draft release. Once the version is approved, it attaches the signed `.xpi` to the release and publishes it. To check right away, start the publish workflow by hand under Actions → Publish → "Run workflow". A rejected or disabled version makes the publish workflow fail until its draft release is deleted; the other draft releases are still published.
 
 Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
