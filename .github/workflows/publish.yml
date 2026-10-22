@@ -26,14 +26,34 @@ jobs:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
+          releases=$(gh release list --limit 100 --json tagName,isDraft)
+          newest=$(jq -r '.[].tagName' <<<"$releases" | sort -V | tail -1)
           failed=0
-          for tag in $(gh release list --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | sort -V); do
+          published=0
+          for tag in $(jq -r '.[] | select(.isDraft) | .tagName' <<<"$releases" | sort -V); do
             xpi="ai-watermark-$tag.xpi"
             status=0
             node scripts/amo-download.mjs "${tag#v}" "$xpi" || status=$?
-            [ "$status" = 3 ] && continue
-            [ "$status" = 0 ] || { failed=1; continue; }
-            gh release upload "$tag" "$xpi"
-            gh release edit "$tag" --draft=false
+            case "$status" in
+              0)
+                gh release upload "$tag" "$xpi"
+                gh release edit "$tag" --draft=false --latest=false
+                published=1
+                ;;
+              3) ;;
+              4)
+                if [ "$tag" != "$newest" ]; then
+                  echo "::notice::$tag is disabled on addons.mozilla.org and superseded by $newest, deleting its draft release"
+                  gh release delete "$tag" --yes
+                else
+                  echo "::error::$tag is disabled on addons.mozilla.org"
+                  failed=1
+                fi
+                ;;
+              *) failed=1 ;;
+            esac
           done
+          if [ "$published" = 1 ]; then
+            gh release edit "$(gh release list --limit 100 --exclude-drafts --json tagName --jq '.[].tagName' | sort -V | tail -1)" --latest
+          fi
           exit "$failed"
