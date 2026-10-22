@@ -4,7 +4,7 @@
       "name": "detectra-openfake",
       "label": "Detectra (OpenFake)",
       "repo": "s-gehring/detectra-openfake",
-      "revision": "ef971ed6ecca0205d8b001e9326727fb5c00e8a8",
+      "revision": "PLACEHOLDER-UNTIL-UPLOAD",
       "license": "CC BY-NC 4.0",
       "dtype": "q8",
       "output": "sigmoid",
@@ -16,17 +16,17 @@
         "std": [0.229, 0.224, 0.225]
       },
       "files": {
-        "model.onnx": "e336a4422c5960d0da6beed1801c0f177b3a486a7cb1b81014cc36a1c993c77a"
+        "model.onnx": "b5bd0fd699469b721b00f6a5626a2616b2b0a34283eece124d90451147ab7fc6"
       }
     }
   ],
   "calibration": {
-    "weights": [0.5488],
-    "bias": 1.0703
+    "weights": [0.552],
+    "bias": 0.1933
   },
   "cascade": {
-    "band": [0.5, 0.95],
+    "band": [0.5, 0.92],
     "shortestEdges": [576, 768]
   },
-  "threshold": 0.95
+  "threshold": 0.92
 }
