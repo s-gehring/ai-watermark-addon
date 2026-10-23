@@ -24,116 +24,37 @@
     },
     {
       "provider": "openai",
-      "file": "openai-1254x1254.bin",
+      "file": "openai-512.bin",
       "size": 512,
-      "outputSize": [
-        1254,
-        1254
-      ],
-      "weightScale": 0.0034099923203279084,
+      "weightScale": 0.0014031475609396515,
       "threshold": 8,
       "source": {
         "datasets": [
           {
-            "dataset": "bigdatamark/synthid-research",
-            "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
-            "folders": [
-              "gpt-image-2",
-              "gpt-image-2.5-flare",
-              "gpt-image-2.5-sunburst"
-            ],
-            "images": 420
-          },
-          {
             "dataset": "winrisef/gpt-generated-image-collection",
-            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
-            "folders": [
-              "images/batch-0001",
-              "images/batch-0002",
-              "images/batch-0003"
-            ],
-            "images": 4
+            "revision": "1bbee99d2a9f47c2c23bd692ee4ea10d41a9d566",
+            "images": 2034
           }
         ],
-        "images": 424
+        "images": 2034
       }
     },
     {
       "provider": "openai",
-      "file": "openai-1448x1086.bin",
+      "file": "openai-1024.bin",
       "size": 1024,
-      "outputSize": [
-        1448,
-        1086
-      ],
-      "weightScale": 0.0035432002280740026,
+      "prescreen": true,
+      "weightScale": 0.0016245938237845422,
       "threshold": 8,
       "source": {
         "datasets": [
           {
             "dataset": "winrisef/gpt-generated-image-collection",
-            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
-            "folders": [
-              "images/batch-0001",
-              "images/batch-0002",
-              "images/batch-0003"
-            ],
-            "images": 219
+            "revision": "1bbee99d2a9f47c2c23bd692ee4ea10d41a9d566",
+            "images": 2034
           }
         ],
-        "images": 219
-      }
-    },
-    {
-      "provider": "openai",
-      "file": "openai-1672x941.bin",
-      "size": 1024,
-      "outputSize": [
-        1672,
-        941
-      ],
-      "weightScale": 0.0034482568751567815,
-      "threshold": 8,
-      "source": {
-        "datasets": [
-          {
-            "dataset": "winrisef/gpt-generated-image-collection",
-            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
-            "folders": [
-              "images/batch-0001",
-              "images/batch-0002",
-              "images/batch-0003"
-            ],
-            "images": 123
-          }
-        ],
-        "images": 123
-      }
-    },
-    {
-      "provider": "openai",
-      "file": "openai-1122x1402.bin",
-      "size": 1024,
-      "outputSize": [
-        1122,
-        1402
-      ],
-      "weightScale": 0.0036731005081628186,
-      "threshold": 8,
-      "source": {
-        "datasets": [
-          {
-            "dataset": "winrisef/gpt-generated-image-collection",
-            "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
-            "folders": [
-              "images/batch-0001",
-              "images/batch-0002",
-              "images/batch-0003"
-            ],
-            "images": 193
-          }
-        ],
-        "images": 193
+        "images": 2034
       }
     },
     {

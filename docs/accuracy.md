@@ -95,31 +95,43 @@ False positives (measured like `eval.py --ignore-aspect`): 1 of 4,457 real photo
 
 ### OpenAI
 
-Measured with `tools/synthid/crossval.py`: each template is built from two thirds of the images of its size and tested on the remaining third (z ≥ 8).
+Measured with `tools/synthid/crossval.py`: the templates are built from two thirds of the images of every output size and tested on the remaining third (up to 60 images per size, z ≥ 8). 2,034 images with a verified watermark in 14 output sizes, up to 200 per size, from [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection).
 
-| Output size (test images) | Original (PNG) | downscaled to 50 % / 33 % | JPEG 90, 4:4:4 / 4:2:0 | WebP 80 |
-|---|---|---|---|---|
-| 1254 × 1254 (141) | 100 % | 100 % / 100 % | 100 % / 100 % | 97 % |
-| 1448 × 1086 (73) | 100 % | 100 % / 100 % | 100 % / 100 % | 99 % |
-| 1672 × 941 (41) | 100 % | 100 % / 100 % | 100 % / 100 % | 98 % |
-| 1122 × 1402 (64) | 100 % | 100 % / 100 % | 100 % / 100 % | 95 % |
+| Output size (test images) | Original (PNG) | downscaled to 50 % / 33 % | JPEG 90, 4:4:4 / 4:2:0 | WebP 80 | 1280 px, JPEG 80 | 800 px, JPEG 75 |
+|---|---|---|---|---|---|---|
+| 1536 × 1024 (60) | 98 % | 97 % / 78 % | 98 % / 98 % | 68 % | 95 % | 10 % |
+| 1024 × 1536 (60) | 95 % | 90 % / 67 % | 93 % / 93 % | 75 % | 90 % | 15 % |
+| 1254 × 1254 (60) | 100 % | 88 % / 73 % | 98 % / 98 % | 73 % | 98 % | 63 % |
+| 1448 × 1086 (60) | 97 % | 93 % / 82 % | 95 % / 95 % | 88 % | 93 % | 58 % |
+| 1672 × 941 (60) | 100 % | 98 % / 82 % | 100 % / 100 % | 83 % | 98 % | 5 % |
+| 1122 × 1402 (60) | 100 % | 100 % / 93 % | 100 % / 100 % | 93 % | 100 % | 78 % |
+| 8 further sizes (258) | 98 % | 97 % / 83 % | 98 % / 98 % | 85 % | 96 % | 46 % |
+| all 14 sizes (618) | 98 % | 96 % / 81 % | 98 % / 98 % | 82 % | 96 % | 42 % |
 
-Cropped to 95 % on all sides: 0 %. The shipped templates are built from all images (424, 219, 123 and 193).
+Cropped to 95 % on all sizes: 0 %. Built without the tested output size (`--leave-size-out`), the 618 test images give the same rates: 99 % original, 95 % at 50 %, 95 % at 1280 px with JPEG 80. The pattern therefore does not depend on the output size.
 
-Other output sizes: ChatGPT picks the size from the aspect ratio of the input image, so many images have no template of their own. Of 2,165 GPT-Image 2 PNGs with a C2PA watermark assertion in 67 other sizes (1086 × 1448, 1559 × 1009, 1537 × 1023, 1024 × 1536, 1536 × 1024 and others; from the MLLM dataset [zr-zhang/MLLM-Generated-Image-Detection-Dataset](https://huggingface.co/datasets/zr-zhang/MLLM-Generated-Image-Detection-Dataset), wafflefan/felix-chatgpt-generated-images, mramazan/Synthetic-Character-Dataset-for-FLUX-LORA and winrisef), 99 % trigger.
+Independent images, none of them used for the template:
 
-In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](https://huggingface.co/datasets/Sarim-Hash/liars-dividend-GPT-image-2-photoreal), 80 images at 1024 × 1024 without C2PA), one image reaches z 195 with the 1254 template, probably a downscaled copy. The other 79 have the uncovered size 1024 × 1024 and do not trigger.
+| Images | Original | downscaled to 33 % | 1280 px, JPEG 80 |
+|---|---|---|---|
+| GPT-Image 2 PNGs with a C2PA watermark assertion in 416 different output sizes (700 from the MLLM dataset [zr-zhang/MLLM-Generated-Image-Detection-Dataset](https://huggingface.co/datasets/zr-zhang/MLLM-Generated-Image-Detection-Dataset)) | 100 % | 99.9 % | 99.9 % |
+| gpt-image-2, gpt-image-2.5-flare and gpt-image-2.5-sunburst at 1254 × 1254 (400, [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research)) | 100 % | 99 % | 100 % |
+| Wikimedia Commons files with a C2PA watermark assertion (33, many edited afterwards) | 85 % | 79 % | 85 % |
 
-False positives (measured like `eval.py --ignore-aspect`, so every template on every image): none of 8,830 images without an OpenAI watermark (the 4,457 real images above, 1,873 images from Gemini, GPT-Image 1.5, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and other generators, and 1,500 real photos and 1,000 FLUX.2, Qwen-Image 2.1 and Nano Banana 2 images from the MLLM dataset). The highest z-score was 4.4, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 110 trigger, all GPT-Image 2 images from one dataset (110 of 120, mostly JPEGs at 900 × 1200); the 300 images of the other three datasets do not. In OpenFake, 14 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
+The undetected Commons files are mostly screenshots and edited versions, where the pixels no longer carry the pattern. 3840 × 2160 files are found as well (z 24 to 163).
+
+In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](https://huggingface.co/datasets/Sarim-Hash/liars-dividend-GPT-image-2-photoreal), 100 images at 1024 × 1024 without C2PA), one image reaches z 117, apparently from ChatGPT. The other 99 do not trigger. No image at 1024 × 1024 with a verified watermark is known, so this size is not tested.
+
+False positives: none of 16,221 images without an OpenAI watermark (8,016 real photos, paintings, charts and thumbnails and images from Gemini, GPT-Image 1 and 1.5, FLUX.2, Qwen-Image, Midjourney 7 and other generators, and 8,205 images from OpenFake, among them 1,281 from GPT-Image 1, 860 from DALL-E 3, 802 LAION and 698 Pexels photos). The highest z-score was 4.5, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 113 trigger, 112 of them GPT-Image 2 images from one dataset (112 of 120, mostly JPEGs at 900 × 1200); of the other three datasets 1 of 300 triggers. In OpenFake, 16 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
 
 ### Limitations
 
 - This is a reconstruction from public sample images, not Google's decoder. Only images from Gemini 3 Pro Image (Nano Banana Pro), Gemini 3.1 Flash Image and GPT-Image 2 (ChatGPT and API) are tested, other models are unverified.
-- OpenAI images in sizes without their own template are found less reliably once they are downscaled and saved as JPEG (102 of 109 JPEGs at 900 × 1200, 14 of 30 OpenFake images at 1024 × 1536 and 1536 × 1024). Images at 1024 × 1024 without C2PA are almost never found, and there are no such images with a verified watermark. Every template is based on at most two sources. OpenAI images from before May 2026 carry no SynthID.
+- OpenAI images are found less reliably after WebP compression (82 %), after downscaling to 33 % (81 %) and at 800 px with JPEG 75 (42 %). The OpenAI template comes from one source, and no image at 1024 × 1024 with a verified watermark is known, so that size is untested. OpenAI images from before May 2026 carry no SynthID.
 - Cropping destroys the signal completely, and WebP erases it in Gemini images. Gemini images that are downscaled and then saved as JPEG, as under the model's web conditions (1280 or 800 px, JPEG 80 or 75), are no longer detected, ChatGPT images in the template sizes still are. Images from social networks are therefore often not detected; then the model takes over.
 - Google's blogs serve WebP renditions, which erase the pattern. The add-on loads the original from `original_images/` instead, which works only where the rendition's file name is not shortened. Of 182 images on 15 posts about Nano Banana, Nano Banana Pro and Imagen 4, it finds the original of 91; SynthID or the C2PA metadata flag 29 images (2 without this), and 87 are flagged in total (80 without).
 - Real photos edited with Gemini carry SynthID as well and are flagged, those edited with ChatGPT probably too.
-- The Google template is computed from the Hugging Face dataset [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there), the OpenAI templates from [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0) and [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
+- The Google template is computed from the Hugging Face dataset [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there), the OpenAI templates from [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
 
 ## Amazon Nova Canvas watermark
 

@@ -11,7 +11,6 @@ MIN_FREQUENCY = 4
 NYQUIST_MARGIN = 0.45
 GRID_PERIODS = (8, 16)
 GRID_TOLERANCE = 1.5
-ASPECT_TOLERANCE = 0.02
 LOCAL_CONTRAST_OFFSET = 0.5
 TEMPLATE_DIR = Path("src") / "background" / "synthid-templates"
 YCBCR = np.array(
@@ -48,11 +47,11 @@ def load_rgb(path):
     return np.asarray(image, dtype=np.float64)
 
 
-def planes(rgb, size=SIZE):
+def planes(rgb, size=SIZE, channels=(0, 1, 2)):
     height, width, _ = rgb.shape
     ycc = rgb @ YCBCR.T
     ry, rx = resample_matrix(height, size), resample_matrix(width, size)
-    out = np.stack([ry @ ycc[..., c] @ rx.T for c in range(3)])
+    out = np.stack([ry @ ycc[..., c] @ rx.T for c in channels])
     return out - out.mean(axis=(1, 2), keepdims=True)
 
 
@@ -66,14 +65,18 @@ def local_contrast(p):
     return q - q.mean(axis=(1, 2), keepdims=True)
 
 
-def spectrum(rgb, size=SIZE):
-    p = planes(rgb, size)
+def spectrum(rgb, size=SIZE, channels=(0, 1, 2)):
+    p = planes(rgb, size, channels)
     f = np.fft.rfft2(local_contrast(p))
-    return f / (np.abs(f) + 1e-6), p.std(axis=(1, 2))
+    u = np.zeros((3, *f.shape[1:]), np.complex128)
+    std = np.zeros(3)
+    u[list(channels)] = f / (np.abs(f) + 1e-6)
+    std[list(channels)] = p.std(axis=(1, 2))
+    return u, std
 
 
-def unit_spectrum(rgb, size=SIZE):
-    return spectrum(rgb, size)[0]
+def unit_spectrum(rgb, size=SIZE, channels=(0, 1, 2)):
+    return spectrum(rgb, size, channels)[0]
 
 
 def frequencies(size=SIZE):
@@ -96,25 +99,39 @@ def usable(height, width, size=SIZE):
     return rows & cols
 
 
-def build(paths, size=SIZE, max_frequency=None, border=0, min_frequency=None, channels=(0, 1, 2)):
-    total, count = None, 0
+def accumulate(paths, size=SIZE, channels=(0, 1, 2), masked=False):
+    total, support, count = 0, 0, 0
     for path in paths:
-        u = unit_spectrum(load_rgb(path), size)
-        total = u if total is None else total + u
+        rgb = load_rgb(path)
+        u = unit_spectrum(rgb, size, channels)[list(channels)]
+        valid = usable(*rgb.shape[:2], size) if masked else np.ones(u.shape[1:], bool)
+        total = total + u * valid
+        support = support + valid
         count += 1
-    mean = total / count
+    return total, support, count
+
+
+def finalize(sums, size=SIZE, channels=(0, 1, 2), max_frequency=None, border=0, min_frequency=None):
+    total, support, count = sums
+    mean = np.divide(total, support, out=np.zeros_like(total), where=support > 0)
+    weights = np.zeros((3, size, size // 2 + 1))
+    phases = np.zeros_like(weights)
+    weights[list(channels)] = np.sqrt(np.maximum(np.abs(mean) ** 2 - 1 / np.maximum(support, 1), 0))
+    phases[list(channels)] = np.angle(mean)
     ky, kx = frequencies(size)
     keep = (np.abs(ky) >= MIN_FREQUENCY) & (kx >= MIN_FREQUENCY)
     if max_frequency is not None:
         keep &= np.hypot(ky, kx) <= max_frequency
     if min_frequency is not None:
         keep &= np.hypot(ky, kx) >= min_frequency
-    weights = np.sqrt(np.maximum(np.abs(mean) ** 2 - 1 / count, 0))
-    phases = np.angle(mean)
     if border:
         weights, phases = without_border(weights, phases, border)
-    selected = np.isin(np.arange(3), channels)[:, None, None]
-    return weights * keep[None] * selected, phases, count
+    return weights * keep[None], phases, count
+
+
+def build(paths, size=SIZE, max_frequency=None, border=0, min_frequency=None, channels=(0, 1, 2), masked=False):
+    sums = accumulate(paths, size, channels, masked)
+    return finalize(sums, size, channels, max_frequency, border, min_frequency)
 
 
 def without_border(weights, phases, border):
@@ -151,13 +168,8 @@ def score(rgb, weights, phases, size=SIZE, min_channel_std=0):
     height, width, _ = rgb.shape
     if min(height, width) < MIN_SIDE:
         return 0.0
-    u, channel_std = spectrum(rgb, size)
+    u, channel_std = spectrum(rgb, size, tuple(c for c in range(3) if weights[c].any()) or (0, 1, 2))
     return score_spectrum(u, height, width, weights, phases, channel_std, min_channel_std)
-
-
-def fits(template, height, width):
-    output = template["meta"].get("outputSize")
-    return output is None or abs(np.log(width / height * output[1] / output[0])) <= ASPECT_TOLERANCE
 
 
 def save(path, w, p):

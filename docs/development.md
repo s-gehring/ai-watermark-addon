@@ -78,16 +78,16 @@ The weights are trained on OpenFake, which is licensed under CC BY-NC 4.0, so th
 
 ```bash
 .venv/bin/pip install numpy pillow pyarrow fsspec aiohttp huggingface_hub
-.venv/bin/python tools/synthid/build_templates.py   # 288 Gemini, 959 OpenAI and 75 Nova Canvas images (about 3.4 GB) -> src/background/synthid-templates/, synthid.json
-.venv/bin/python tools/synthid/build_templates.py openai   # only the OpenAI templates
+.venv/bin/python tools/synthid/build_templates.py   # 288 Gemini, 2,034 OpenAI and 75 Nova Canvas images (about 6 GB) -> src/background/synthid-templates/, synthid.json
+.venv/bin/python tools/synthid/build_templates.py openai   # only the OpenAI templates, from the files pinned in tools/synthid/openai_sources.json
 .venv/bin/python tools/synthid/build_templates.py amazon   # only the Nova Canvas template, from the GitHub commits in tools/synthid/amazon_sources.json
-.venv/bin/python tools/synthid/crossval.py --transforms   # OpenAI: template from two thirds, test on the remaining third; Amazon: leave one repository out
+.venv/bin/python tools/synthid/crossval.py --transforms   # OpenAI: templates from two thirds of the images of every output size, test on the remaining third (--leave-size-out also without the tested size); Amazon: leave one repository out
 .venv/bin/python tools/synthid/fetch_openfake.py    # test images to tools/synthid/.cache/openfake (about 9 GB download)
 .venv/bin/python tools/synthid/eval.py --transforms tools/synthid/.cache/openfake/fake/nano-banana-pro
 .venv/bin/python tools/synthid/eval.py tools/synthid/.cache/openfake/real/* tools/synthid/.cache/openfake/fake/*
 .venv/bin/python tools/synthid/fetch_research.py   # second test dataset to tools/synthid/.cache/synthid-research (about 5 GB)
 .venv/bin/python tools/synthid/eval.py tools/synthid/.cache/synthid-research/*/
-.venv/bin/python tools/synthid/eval.py --ignore-aspect tools/synthid/.cache/openfake/real/*   # every template on every image
+.venv/bin/python tools/synthid/eval.py tools/synthid/.cache/openfake/real/*   # false positives on real photos
 ```
 
 The thresholds are in [`synthid.json`](../synthid.json) (`threshold` per template).

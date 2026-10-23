@@ -135,37 +135,27 @@ describe('synthIdScore', () => {
 
 describe('detectSynthId', () => {
   const pattern = carrierImage(192, 128, 2, 0);
-  const detector = (provider: SynthIdProvider, size: number, aspect?: number): SynthIdDetector => ({
+  const detector = (provider: SynthIdProvider, size: number): SynthIdDetector => ({
     ...templateFrom(pattern, size),
     provider,
     threshold: 5,
-    aspect,
   });
 
   it('reports the provider of the first matching template', () => {
-    expect(detectSynthId(carrierImage(384, 256, 2, 40), [detector('openai', 64, 1.5), detector('google', 128)])).toBe('openai');
+    expect(detectSynthId(carrierImage(384, 256, 2, 40), [detector('openai', 64), detector('google', 128)])).toBe('openai');
+    expect(detectSynthId(carrierImage(384, 256, 2, 40), [detector('google', 128), detector('openai', 64)])).toBe('google');
   });
 
-  it('skips templates made for another aspect ratio', () => {
-    const portrait = carrierImage(256, 384, 2, 40);
-    expect(detectSynthId(portrait, [detector('openai', 64, 1.5)])).toBeNull();
-    expect(detectSynthId(portrait, [detector('openai', 64, 1.5), detector('google', 128)])).toBe('google');
-  });
-
-  it('applies templates for another aspect ratio whose spectrum is already computed', () => {
-    const portrait = carrierImage(256, 384, 2, 40);
-    const seed = { ...detector('google', 64), threshold: Infinity };
-    expect(detectSynthId(portrait, [seed, detector('openai', 64, 1.5)])).toBe('openai');
-  });
-
-  it('applies templates for another aspect ratio once the same provider scored at least 3', () => {
-    const portrait = carrierImage(256, 384, 2, 40);
-    const seed = (provider: SynthIdProvider) => ({ ...detector(provider, 64), threshold: Infinity });
-    expect(detectSynthId(portrait, [seed('openai'), detector('openai', 128, 1.5)])).toBe('openai');
-    expect(detectSynthId(portrait, [seed('google'), detector('openai', 128, 1.5)])).toBeNull();
+  it('runs prescreen templates only once the same provider scored at least 3', () => {
+    const image = carrierImage(384, 256, 2, 40);
+    const gate = (provider: SynthIdProvider) => ({ ...detector(provider, 64), threshold: Infinity });
+    const fine = { ...detector('openai', 128), prescreen: true };
+    expect(detectSynthId(image, [gate('openai'), fine])).toBe('openai');
+    expect(detectSynthId(image, [gate('google'), fine])).toBeNull();
+    expect(detectSynthId(image, [fine])).toBeNull();
   });
 
   it('finds nothing in images without the pattern', () => {
-    expect(detectSynthId(carrierImage(384, 256, 0, 40), [detector('openai', 64, 1.5), detector('google', 128)])).toBeNull();
+    expect(detectSynthId(carrierImage(384, 256, 0, 40), [detector('openai', 64), detector('google', 128)])).toBeNull();
   });
 });
