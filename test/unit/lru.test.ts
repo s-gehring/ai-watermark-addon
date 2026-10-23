@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TaskQueue } from '../../src/background/queue';
+import { firstResult, TaskQueue } from '../../src/background/queue';
 import { LruCache } from '../../src/shared/lru';
 
 describe('LruCache', () => {
@@ -46,5 +46,22 @@ describe('TaskQueue', () => {
     };
     await Promise.all([5, 1, 3, 1, 2].map((ms) => queue.run(task(ms))));
     expect(peak).toBe(2);
+  });
+});
+
+describe('firstResult', () => {
+  it('returns the first candidate that loads and stops there', async () => {
+    const asked: string[] = [];
+    const load = async (candidate: string) => {
+      asked.push(candidate);
+      return candidate === 'b' || candidate === 'c' ? candidate.toUpperCase() : null;
+    };
+    expect(await firstResult(['a', 'b', 'c'], load)).toBe('B');
+    expect(asked).toEqual(['a', 'b']);
+  });
+
+  it('returns null when no candidate loads', async () => {
+    expect(await firstResult(['a', 'b'], async () => null)).toBeNull();
+    expect(await firstResult([], async () => 'x')).toBeNull();
   });
 });

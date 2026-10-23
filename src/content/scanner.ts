@@ -1,6 +1,6 @@
 import { isFlagged, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
 import type { Settings } from '../shared/settings';
-import { hasBackgroundImage, imageUrlOf, isLargeEnough, largerVariantOf } from './candidates';
+import { hasBackgroundImage, imageUrlOf, isLargeEnough, knownOriginals, largerVariantsOf } from './candidates';
 import { shadowRootOf } from './dom';
 import { BadgeLayer } from './overlay';
 
@@ -13,7 +13,7 @@ export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
   private checkedUrl = new WeakMap<Element, string>();
   private readonly inView = new Set<Element>();
-  private readonly shadowRoots = new Set<ShadowRoot>();
+  private shadowRoots = new WeakSet<ShadowRoot>();
   private readonly layer: BadgeLayer;
   private readonly io: IntersectionObserver;
   private readonly mo: MutationObserver;
@@ -33,6 +33,7 @@ export class Scanner {
   start(): void {
     const { showScore, showChecked, threshold } = this.settings;
     this.layer.setOptions({ showScore, showChecked, threshold });
+    this.shadowRoots = new WeakSet();
     this.mo.observe(document.documentElement, OBSERVED);
     document.addEventListener('load', this.onLoad, true);
     addEventListener('resize', this.onResize, { passive: true });
@@ -44,8 +45,6 @@ export class Scanner {
     this.io.disconnect();
     document.removeEventListener('load', this.onLoad, true);
     removeEventListener('resize', this.onResize);
-    for (const root of this.shadowRoots) root.removeEventListener('load', this.onLoad, true);
-    this.shadowRoots.clear();
     this.inView.clear();
     this.pendingRoots = [];
     this.layer.clear();
@@ -179,12 +178,13 @@ export class Scanner {
     return verdict;
   }
 
-  private originalFor(url: string, element: Element): string | undefined {
+  private originalFor(url: string, element: Element): string[] | undefined {
     const { checkMetadata, checkWatermark } = this.settings;
-    if (this.originals >= MAX_ORIGINALS || !(checkMetadata || checkWatermark) || !(element instanceof HTMLImageElement)) return undefined;
-    const original = largerVariantOf(element, url);
-    if (original) this.originals++;
-    return original ?? undefined;
+    if (this.originals >= MAX_ORIGINALS || !(checkMetadata || checkWatermark)) return undefined;
+    const originals = element instanceof HTMLImageElement ? largerVariantsOf(element, url) : knownOriginals(url);
+    if (!originals.length) return undefined;
+    this.originals++;
+    return originals;
   }
 }
 
@@ -196,7 +196,7 @@ async function send(request: BackgroundRequest): Promise<Verdict> {
   }
 }
 
-async function requestVerdict(url: string, element: Element, original?: string): Promise<Verdict> {
+async function requestVerdict(url: string, element: Element, original?: string[]): Promise<Verdict> {
   const verdict = url.startsWith('blob:') ? await classifyBlob(url) : await send({ type: 'classify', url, original });
   if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
   const bytes = await pixelsOf(element);

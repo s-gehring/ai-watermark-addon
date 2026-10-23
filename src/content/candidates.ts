@@ -86,13 +86,22 @@ export function largestCandidate(candidates: SrcsetCandidate[], current: string)
   return size(largest) >= size(selected) * MIN_GAIN ? largest.url : null;
 }
 
-export function knownOriginal(url: string): string | null {
+const WAGTAIL_RENDITION =
+  /^(https:\/\/storage\.googleapis\.com\/gweb-[\w-]+)\/images\/([^/?#]+?)(?:\.[0-9a-f]{8})?\.(?:width|height|fill|max|min|scale)-[^/?#]*\.(png|jpe?g|gif|webp)(?:[?#].*)?$/i;
+
+export function knownOriginals(url: string): string[] {
+  const rendition = WAGTAIL_RENDITION.exec(url);
+  if (rendition) {
+    const [, bucket, name, extension] = rendition;
+    const extensions = extension.toLowerCase() === 'webp' ? ['png', 'jpg', 'jpeg'] : [extension];
+    return extensions.map((e) => `${bucket}/original_images/${name}.${e}`);
+  }
   for (const [pattern, replacement] of ORIGINAL_RULES) {
     if (!pattern.test(url)) continue;
     const original = url.replace(pattern, replacement);
-    return original !== url ? original : null;
+    return original !== url ? [original] : [];
   }
-  return null;
+  return [];
 }
 
 function linkedImage(image: HTMLImageElement): string | null {
@@ -112,16 +121,16 @@ function srcsetCandidate(image: HTMLImageElement, current: string): string | nul
   return null;
 }
 
-export function largerVariantOf(image: HTMLImageElement, current: string): string | null {
-  if (!/^https?:/.test(current)) return null;
-  const known = knownOriginal(current);
-  if (known) return known;
+export function largerVariantsOf(image: HTMLImageElement, current: string): string[] {
+  if (!/^https?:/.test(current)) return [];
+  const known = knownOriginals(current);
+  if (known.length) return known;
   const origins = [new URL(current).origin, location.origin];
   const allowed = (url: string | null): url is string => !!url && url !== current && origins.includes(new URL(url).origin);
   const linked = linkedImage(image);
-  if (allowed(linked)) return linked;
+  if (allowed(linked)) return [linked];
   const largest = srcsetCandidate(image, current);
-  return allowed(largest) ? largest : null;
+  return allowed(largest) ? [largest] : [];
 }
 
 export function hasBackgroundImage(element: Element): boolean {
