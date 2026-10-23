@@ -30,7 +30,7 @@ AI-generated image detector bundled with the Firefox add-on [AI Watermark](https
 - **Input:** `pixel_values`, float32, 1 × 3 × 384 × 384. Resize the shortest edge to 440 px (bilinear), center-crop 384 px, scale to [0, 1], normalize with ImageNet mean `[0.485, 0.456, 0.406]` and std `[0.229, 0.224, 0.225]`.
 - **Output:** `logits`, float32, 1 × 1. `sigmoid(logit)` is the raw probability that the image is AI-generated.
 
-The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.6535 * logit + 1.6906)`), scores images between 0.5 and 0.92 again on center crops with a shorter edge of 576 and 768 px, keeps the highest score and flags images from 0.92, which marks at most 1 % of real photos under web conditions.
+The raw probability is poorly calibrated for real photos. The add-on applies Platt scaling (`sigmoid(0.6535 * logit + 1.6906)`), scores images between 0.5 and 0.95 again on center crops with a shorter edge of 576 and 768 px, keeps the highest score and flags images from 0.95, which marks less than 1 % of real photos under web conditions.
 
 ## Evaluation
 
@@ -38,8 +38,8 @@ Measured on held-out test data (OpenFake test split with generators and photo so
 
 - AUC 0.97
 - 72–75 % of AI images detected at 1 % flagged real photos (Detectra v3 without fine-tuning: 33–34 %), 78 % with the add-on's second pass on larger crops
-- 75–77 % of the newest generators' images detected at the add-on's threshold (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1 Flash Image)
-- at the add-on's threshold: 0 % of paintings from the Cleveland Museum of Art, 3–7 % of WikiArt paintings and 0 % of charts flagged
+- 68–72 % of the newest generators' images detected at the add-on's threshold (FLUX.2, GPT-Image 2, Qwen-Image 2.1, Gemini 3.1 Flash Image)
+- at the add-on's threshold: 0 % of paintings from the Cleveland Museum of Art, 3–6 % of WikiArt paintings and 0 % of charts flagged
 
 Full results and limitations: [docs/accuracy.md](https://github.com/s-gehring/ai-watermark-addon/blob/main/docs/accuracy.md).
 

@@ -8,24 +8,24 @@ Measured with `npm run eval` on 4,906 images. One half is used for calibration, 
 - **real photos:** 943 from OpenFake (ImageNet, DOCCI), 375 from photography subreddits (OpenFake Reddit test set), 1,000 from [COCO](https://huggingface.co/datasets/detection-datasets/coco) and 600 YouTube video thumbnails from the [AudioSet](https://research.google.com/audioset/) eval set (uploaded until early 2017, 300 with and 300 without music), cropped to 16:9 the way YouTube shows them in lists
 - **graphics and art:** 300 charts from [ChartQA](https://huggingface.co/datasets/HuggingFaceM4/ChartQA), 300 paintings from [WikiArt](https://huggingface.co/datasets/huggan/wikiart) and 300 paintings from the [Cleveland Museum of Art Open Access](https://openaccess-api.clevelandart.org/) collection (CC0)
 
-Every image is scored three times: as the original file and the way images typically arrive on web pages, downscaled to at most 1280 px or 800 px and saved as JPEG with quality 80 or 75. The calibration is fitted on one half, and the default threshold of 92 % flags at most 1 % of that half's real photos under web conditions.
+Every image is scored three times: as the original file and the way images typically arrive on web pages, downscaled to at most 1280 px or 800 px and saved as JPEG with quality 80 or 75. The calibration is fitted on one half, and the default threshold of 95 % flags at most 1 % of that half's real photos under web conditions.
 
-At the default threshold of 92 %:
+At the default threshold of 95 %:
 
 | | Original file | Web 1280 px | Web 800 px |
 |---|---|---|---|
-| AI images detected (OpenFake) | 86 % | 78 % | 78 % |
-| AI images detected (Reddit) | 80 % | 81 % | 69 % |
-| AI images detected (newer generators) | 92 % | 77 % | 75 % |
-| real photos flagged (all) | 1.4 % | 1.0 % | 0.5 % |
-| real photos flagged (photography subreddits) | 4.3 % | 4.3 % | 1.6 % |
-| real photos flagged (DOCCI camera photos) | 3.8 % | 3.1 % | 1.3 % |
-| YouTube thumbnails flagged | 0.7 % | 0 % | 0.3 % |
-| paintings flagged (Cleveland Museum of Art) | 0.6 % | 0 % | 0 % |
-| paintings flagged (WikiArt) | 7.3 % | 7.3 % | 3.3 % |
+| AI images detected (OpenFake) | 83 % | 76 % | 69 % |
+| AI images detected (Reddit) | 79 % | 78 % | 65 % |
+| AI images detected (newer generators) | 89 % | 72 % | 68 % |
+| real photos flagged (all) | 0.8 % | 0.5 % | 0.3 % |
+| real photos flagged (photography subreddits) | 2.7 % | 1.6 % | 0.5 % |
+| real photos flagged (DOCCI camera photos) | 2.5 % | 1.9 % | 0.6 % |
+| YouTube thumbnails flagged | 0 % | 0 % | 0.3 % |
+| paintings flagged (Cleveland Museum of Art) | 0 % | 0 % | 0 % |
+| paintings flagged (WikiArt) | 4.6 % | 6.0 % | 2.6 % |
 | charts flagged | 0 % | 0 % | 0 % |
 
-On 2,320 further images that are neither in the training data nor in this measurement (GPT-Image 2 and other OpenAI images from six Hugging Face datasets, Gemini and OpenAI images from Wikimedia Commons, further OpenFake test images, ImageNet and DOCCI photos), it detects 72 % and 63 % of the AI images under web conditions (1280 px and 800 px) and flags 1.2 % and 0.9 % of the photos.
+On 2,320 further images that are neither in the training data nor in this measurement (GPT-Image 2 and other OpenAI images from six Hugging Face datasets, Gemini and OpenAI images from Wikimedia Commons, further OpenFake test images, ImageNet and DOCCI photos), it detects 66 % and 57 % of the AI images under web conditions (1280 px and 800 px) and flags 0.8 % and 0.6 % of the photos.
 
 Other thresholds (web 1280 px, all AI images against real photos):
 
@@ -35,8 +35,8 @@ Other thresholds (web 1280 px, all AI images against real photos):
 | 70 % | 88 % | 4.3 % |
 | 80 % | 85 % | 3.0 % |
 | 90 % | 79 % | 1.5 % |
-| **92 % (default)** | **78 %** | **1.0 %** |
-| 97 % | 65 % | 0.1 % |
+| **95 % (default)** | **74 %** | **0.5 %** |
+| 97 % | 67 % | 0.1 % |
 
 Comparison with other local models under web conditions (1280 px and 800 px), AI images detected at exactly 1 % flagged photos:
 
@@ -55,10 +55,10 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 
 ### Limitations
 
-- The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about 25 % of the AI images without metadata or watermark stay unmarked under web conditions. To catch more, lower the threshold in the settings and accept more false positives.
-- The model is weaker on the newest generators. Under web conditions (1280 px) it finds 72 of 78 FLUX.2 images, 59 of 70 GPT-Image 2 images, 34 of 73 Qwen-Image 2.1 images and 69 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 92 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
-- Heavily edited photos from photography subreddits are flagged at up to 4 %, camera photos from DOCCI at up to 3 % and YouTube thumbnails at up to 1 % under web conditions. 3D renderings are not in the test set.
-- The fine-tuning uses public domain artworks from the Met as negatives, mostly from before 1900. The paintings from the Cleveland Museum of Art are similar and are hardly flagged (1 of 156 as original file), WikiArt contains more modern and abstract art and is flagged at 3 to 7 % under web conditions. Detectra, the base model, was itself trained with WikiArt paintings.
+- The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about 30 % of the AI images without metadata or watermark stay unmarked under web conditions. To catch more, lower the threshold in the settings and accept more false positives.
+- The model is weaker on the newest generators. Under web conditions (1280 px) it finds 70 of 78 FLUX.2 images, 54 of 70 GPT-Image 2 images, 30 of 73 Qwen-Image 2.1 images and 66 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 89 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
+- Heavily edited photos from photography subreddits are flagged at up to 2 %, camera photos from DOCCI at up to 2 % and YouTube thumbnails at up to 1 % under web conditions. 3D renderings are not in the test set.
+- The fine-tuning uses public domain artworks from the Met as negatives, mostly from before 1900. The paintings from the Cleveland Museum of Art are similar and are not flagged (none of 156, also as original files), WikiArt contains more modern and abstract art and is flagged at 3 to 6 % under web conditions. Detectra, the base model, was itself trained with WikiArt paintings.
 - The fine-tuning uses the OpenFake train split, COCO train, Met, NGA and SMK artworks, photos from LAION-Mobile and Unsplash and self-generated images, none of which appear in the measurement. The train split contains some of the newest generators measured here or their siblings (FLUX.2 dev and klein 4B, Qwen-Image, and 1,095 images from Nano Banana 2, which is Gemini 3.1 Flash Image), but other images and prompts. The self-generated images come from FLUX.2 klein, Qwen-Image 2.1 and Z-Image, also with other prompts. The measurement uses the test split with other generators and other photo sources (ImageNet and DOCCI instead of LAION and Pexels). The checkpoint was, however, selected based on this measurement (out of a few variants), so the numbers are slightly optimistic. On the independent images above it detects about as many.
 - Compression and downscaling cost detection (AUC 0.99 as original files, 0.97 under web conditions).
 - Calibration and measurement use separate images but the same sources; the threshold also uses the measured photos. Sites with a different image mix or their own compression may differ.
@@ -87,13 +87,13 @@ Measured with `tools/synthid/crossval.py google --transforms`: both templates ar
 | downscaled to 800 px, JPEG 75 | 1 % | 0 % |
 | downscaled to 60 % with bilinear filtering, like a screenshot | 100 % | 96 % |
 | cropped to 95 % on all sides | 96 % | 92 % |
-| cropped to a random 80 to 95 % at a random position | 96 % | 91 % |
-| cropped to 1:1, 4:5, 16:9 or 9:16 | 99 % | 89 % |
-| cropped to 1:1 (4:5 for square images) and downscaled to 1080 px, without or with JPEG 85 | 97 % or 87 % | 92 % or 42 % |
-| cropped to 95 % on all sides, JPEG 85 | 84 % | 52 % |
+| cropped to a random 80 to 95 % at a random position | 97 % | 91 % |
+| cropped to 1:1, 4:5, 16:9 or 9:16 | 99 % | 88 % |
+| cropped to 1:1 (4:5 for square images) and downscaled to 1080 px, without or with JPEG 85 | 97 % or 88 % | 92 % or 43 % |
+| cropped to 95 % on all sides, JPEG 85 | 86 % | 53 % |
 | cropped to 95 % on all sides and downscaled to 50 % | 96 % | 29 % |
 
-Crops are found by the crop search (z ≥ 8), which only runs for images that the model scores at 50 % or more; this costs 1 to 12 percentage points. Without the crop search, none of them is detected. Crops on all sides of downscaled images are only found where the result happens to match a known output size, as for the 2048 × 2048 images at 50 %.
+Crops are found by the crop search (z ≥ 8), which only runs for images that the model scores at 50 % or more; this costs up to 10 percentage points. Without the crop search, none of them is detected. Crops on all sides of downscaled images are only found where the result happens to match a known output size, as for the 2048 × 2048 images at 50 %.
 
 Images that are not part of the templates:
 
@@ -103,11 +103,11 @@ Images that are not part of the templates:
 | Imagen 4 from OpenFake (391) | 13 % | 1 % | 5 % | 1 % |
 | Imagen 3 from OpenFake (100) | 0 % | 0 % | 0 % | 0 % |
 
-Of 222 Gemini, Imagen and Veo images collected on the web whose origin is documented by a Google C2PA manifest, IPTC metadata or a Google page, 43 % are detected as found and 45 % in browser screenshots (shown at up to 1000 × 700 CSS pixels, device pixel ratio 2 or 3). Re-encoded the way typical services do, 19 % are detected at 2048 px with JPEG 85, 9 % at 1024 px as JPEG like on Google's image servers, 7 % at 1280 px with JPEG 75 and as WebP 80, 6 % at 1080 px with JPEG 80, 1 % at 1000 px as WebP, and none of the 93 WebP versions that Google's blogs serve. Many of these images had already been cropped, downscaled or recompressed when they were posted. Of 223 of these images, the crop search raises the rate as found from 43 to 46 %, cropped to 90 % on all sides from 0 to 25 % and cropped to a square from 3 to 39 %.
+Of 222 Gemini, Imagen and Veo images collected on the web whose origin is documented by a Google C2PA manifest, IPTC metadata or a Google page, 43 % are detected as found and 45 % in browser screenshots (shown at up to 1000 × 700 CSS pixels, device pixel ratio 2 or 3). Re-encoded the way typical services do, 19 % are detected at 2048 px with JPEG 85, 9 % at 1024 px as JPEG like on Google's image servers, 7 % at 1280 px with JPEG 75 and as WebP 80, 6 % at 1080 px with JPEG 80, 1 % at 1000 px as WebP, and none of the 93 WebP versions that Google's blogs serve. Many of these images had already been cropped, downscaled or recompressed when they were posted. Of 223 of these images, the crop search raises the rate as found from 43 to 46 %, cropped to 90 % on all sides from 0 to 24 % and cropped to a square from 3 to 38 %.
 
 False positives (every image as delivered, as WebP 80 and downscaled to 1280 or 800 px with JPEG 80 or 75): 1 of 49,621 real photos, paintings, charts and YouTube thumbnails (ImageNet, DOCCI, COCO, LAION, Pexels, OpenFake's Reddit photos, ChartQA, WikiArt, the Metropolitan Museum, the Cleveland Museum of Art and Google Arts & Culture), a 3302 × 4922 photo from a photography subreddit (z 48), possibly edited with Gemini. Otherwise the highest z-score of a real image was 7.7 (a 1080 × 1350 Reddit photo) and then 4.5, the standard deviation 1.0. Of 25,610 images from other generators (OpenFake's generators, GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7, Sora 2, Seedream 5, Illustrious and others), 3 trigger because they reproduce the brightness part of the Google pattern: 2 of 19 ERNIE-Image images (z 21) and 1 of 7 images from the FLUX fine-tune twbabeflux in OpenFake (z 10.5). No other image from another generator reached more than z 5.7. Three more images that OpenFake attributes to GPT-Image 1.5 triggered; they have exactly the resolution of Nano Banana Pro outputs (2752 × 1536 and 1696 × 2528) and are probably Gemini images.
 
-The crop search, run on every image regardless of the model, flags none of 49,614 of these real images, each as delivered and at 1280 px with JPEG 80; the highest z-score was 7.1 (7,252 of these versions pass the model gate, highest 6.8). Of 4,277 images from other generators, it flags two in OpenFake: one attributed to Seedream 5.0 (900 × 1600, z 10.5) and the 1280 px version of one attributed to GPT-Image 1.5 (z 9.2). Both have the proportions of a Nano Banana Pro output cropped to 9:16 or 2:3 and are probably Gemini images as well. Fitted to the tail of the highest z-score per image (Gumbel and a generalized Pareto distribution above the 99th percentile, shifted to the slightly higher scores of images that pass the gate), the chance that a real image that the crop search checks reaches z 8 is about 5 in 10 million for the Google templates (at most 8 in 10 million, 95 % bootstrap bound).
+The crop search, run on every image regardless of the model, flags none of 49,614 of these real images, each as delivered and at 1280 px with JPEG 80; the highest z-score was 7.1 (8,368 of these versions pass the model gate, highest 6.9). Of 4,277 images from other generators, it flags two in OpenFake: one attributed to Seedream 5.0 (900 × 1600, z 10.5) and the 1280 px version of one attributed to GPT-Image 1.5 (z 9.2). Both have the proportions of a Nano Banana Pro output cropped to 9:16 or 2:3 and are probably Gemini images as well. Fitted to the tail of the highest z-score per image (Gumbel and a generalized Pareto distribution above the 99th percentile, shifted to the slightly higher scores of images that pass the gate), the chance that a real image that the crop search checks reaches z 8 is about 5 in 10 million for the Google templates (at most 8 in 10 million, 95 % bootstrap bound).
 
 ### OpenAI
 
@@ -124,7 +124,7 @@ Measured with `tools/synthid/crossval.py`: the templates are built from two thir
 | 8 further sizes (258) | 98 % | 97 % / 83 % | 98 % / 98 % | 85 % | 96 % | 46 % |
 | all 14 sizes (618) | 98 % | 96 % / 81 % | 98 % / 98 % | 82 % | 96 % | 42 % |
 
-Crops, found by the crop search (z ≥ 8, only for images that the model scores at 50 % or more): 87 % cropped to 95 % on all sides, 86 % cropped to a random 80 to 95 %, 83 % cropped to 1:1, 4:5, 16:9 or 9:16, 87 % or 81 % cropped to 1:1 or 4:5 and downscaled to 1080 px without or with JPEG 85, 82 % cropped to 95 % with JPEG 85, and none cropped to 95 % and downscaled to 50 %. Without the crop search, none of them is detected. Built without the tested output size (`--leave-size-out`), the 618 test images give the same rates: 99 % original, 95 % at 50 %, 95 % at 1280 px with JPEG 80. The pattern therefore does not depend on the output size.
+Crops, found by the crop search (z ≥ 8, only for images that the model scores at 50 % or more): 87 % cropped to 95 % on all sides, 86 % cropped to a random 80 to 95 %, 83 % cropped to 1:1, 4:5, 16:9 or 9:16, 87 % or 81 % cropped to 1:1 or 4:5 and downscaled to 1080 px without or with JPEG 85, 80 % cropped to 95 % with JPEG 85, and none cropped to 95 % and downscaled to 50 %. Without the crop search, none of them is detected. Built without the tested output size (`--leave-size-out`), the 618 test images give the same rates: 99 % original, 95 % at 50 %, 95 % at 1280 px with JPEG 80. The pattern therefore does not depend on the output size.
 
 Independent images, none of them used for the template:
 
@@ -140,7 +140,7 @@ In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](htt
 
 False positives: none of 16,221 images without an OpenAI watermark (8,016 real photos, paintings, charts and thumbnails and images from Gemini, GPT-Image 1 and 1.5, FLUX.2, Qwen-Image, Midjourney 7 and other generators, and 8,205 images from OpenFake, among them 1,281 from GPT-Image 1, 860 from DALL-E 3, 802 LAION and 698 Pexels photos). The highest z-score was 4.5, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 113 trigger, 112 of them GPT-Image 2 images from one dataset (112 of 120, mostly JPEGs at 900 × 1200); of the other three datasets 1 of 300 triggers. In OpenFake, 16 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
 
-The crop search flags none of the 49,614 real images above and 2,741 images from other generators, each as delivered and at 1280 px with JPEG 80; the highest z-score was 7.0. The same tail fit gives about 7 in 10 million per checked image at z 8 (at most 2 in 1 million).
+The crop search flags none of the 49,614 real images above and 2,741 images from other generators, each as delivered and at 1280 px with JPEG 80; the highest z-score was 7.0. The same tail fit gives about 7 in 10 million per checked image at z 8 (at most 3 in 1 million).
 
 ### Limitations
 

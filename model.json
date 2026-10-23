@@ -25,8 +25,8 @@
     "bias": 1.6906
   },
   "cascade": {
-    "band": [0.5, 0.92],
+    "band": [0.5, 0.95],
     "shortestEdges": [576, 768]
   },
-  "threshold": 0.92
+  "threshold": 0.95
 }
