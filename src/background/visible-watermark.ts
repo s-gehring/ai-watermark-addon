@@ -31,13 +31,33 @@ const MARK_THRESHOLDS: Record<keyof typeof visibleMarks.marks, number> = {
   'grok-2024': 0.8,
   'grok-aurora': 0.65,
   grok: 0.65,
+  bing: 0.7,
+  meta: 0.6,
 };
 
-type Placement = [logo: number, right: number, bottom: number];
+const DALLE_PALETTE = [
+  [255, 255, 102],
+  [66, 255, 255],
+  [81, 218, 76],
+  [255, 110, 60],
+  [60, 70, 255],
+];
+const DALLE_REFERENCE_WIDTH = 1024;
+const DALLE_CELL = [21, 20];
+const DALLE_INNER = 0.6;
+const DALLE_FACTORS = [0.96, 1, 1.04];
+const DALLE_SLACK = [0, 1, 2, 3];
+const DALLE_MIN_CELL = 3;
+const DALLE_TOLERANCE = 64;
+const DALLE_THRESHOLD = 0.6;
+
+type Anchor = 'tl' | 'tr' | 'bl' | 'br';
+type Placement = [logo: number, horizontal: number, vertical: number];
 type Box = (width: number, height: number) => Placement;
 
 interface Layout {
   template: Template;
+  anchor: Anchor;
   placements: (width: number, height: number) => Placement[];
   scales: number;
   minLogo: number;
@@ -118,6 +138,7 @@ function loadKling(): Layout[] {
     const box = KLING_BOXES[name as keyof typeof klingLogo.layouts];
     return {
       template: makeTemplate(Float64Array.from(decode(contrast)), width, height),
+      anchor: 'br',
       placements: (w, h) => [box(w, h)],
       scales: KLING_SCALES,
       minLogo: KLING_MIN_LOGO,
@@ -149,9 +170,10 @@ function loadMarks(): NonNullable<typeof markLayouts> {
     scheme: mark.scheme as WatermarkScheme,
     layout: {
       template: makeTemplate(Float64Array.from(decode(mark.contrast)), mark.width, mark.height),
+      anchor: 'anchor' in mark ? (mark.anchor as Anchor) : 'br',
       placements: 'short' in mark ? shortSidePlacements(mark.short) : scanPlacements(mark.scan),
       scales: 'short' in mark ? KLING_SCALES : 0,
-      minLogo: MARK_MIN_LOGO,
+      minLogo: 'min' in mark ? mark.min : MARK_MIN_LOGO,
     },
   }));
 }
@@ -245,19 +267,73 @@ export function geminiLogoScore(image: PixelImage): number {
   return best;
 }
 
-function layoutScore(image: PixelImage, { template, placements, scales, minLogo }: Layout): number {
+function gridOrigin(extent: number, margin: number, cells: number, scale: number, shift: number, far: boolean): number | null {
+  const start = far ? extent - margin - (cells + PAD - shift) * scale : margin - (PAD - shift) * scale;
+  const fits = far ? margin >= (PAD + shift) * scale : start >= 0;
+  return start >= 0 && fits ? start : null;
+}
+
+function rounded(value: number): number {
+  return Math.floor(value + 0.5);
+}
+
+function dalleDeviation(image: PixelImage, right: number, bottom: number, cellWidth: number, cellHeight: number): number | null {
+  const { width, height, channels, data } = image;
+  let worst = 0;
+  for (let k = 0; k < 5; k++) {
+    const left = right - (5 - k) * cellWidth;
+    const x0 = rounded(left + (cellWidth * (1 - DALLE_INNER)) / 2);
+    const x1 = Math.max(rounded(left + (cellWidth * (1 + DALLE_INNER)) / 2), x0 + 1);
+    const y0 = rounded(bottom - (cellHeight * (1 + DALLE_INNER)) / 2);
+    const y1 = Math.max(rounded(bottom - (cellHeight * (1 - DALLE_INNER)) / 2), y0 + 1);
+    if (x0 < 0 || y0 < 0 || x1 > width || y1 > height) return null;
+    const count = (x1 - x0) * (y1 - y0);
+    for (let c = 0; c < 3; c++) {
+      let sum = 0;
+      let squares = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const v = data[(y * width + x) * channels + c];
+          sum += v;
+          squares += v * v;
+        }
+      }
+      const mean = sum / count;
+      worst = Math.max(worst, Math.abs(mean - DALLE_PALETTE[k][c]), Math.sqrt(Math.max(squares / count - mean * mean, 0)));
+    }
+  }
+  return worst;
+}
+
+export function dalleBarScore(image: PixelImage): number {
+  let best = -1;
+  for (const factor of DALLE_FACTORS) {
+    const scale = (image.width / DALLE_REFERENCE_WIDTH) * factor;
+    const cellWidth = DALLE_CELL[0] * scale;
+    if (cellWidth < DALLE_MIN_CELL) continue;
+    for (const sx of DALLE_SLACK) {
+      for (const sy of DALLE_SLACK) {
+        const worst = dalleDeviation(image, image.width - sx * scale, image.height - sy * scale, cellWidth, DALLE_CELL[1] * scale);
+        if (worst !== null) best = Math.max(best, 1 - worst / DALLE_TOLERANCE);
+      }
+    }
+  }
+  return best;
+}
+
+function layoutScore(image: PixelImage, { template, anchor, placements, scales, minLogo }: Layout): number {
   const { width, height } = image;
   let best = -1;
-  for (const [logo, right, bottom] of placements(width, height)) {
+  for (const [logo, horizontal, vertical] of placements(width, height)) {
     if (logo < minLogo) continue;
     for (let e = -scales; e <= scales; e++) {
       const factor = KLING_STEP ** e;
       const scale = (logo * factor) / template.columns;
       for (const dy of KLING_OFFSETS) {
         for (const dx of KLING_OFFSETS) {
-          const x0 = width - right * factor - (template.columns + PAD - dx) * scale;
-          const y0 = height - bottom * factor - (template.rows + PAD - dy) * scale;
-          if (x0 < 0 || y0 < 0 || right * factor < (PAD + dx) * scale || bottom * factor < (PAD + dy) * scale) continue;
+          const x0 = gridOrigin(width, horizontal * factor, template.columns, scale, dx, anchor[1] === 'r');
+          const y0 = gridOrigin(height, vertical * factor, template.rows, scale, dy, anchor[0] === 'b');
+          if (x0 === null || y0 === null) continue;
           best = Math.max(best, bestCorrelation(featureGrid(image, x0, y0, scale, template), template));
         }
       }
@@ -289,5 +365,6 @@ function visibleMark(image: PixelImage): WatermarkScheme | null {
 export function detectVisibleWatermark(image: PixelImage): WatermarkScheme | null {
   if (geminiLogoScore(image) >= GEMINI_THRESHOLD) return 'gemini-visible';
   if (klingLogoScore(image) >= KLING_THRESHOLD) return 'kling-visible';
+  if (dalleBarScore(image) >= DALLE_THRESHOLD) return 'dalle-visible';
   return visibleMark(image);
 }

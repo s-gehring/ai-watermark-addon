@@ -26,7 +26,10 @@ export type WatermarkScheme =
   | 'grok-visible'
   | 'doubao-visible'
   | 'jimeng-visible'
-  | 'qwen-visible';
+  | 'qwen-visible'
+  | 'bing-visible'
+  | 'meta-visible'
+  | 'dalle-visible';
 
 export type CheckStatus = 'clear' | 'off';
 
