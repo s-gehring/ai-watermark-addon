@@ -51,6 +51,12 @@ export async function decodeImage(blob: Blob): Promise<PixelImage> {
   }
 }
 
+export async function reencodeAsJpeg(image: PixelImage, quality: number): Promise<PixelImage> {
+  const canvas = new OffscreenCanvas(image.width, image.height);
+  canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
+  return decodeImage(await canvas.convertToBlob({ type: 'image/jpeg', quality }));
+}
+
 async function modelLogit(classifier: Classifier, model: ModelEntry, input: Float32Array): Promise<number> {
   const [width, height] = inputShape(model.input as InputSpec);
   const { session, id2label } = classifier;

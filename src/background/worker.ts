@@ -1,9 +1,10 @@
 import modelConfig from '../../model.json';
 import synthIdConfig from '../../synthid.json';
 import type { SynthIdProvider, Verdict } from '../shared/messages';
-import { decodeImage, scoreImage } from './classifier';
+import { decodeImage, reencodeAsJpeg, scoreImage } from './classifier';
 import { detectBytedanceWatermark } from './bytedance-watermark';
 import { detectInvisibleWatermark } from './invisible-watermark';
+import { isLossyWebp } from './format';
 import { detectAiMetadata } from './metadata';
 import { couldBeSourceOf, isScorable, type PixelImage } from './preprocess';
 import { TaskQueue } from './queue';
@@ -41,6 +42,8 @@ const scope = self as unknown as {
   postMessage(message: WorkerResponse): void;
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
 };
+// Firefox drops chroma subsampling from quality 0.9 on; scores only improve with 4:2:0.
+const WEBP_AS_JPEG_QUALITY = 0.89;
 const queue = new TaskQueue();
 let detectors: Promise<SynthIdDetector[]> | null = null;
 
@@ -116,7 +119,7 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   let scored: Awaited<ReturnType<typeof scoreImage>>;
   try {
-    scored = await scoreImage(image);
+    scored = await scoreImage(isLossyWebp(new Uint8Array(displayed.bytes)) ? await reencodeAsJpeg(image, WEBP_AS_JPEG_QUALITY) : image);
   } catch (error) {
     console.error('[ai-watermark] inference failed', error);
     return { ok: false, error: 'model' };
