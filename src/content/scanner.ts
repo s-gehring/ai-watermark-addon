@@ -1,9 +1,11 @@
 import { isFlagged, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
 import type { Settings } from '../shared/settings';
 import { hasBackgroundImage, imageUrlOf, isLargeEnough, largerVariantOf } from './candidates';
+import { shadowRootOf } from './dom';
 import { BadgeLayer } from './overlay';
 
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
+const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
 const DISCOVERY_CHUNK = 400;
 const MAX_ORIGINALS = 20;
 
@@ -11,6 +13,7 @@ export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
   private checkedUrl = new WeakMap<Element, string>();
   private readonly inView = new Set<Element>();
+  private readonly shadowRoots = new Set<ShadowRoot>();
   private readonly layer: BadgeLayer;
   private readonly io: IntersectionObserver;
   private readonly mo: MutationObserver;
@@ -30,12 +33,7 @@ export class Scanner {
   start(): void {
     const { showScore, showChecked, threshold } = this.settings;
     this.layer.setOptions({ showScore, showChecked, threshold });
-    this.mo.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: WATCHED_ATTRIBUTES,
-    });
+    this.mo.observe(document.documentElement, OBSERVED);
     document.addEventListener('load', this.onLoad, true);
     addEventListener('resize', this.onResize, { passive: true });
     this.discover(document.documentElement);
@@ -46,6 +44,8 @@ export class Scanner {
     this.io.disconnect();
     document.removeEventListener('load', this.onLoad, true);
     removeEventListener('resize', this.onResize);
+    for (const root of this.shadowRoots) root.removeEventListener('load', this.onLoad, true);
+    this.shadowRoots.clear();
     this.inView.clear();
     this.pendingRoots = [];
     this.layer.clear();
@@ -113,8 +113,12 @@ export class Scanner {
         const next = this.pendingRoots.pop()!;
         this.observeIfCandidate(next);
         budget--;
-        for (let child = next.lastElementChild; child; child = child.previousElementSibling) {
-          this.pendingRoots.push(child);
+        const shadow = shadowRootOf(next);
+        if (shadow) this.watchShadowRoot(shadow);
+        for (const parent of shadow ? [shadow, next] : [next]) {
+          for (let child = parent.lastElementChild; child; child = child.previousElementSibling) {
+            this.pendingRoots.push(child);
+          }
         }
       }
       if (this.pendingRoots.length) {
@@ -124,6 +128,13 @@ export class Scanner {
       }
     };
     step();
+  }
+
+  private watchShadowRoot(root: ShadowRoot): void {
+    if (this.shadowRoots.has(root)) return;
+    this.shadowRoots.add(root);
+    this.mo.observe(root, OBSERVED);
+    root.addEventListener('load', this.onLoad, true);
   }
 
   private observeIfCandidate(element: Element): void {

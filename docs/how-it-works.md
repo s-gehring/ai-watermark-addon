@@ -3,6 +3,7 @@
 ## Which images are checked
 
 - `<img>` elements and CSS background images whose shorter rendered side is at least 200 px (configurable)
+- images inside open and closed shadow roots (web components), also nested ones
 - images loaded later as well (lazy loading, infinite scroll, `srcset` changes); an image is checked only once it gets close to the visible area
 - SVGs are skipped
 
