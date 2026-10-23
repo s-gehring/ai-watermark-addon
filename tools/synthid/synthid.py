@@ -1,4 +1,5 @@
 import json
+import math
 from functools import lru_cache
 from pathlib import Path
 
@@ -85,18 +86,23 @@ def frequencies(size=SIZE):
     return ky, kx
 
 
-def usable(height, width, size=SIZE):
+def usable_axes(height, width, size=SIZE):
     ky, kx = frequencies(size)
-    rows = np.abs(ky) <= NYQUIST_MARGIN * height
-    cols = kx <= NYQUIST_MARGIN * width
+    rows = np.abs(ky[:, 0]) <= NYQUIST_MARGIN * height
+    cols = kx[0] <= NYQUIST_MARGIN * width
     for period in GRID_PERIODS:
         for j in range(1, size):
             fy, fx = j * height / period, j * width / period
             if fy <= size / 2:
-                rows &= ~(np.abs(np.abs(ky) - fy) < GRID_TOLERANCE)
+                rows &= ~(np.abs(np.abs(ky[:, 0]) - fy) < GRID_TOLERANCE)
             if fx <= size / 2:
-                cols &= ~(np.abs(kx - fx) < GRID_TOLERANCE)
-    return rows & cols
+                cols &= ~(np.abs(kx[0] - fx) < GRID_TOLERANCE)
+    return rows, cols
+
+
+def usable(height, width, size=SIZE):
+    rows, cols = usable_axes(height, width, size)
+    return rows[:, None] & cols[None, :]
 
 
 def accumulate(paths, size=SIZE, channels=(0, 1, 2), masked=False):
@@ -186,3 +192,137 @@ def load_templates(root):
         weights, phases = dequantize(raw[:count].reshape(shape), raw[count:].reshape(shape), meta["weightScale"])
         templates.append({"meta": meta, "weights": weights, "phases": phases})
     return templates
+
+
+CROP_SIZE = 512
+ASPECT_TOLERANCE = 0.002
+PROFILE_LENGTH = 4 * CROP_SIZE
+REFINE_SCORE = 4
+REFINE_STEPS = 4
+REFINE_DIVISIONS = 8
+
+
+def crop_hypotheses(width, height, sizes, min_axis, min_both, max_skew):
+    """Scale hypotheses (sy, sx, mode) for an image that may be a crop of an output of one of the sizes."""
+    seen = []
+
+    def add(sy, sx, mode):
+        if not any(abs(sy - a) < 1e-4 and abs(sx - b) < 1e-4 for a, b, _ in seen):
+            seen.append((sy, sx, mode))
+
+    ratios = []
+    for w, h in sizes:
+        if not any(a * h == b * w for a, b in ratios):
+            ratios.append((w, h))
+    for w, h in sorted(ratios, key=lambda s: s[0] / s[1]):
+        r = (width * h) / (height * w)
+        if min_axis <= r < 1 - ASPECT_TOLERANCE:
+            add(1.0, r, "x")
+        elif 1 + ASPECT_TOLERANCE < r <= 1 / min_axis:
+            add(1 / r, 1.0, "y")
+    for w, h in sizes:
+        sy, sx = height / h, width / w
+        if min_both <= min(sy, sx) and max(sy, sx) < 1 and abs(sy - sx) <= max_skew:
+            add(sy, sx, "xy")
+    return seen
+
+
+def dirichlet(d, n=CROP_SIZE):
+    small = np.abs(d) < 1e-9
+    magnitude = np.where(small, 1.0, np.sin(np.pi * d) / np.where(small, 1.0, n * np.sin(np.pi * d / n)))
+    return np.exp(1j * np.pi * d * (n - 1) / n) * magnitude
+
+
+def axis_taps(k, scale, ok, wrap, n=CROP_SIZE):
+    """Interpolation taps that read frequency k * scale of the crop spectrum, with the phase of the scale."""
+    f = k * scale
+    base = np.floor(f).astype(np.int64)
+    half = n // 2 + 1
+    index, weights, norm = [], [], np.zeros(len(k))
+    for t in range(1 if scale == 1 else 2):
+        m = base + t
+        i = m % n if wrap else np.minimum(m, half - 1)
+        good = ok[i] if wrap else (m <= half - 1) & ok[i]
+        w = np.conj(dirichlet(f - m, n)) * good
+        index.append(i)
+        weights.append(w)
+        norm += np.abs(w) ** 2
+    shift = np.exp(-1j * np.pi * (scale - 1) * k / n) / np.sqrt(np.where(norm > 0, norm, 1))
+    return index, [w * shift * (norm > 0) for w in weights], norm > 0
+
+
+def crop_coefficients(u, rows, cols, sy, sx):
+    """Template-grid coefficients of a crop that covers (sy, sx) of the original: u is the crop's unit spectrum."""
+    ky, kx = frequencies(CROP_SIZE)
+    iy, wy, vy = axis_taps(ky[:, 0], sy, rows, True)
+    ix, wx, vx = axis_taps(kx[0], sx, cols, False)
+    b = np.zeros(u.shape, np.complex128)
+    for a in range(len(iy)):
+        for c in range(len(ix)):
+            b += (wy[a][:, None] * wx[c][None, :])[None] * u[:, iy[a]][:, :, ix[c]]
+    return b, vy[:, None] & vx[None, :]
+
+
+def offset_scores(g, oy, ox):
+    ky, kx = frequencies(CROP_SIZE)
+    ey = np.exp(-2j * np.pi * np.outer(oy, ky[:, 0]))
+    ex = np.exp(-2j * np.pi * np.outer(kx[0], ox))
+    return np.real((ey @ g) @ ex)
+
+
+def best_offset(g, norm, sy, sx, mode):
+    """Highest score over all offsets of the crop that the hypothesis allows."""
+    n = CROP_SIZE
+    if mode != "xy":
+        line = np.zeros(PROFILE_LENGTH, np.complex128)
+        if mode == "x":
+            line[: n // 2 + 1] = g.sum(axis=0)
+        else:
+            line[frequencies(n)[0][:, 0].astype(np.int64) % PROFILE_LENGTH] = g.sum(axis=1)
+        profile = np.real(np.fft.fft(line)) / norm
+        j = np.arange(-2, math.ceil((1 - (sx if mode == "x" else sy)) * PROFILE_LENGTH) + 3)
+        return float(profile[j % PROFILE_LENGTH].max())
+    full = np.zeros((n, n), np.complex128)
+    full[:, : n // 2 + 1] = g
+    window = np.real(np.fft.fft2(full)) / norm
+    ry = np.arange(-1, math.ceil((1 - sy) * n) + 2)
+    rx = np.arange(-1, math.ceil((1 - sx) * n) + 2)
+    window = window[np.ix_(ry % n, rx % n)]
+    i, j = np.unravel_index(int(np.argmax(window)), window.shape)
+    if window[i, j] < REFINE_SCORE:
+        return float(window[i, j])
+    steps = np.arange(-REFINE_STEPS, REFINE_STEPS + 1) / REFINE_DIVISIONS
+    return float(offset_scores(g, (ry[i] + steps) / n, (rx[j] + steps) / n).max() / norm)
+
+
+def crop_scores(u, rows, cols, templates, hypothesis):
+    """z per template (weights, phases) for one hypothesis, maximized over the offsets."""
+    sy, sx, mode = hypothesis
+    channels = [c for c in range(3) if any(w[c].any() for w, _ in templates)]
+    b, valid = crop_coefficients(u[channels], rows, cols, sy, sx)
+    out = []
+    for weights, phases in templates:
+        w = weights[channels]
+        g = (w * np.exp(-1j * phases[channels]) * b).sum(axis=0)
+        energy = float((w**2 * valid[None]).sum())
+        out.append(best_offset(g, math.sqrt(energy / 2), sy, sx, mode) if energy > 0 else 0.0)
+    return out
+
+
+def crop_search(rgb, templates, config):
+    """Highest z per provider over the crop hypotheses (templates from load_templates, config from synthid.json)."""
+    height, width, _ = rgb.shape
+    if min(height, width) < MIN_SIDE:
+        return {}
+    u = None
+    rows, cols = usable_axes(height, width, CROP_SIZE)
+    scores = {}
+    for provider, sizes in config["sizes"].items():
+        group = [(t["weights"], t["phases"]) for t in templates if t["meta"].get("cropSearch") and t["meta"]["provider"] == provider]
+        if not group:
+            continue
+        if u is None:
+            u = unit_spectrum(rgb, CROP_SIZE)
+        hypotheses = crop_hypotheses(width, height, sizes, config["minAxis"], config["minBoth"], config["maxSkew"])
+        scores[provider] = max((z for h in hypotheses for z in crop_scores(u, rows, cols, group, h)), default=-np.inf)
+    return scores

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cropHypotheses,
+  cropSearchScores,
   detectSynthId,
   fft,
+  searchCroppedSynthId,
+  type CropSearchConfig,
   localContrast,
   resampledPlanes,
   rfft2,
@@ -157,5 +161,62 @@ describe('detectSynthId', () => {
 
   it('finds nothing in images without the pattern', () => {
     expect(detectSynthId(carrierImage(384, 256, 0, 40), [detector('openai', 64), detector('google', 128)])).toBeNull();
+  });
+});
+
+describe('crop search', () => {
+  const limits = { minAxis: 0.3, minBoth: 0.75, maxSkew: 0.02 };
+
+  it('derives scale hypotheses from the output sizes', () => {
+    expect(cropHypotheses(768, 768, [[1408, 768], [1024, 1024]], limits)).toEqual([
+      { sy: 1, sx: 768 / 1408, mode: 'x' },
+      { sy: 0.75, sx: 0.75, mode: 'xy' },
+    ]);
+    expect(cropHypotheses(973, 973, [[1024, 1024]], limits)).toEqual([{ sy: 973 / 1024, sx: 973 / 1024, mode: 'xy' }]);
+    expect(cropHypotheses(1024, 1024, [[1024, 1024]], limits)).toEqual([]);
+    expect(cropHypotheses(900, 1000, [[1024, 1024]], limits)).toEqual([{ sy: 1, sx: 0.9, mode: 'x' }]);
+  });
+
+  it.each([
+    [300, 250, 3.325327784293236],
+    [200, 300, 3.617012283024607],
+    [390, 290, 3.251783138379988],
+    [304, 247, 3.2874127584728967],
+  ])('matches the Python reference (image %ix%i)', (width, height, expected) => {
+    const config: CropSearchConfig = { ...limits, threshold: 8, sizes: { google: [[400, 300], [300, 400], [320, 260]] } };
+    const detector: SynthIdDetector = { ...arithmeticTemplate(512), provider: 'google', threshold: 10, cropSearch: true };
+    expect(cropSearchScores(patternedImage(width, height), [detector], config).google).toBeCloseTo(expected, 4);
+  });
+
+  const original = carrierImage(384, 256, 2, 40);
+  const detector: SynthIdDetector = { ...templateFrom(carrierImage(384, 256, 2, 0), 512), provider: 'openai', threshold: 5, cropSearch: true };
+  const config: CropSearchConfig = { ...limits, threshold: 5, sizes: { openai: [[384, 256]] } };
+  const crop = (image: PixelImage, left: number, top: number, width: number, height: number): PixelImage => {
+    const data = new Float64Array(width * height * 3);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        for (let c = 0; c < 3; c++) data[(y * width + x) * 3 + c] = image.data[((y + top) * image.width + x + left) * 3 + c];
+      }
+    }
+    return { width, height, channels: 3, data };
+  };
+
+  it.each([
+    ['one full axis', 64, 0, 256, 256],
+    ['a uniform border', 10, 7, 365, 243],
+  ])('finds the pattern in a crop with %s that the regular check misses', (_, left, top, width, height) => {
+    const cropped = crop(original, left, top, width, height);
+    expect(detectSynthId(cropped, [detector])).toBeNull();
+    expect(searchCroppedSynthId(cropped, [detector], config)).toBe('openai');
+  });
+
+  it('finds nothing in crops without the pattern', () => {
+    const cropped = crop(carrierImage(384, 256, 0, 40), 64, 0, 256, 256);
+    expect(searchCroppedSynthId(cropped, [detector], config)).toBeNull();
+  });
+
+  it('only uses templates marked for the crop search', () => {
+    const cropped = crop(original, 64, 0, 256, 256);
+    expect(searchCroppedSynthId(cropped, [{ ...detector, cropSearch: false }], config)).toBeNull();
   });
 });

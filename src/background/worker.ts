@@ -1,12 +1,20 @@
+import modelConfig from '../../model.json';
 import synthIdConfig from '../../synthid.json';
-import type { Verdict } from '../shared/messages';
+import type { SynthIdProvider, Verdict } from '../shared/messages';
 import { decodeImage, scoreImage } from './classifier';
 import { detectBytedanceWatermark } from './bytedance-watermark';
 import { detectInvisibleWatermark } from './invisible-watermark';
 import { detectAiMetadata } from './metadata';
 import { couldBeSourceOf, isScorable, type PixelImage } from './preprocess';
 import { TaskQueue } from './queue';
-import { detectSynthId, type SynthIdDetector, type TemplateProvider } from './synthid';
+import {
+  detectSynthId,
+  searchCroppedSynthId,
+  type CropSearchConfig,
+  type SpectrumCache,
+  type SynthIdDetector,
+  type TemplateProvider,
+} from './synthid';
 import { detectVisibleWatermark } from './visible-watermark';
 
 export interface Checks {
@@ -45,6 +53,7 @@ async function loadDetector(entry: (typeof synthIdConfig.templates)[number]): Pr
     provider: entry.provider as TemplateProvider,
     threshold: entry.threshold,
     prescreen: entry.prescreen,
+    cropSearch: entry.cropSearch,
     size: entry.size,
     weightScale: entry.weightScale,
     minChannelStd: entry.minChannelStd,
@@ -61,11 +70,20 @@ function loadDetectors(): Promise<SynthIdDetector[]> {
   return detectors;
 }
 
-async function findSynthId(image: PixelImage): Promise<TemplateProvider | null> {
+async function findSynthId(image: PixelImage, spectra: SpectrumCache): Promise<TemplateProvider | null> {
   try {
-    return detectSynthId(image, await loadDetectors());
+    return detectSynthId(image, await loadDetectors(), spectra);
   } catch (error) {
     console.error('[ai-watermark] SynthID check failed', error);
+    return null;
+  }
+}
+
+async function findCroppedSynthId(image: PixelImage, spectra: SpectrumCache): Promise<SynthIdProvider | null> {
+  try {
+    return searchCroppedSynthId(image, await loadDetectors(), synthIdConfig.cropSearch as CropSearchConfig, spectra);
+  } catch (error) {
+    console.error('[ai-watermark] SynthID crop search failed', error);
     return null;
   }
 }
@@ -87,7 +105,8 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
   if (reason) return { ok: true, score: 1, source: 'metadata', reason };
   const metadata = checks.checkMetadata ? 'clear' : 'off';
   const target = source ?? image;
-  const provider = checks.checkWatermark ? await findSynthId(target) : null;
+  const spectra: SpectrumCache = new Map();
+  const provider = checks.checkWatermark ? await findSynthId(target, spectra) : null;
   if (provider === 'amazon') return { ok: true, score: 1, source: 'watermark', scheme: 'nova-canvas', metadata };
   if (provider) return { ok: true, score: 1, source: 'synthid', provider, metadata };
   const scheme = checks.checkWatermark
@@ -95,13 +114,17 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
     : null;
   if (scheme) return { ok: true, score: 1, source: 'watermark', scheme, metadata };
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
+  let scored: Awaited<ReturnType<typeof scoreImage>>;
   try {
-    const watermark = checks.checkWatermark ? 'clear' : 'off';
-    return { ok: true, ...(await scoreImage(image)), source: 'model', metadata, watermark };
+    scored = await scoreImage(image);
   } catch (error) {
     console.error('[ai-watermark] inference failed', error);
     return { ok: false, error: 'model' };
   }
+  if (!checks.checkWatermark) return { ok: true, ...scored, source: 'model', metadata, watermark: 'off' };
+  const cropped = scored.score >= modelConfig.cascade.band[0] ? await findCroppedSynthId(target, spectra) : null;
+  if (cropped) return { ok: true, score: 1, source: 'synthid', provider: cropped, metadata };
+  return { ok: true, ...scored, source: 'model', metadata, watermark: 'clear' };
 }
 
 scope.onmessage = ({ data }) => {

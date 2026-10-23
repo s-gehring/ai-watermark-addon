@@ -34,7 +34,7 @@ ROBUST_BAND = 32
 ROBUST_CONDITIONS = ("WebP 80", "web 1280 px, JPEG 80", "web 800 px, JPEG 75")
 OPENAI = json.loads((Path(__file__).parent / "openai_sources.json").read_text())
 OPENAI_TEMPLATES = [
-    {"file": "openai-512.bin", "size": 512},
+    {"file": "openai-512.bin", "size": 512, "cropSearch": True},
     {"file": "openai-1024.bin", "size": 1024, "prescreen": True},
 ]
 OPENAI_CHANNELS = (0,)
@@ -167,13 +167,14 @@ def main():
     parser.add_argument("providers", nargs="*", choices=["google", "openai", "amazon"], default=["google", "openai", "amazon"])
     args = parser.parse_args()
 
-    existing = {t["file"]: t for t in json.loads(META.read_text())["templates"]} if META.exists() else {}
+    meta = json.loads(META.read_text()) if META.exists() else {}
+    existing = {t["file"]: t for t in meta.get("templates", [])}
     templates = dict(existing)
     if "google" in args.providers:
         images = google_images()
-        entry = {"provider": "google", "file": "google.bin", "size": GOOGLE_SIZE, "threshold": GOOGLE_THRESHOLD}
+        entry = {"provider": "google", "file": "google.bin", "size": GOOGLE_SIZE, "threshold": GOOGLE_THRESHOLD, "cropSearch": True}
         templates[entry["file"]] = build(entry, GOOGLE, images, existing)
-        entry = {"provider": "google", "file": "google-robust.bin", "size": GOOGLE_SIZE, "threshold": GOOGLE_THRESHOLD}
+        entry = {"provider": "google", "file": "google-robust.bin", "size": GOOGLE_SIZE, "threshold": GOOGLE_THRESHOLD, "cropSearch": True}
         templates[entry["file"]] = build(entry, GOOGLE, images, existing, weighting=survival)
     if "openai" in args.providers:
         templates = {file: t for file, t in templates.items() if t["provider"] != "openai"}
@@ -203,7 +204,7 @@ def main():
         )
     order = ["google.bin", "google-robust.bin", *(t["file"] for t in OPENAI_TEMPLATES), "amazon-nova-canvas.bin"]
     ordered = sorted(templates.values(), key=lambda t: order.index(t["file"]) if t["file"] in order else len(order))
-    META.write_text(json.dumps({"templates": ordered}, indent=2) + "\n")
+    META.write_text(json.dumps({**meta, "templates": ordered}, indent=2) + "\n")
 
 
 if __name__ == "__main__":
