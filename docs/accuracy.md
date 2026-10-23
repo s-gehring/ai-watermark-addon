@@ -86,7 +86,14 @@ Measured with `tools/synthid/crossval.py google --transforms`: both templates ar
 | downscaled to 1280 px, JPEG 80 | 88 % | 27 % |
 | downscaled to 800 px, JPEG 75 | 1 % | 0 % |
 | downscaled to 60 % with bilinear filtering, like a screenshot | 100 % | 96 % |
-| cropped to 95 % on all sides | 0 % | 0 % |
+| cropped to 95 % on all sides | 96 % | 92 % |
+| cropped to a random 80 to 95 % at a random position | 96 % | 91 % |
+| cropped to 1:1, 4:5, 16:9 or 9:16 | 99 % | 89 % |
+| cropped to 1:1 (4:5 for square images) and downscaled to 1080 px, without or with JPEG 85 | 97 % or 87 % | 92 % or 42 % |
+| cropped to 95 % on all sides, JPEG 85 | 84 % | 52 % |
+| cropped to 95 % on all sides and downscaled to 50 % | 96 % | 29 % |
+
+Crops are found by the crop search (z ≥ 8), which only runs for images that the model scores at 50 % or more; this costs 1 to 12 percentage points. Without the crop search, none of them is detected. Crops on all sides of downscaled images are only found where the result happens to match a known output size, as for the 2048 × 2048 images at 50 %.
 
 Images that are not part of the templates:
 
@@ -96,9 +103,11 @@ Images that are not part of the templates:
 | Imagen 4 from OpenFake (391) | 13 % | 1 % | 5 % | 1 % |
 | Imagen 3 from OpenFake (100) | 0 % | 0 % | 0 % | 0 % |
 
-Of 222 Gemini, Imagen and Veo images collected on the web whose origin is documented by a Google C2PA manifest, IPTC metadata or a Google page, 43 % are detected as found and 45 % in browser screenshots (shown at up to 1000 × 700 CSS pixels, device pixel ratio 2 or 3). Re-encoded the way typical services do, 19 % are detected at 2048 px with JPEG 85, 9 % at 1024 px as JPEG like on Google's image servers, 7 % at 1280 px with JPEG 75 and as WebP 80, 6 % at 1080 px with JPEG 80, 1 % at 1000 px as WebP, and none of the 93 WebP versions that Google's blogs serve. Many of these images had already been cropped, downscaled or recompressed when they were posted.
+Of 222 Gemini, Imagen and Veo images collected on the web whose origin is documented by a Google C2PA manifest, IPTC metadata or a Google page, 43 % are detected as found and 45 % in browser screenshots (shown at up to 1000 × 700 CSS pixels, device pixel ratio 2 or 3). Re-encoded the way typical services do, 19 % are detected at 2048 px with JPEG 85, 9 % at 1024 px as JPEG like on Google's image servers, 7 % at 1280 px with JPEG 75 and as WebP 80, 6 % at 1080 px with JPEG 80, 1 % at 1000 px as WebP, and none of the 93 WebP versions that Google's blogs serve. Many of these images had already been cropped, downscaled or recompressed when they were posted. Of 223 of these images, the crop search raises the rate as found from 43 to 46 %, cropped to 90 % on all sides from 0 to 25 % and cropped to a square from 3 to 39 %.
 
 False positives (every image as delivered, as WebP 80 and downscaled to 1280 or 800 px with JPEG 80 or 75): 1 of 49,621 real photos, paintings, charts and YouTube thumbnails (ImageNet, DOCCI, COCO, LAION, Pexels, OpenFake's Reddit photos, ChartQA, WikiArt, the Metropolitan Museum, the Cleveland Museum of Art and Google Arts & Culture), a 3302 × 4922 photo from a photography subreddit (z 48), possibly edited with Gemini. Otherwise the highest z-score of a real image was 7.7 (a 1080 × 1350 Reddit photo) and then 4.5, the standard deviation 1.0. Of 25,610 images from other generators (OpenFake's generators, GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7, Sora 2, Seedream 5, Illustrious and others), 3 trigger because they reproduce the brightness part of the Google pattern: 2 of 19 ERNIE-Image images (z 21) and 1 of 7 images from the FLUX fine-tune twbabeflux in OpenFake (z 10.5). No other image from another generator reached more than z 5.7. Three more images that OpenFake attributes to GPT-Image 1.5 triggered; they have exactly the resolution of Nano Banana Pro outputs (2752 × 1536 and 1696 × 2528) and are probably Gemini images.
+
+The crop search flags none of 28,414 real images of the same kinds, each as delivered and at 1280 px with JPEG 80 (4,429 of these versions pass the model gate); the highest z-score was 6.8. Of 4,277 images from other generators, it flags two in OpenFake: one attributed to Seedream 5.0 (900 × 1600, z 10.5) and the 1280 px version of one attributed to GPT-Image 1.5 (z 9.2). Both have the proportions of a Nano Banana Pro output cropped to 9:16 or 2:3 and are probably Gemini images as well.
 
 ### OpenAI
 
@@ -115,7 +124,7 @@ Measured with `tools/synthid/crossval.py`: the templates are built from two thir
 | 8 further sizes (258) | 98 % | 97 % / 83 % | 98 % / 98 % | 85 % | 96 % | 46 % |
 | all 14 sizes (618) | 98 % | 96 % / 81 % | 98 % / 98 % | 82 % | 96 % | 42 % |
 
-Cropped to 95 % on all sizes: 0 %. Built without the tested output size (`--leave-size-out`), the 618 test images give the same rates: 99 % original, 95 % at 50 %, 95 % at 1280 px with JPEG 80. The pattern therefore does not depend on the output size.
+Crops, found by the crop search (z ≥ 8, only for images that the model scores at 50 % or more): 87 % cropped to 95 % on all sides, 86 % cropped to a random 80 to 95 %, 83 % cropped to 1:1, 4:5, 16:9 or 9:16, 87 % or 81 % cropped to 1:1 or 4:5 and downscaled to 1080 px without or with JPEG 85, 82 % cropped to 95 % with JPEG 85, and none cropped to 95 % and downscaled to 50 %. Without the crop search, none of them is detected. Built without the tested output size (`--leave-size-out`), the 618 test images give the same rates: 99 % original, 95 % at 50 %, 95 % at 1280 px with JPEG 80. The pattern therefore does not depend on the output size.
 
 Independent images, none of them used for the template:
 
@@ -131,11 +140,13 @@ In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](htt
 
 False positives: none of 16,221 images without an OpenAI watermark (8,016 real photos, paintings, charts and thumbnails and images from Gemini, GPT-Image 1 and 1.5, FLUX.2, Qwen-Image, Midjourney 7 and other generators, and 8,205 images from OpenFake, among them 1,281 from GPT-Image 1, 860 from DALL-E 3, 802 LAION and 698 Pexels photos). The highest z-score was 4.5, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 113 trigger, 112 of them GPT-Image 2 images from one dataset (112 of 120, mostly JPEGs at 900 × 1200); of the other three datasets 1 of 300 triggers. In OpenFake, 16 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
 
+The crop search flags none of 28,415 real images and 2,741 images from other generators, each as delivered and at 1280 px with JPEG 80; the highest z-score was 7.0.
+
 ### Limitations
 
 - This is a reconstruction from public sample images, not Google's decoder. Only images from Gemini 3 Pro Image (Nano Banana Pro), Gemini 3.1 Flash Image and GPT-Image 2 (ChatGPT and API) are tested, other models are unverified.
 - OpenAI images are found less reliably after WebP compression (82 %), after downscaling to 33 % (81 %) and at 800 px with JPEG 75 (42 %). The OpenAI template comes from one source, and no image at 1024 × 1024 with a verified watermark is known, so that size is untested. OpenAI images from before May 2026 carry no SynthID.
-- Cropping destroys the signal completely. Gemini images that are downscaled to 800 px and saved as JPEG are no longer detected, and Nano Banana Pro images are mostly lost already as WebP or at 1280 px with JPEG 80. Images from social networks are therefore often not detected; then the model takes over.
+- Crops are only found if they come from a known output size of Gemini or ChatGPT, along one axis at any scale or on all sides at the original scale (down to 75 % per side), and only if the model scores the image at 50 % or more. Crops of Imagen, Veo and older Gemini images are not found, and Nano Banana Pro crops saved as JPEG 85 are found only about half the time. Gemini images that are downscaled to 800 px and saved as JPEG are no longer detected, and Nano Banana Pro images are mostly lost already as WebP or at 1280 px with JPEG 80. Images from social networks are therefore often not detected; then the model takes over.
 - Google's blogs serve WebP renditions, which erase the pattern. The add-on loads the original from `original_images/` instead, which works only where the rendition's file name is not shortened. Of 182 images on 15 posts about Nano Banana, Nano Banana Pro and Imagen 4, it finds the original of 91; SynthID or the C2PA metadata flag 31 images (2 without this), and 87 are flagged in total (80 without).
 - Real photos edited with Gemini carry SynthID as well and are flagged, those edited with ChatGPT probably too.
 - Some images from ERNIE-Image and FLUX fine-tunes reproduce the brightness part of Google's pattern and are then reported as Google SynthID.
