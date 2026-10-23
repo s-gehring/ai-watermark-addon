@@ -81,6 +81,43 @@ describe('detectAiMetadata', () => {
     expect(detectAiMetadata(jpegWith('<dc:description>AIGC art, label: "1st place"</dc:description>'))).toBeNull();
   });
 
+  it('detects ComfyUI graphs with custom samplers and workflow-only chunks', () => {
+    const prompt = '{"7": {"inputs": {"seed": 1}, "class_type": "ClownsharKSampler_Beta", "_meta": {"title": "Sampler"}}}';
+    expect(detectAiMetadata(pngWith('prompt', prompt))).toBe('comfyui');
+    expect(detectAiMetadata(pngWith('prompt', '{"4": {"inputs": {}, "class_type": "UNETLoader"}}'))).toBe('comfyui');
+    const workflow = '{"id": "b8437c87", "revision": 0, "last_node_id": 558, "last_link_id": 1069, "nodes": []}';
+    expect(detectAiMetadata(pngWith('workflow', workflow))).toBe('comfyui');
+  });
+
+  it('detects ComfyUI graphs in UTF-16 EXIF user comments', () => {
+    const graph = Buffer.from('{"23": {"class_type": "KSampler", "inputs": {}}}', 'utf16le').toString('latin1');
+    expect(detectAiMetadata(jpegWith(`Exif\x00\x00UNICODE\x00${graph}`))).toBe('comfyui');
+  });
+
+  it('does not treat other JSON with a class_type key as a ComfyUI graph', () => {
+    expect(detectAiMetadata(pngWith('Comment', '{"class_type": "Invoice", "inputs": {}}'))).toBeNull();
+    expect(detectAiMetadata(pngWith('Comment', '{"last_node_id": 3}'))).toBeNull();
+  });
+
+  it('detects the EXIF artist written by the Civitai generator', () => {
+    const uuid = '2d569de9-2123-456b-832c-83d04103880a';
+    const exif = `Exif\x00\x00II*\x00\x08\x00\x00\x00\x02\x00\x31\x01\x02\x00\x25\x00\x00\x00\x26\x00\x00\x00\x3b\x01\x02\x00\x03\x00\x00\x00ai\x00\x00\x00\x00\x00\x00${uuid}\x00`;
+    expect(detectAiMetadata(jpegWith(exif))).toBe('civitai');
+  });
+
+  it('does not treat other artists or the word "ai" in captions as the Civitai marker', () => {
+    const artist = (name: string) => `Exif\x00\x00II*\x00\x08\x00\x00\x00\x01\x00\x3b\x01\x02\x00${String.fromCharCode(name.length + 1)}\x00\x00\x00${name}\x00\x00\x00\x00\x00`;
+    expect(detectAiMetadata(jpegWith(artist('aiden')))).toBeNull();
+    expect(detectAiMetadata(jpegWith(artist('Maist')))).toBeNull();
+    expect(detectAiMetadata(jpegWith('<dc:creator>ai</dc:creator>'))).toBeNull();
+  });
+
+  it('detects the EXIF software written by Reve', () => {
+    const exif = 'Exif\x00\x00II*\x00\x08\x00\x00\x00\x01\x00\x31\x01\x02\x00\x09\x00\x00\x00\x1a\x00\x00\x00\x00\x00\x00\x00Reve.art\x00';
+    expect(detectAiMetadata(jpegWith(exif))).toBe('reve');
+    expect(detectAiMetadata(jpegWith('<dc:description>Made after reading Reve.art</dc:description>'))).toBeNull();
+  });
+
   it('does not treat ordinary prose about sampling as generator parameters', () => {
     expect(detectAiMetadata(pngWith('Description', 'Steps to take when sampling soil'))).toBeNull();
   });

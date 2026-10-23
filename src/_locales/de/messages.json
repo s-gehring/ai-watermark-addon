@@ -15,6 +15,8 @@
   "reason_grok": { "message": "Laut Bild-Metadaten mit Grok (xAI) erstellt." },
   "reason_ideogram": { "message": "Laut Bild-Metadaten mit Ideogram erstellt." },
   "reason_aigc_label": { "message": "Laut Bild-Metadaten AI-generiert (chinesische Kennzeichnungspflicht, GB 45438-2025)." },
+  "reason_civitai": { "message": "Laut Bild-Metadaten mit Civitai erstellt." },
+  "reason_reve": { "message": "Laut Bild-Metadaten mit Reve erstellt." },
   "popupFlagged": { "message": "AI-Bilder auf dieser Seite" },
   "popupInactive": { "message": "Auf dieser Seite nicht aktiv." },
   "popupUnavailable": { "message": "Diese Seite kann nicht geprüft werden." },
