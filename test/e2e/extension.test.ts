@@ -124,6 +124,30 @@ const PAGE = `<!doctype html>
   </script>
 </body></html>`;
 
+const SHADOW_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><style>.host { display: block; width: 320px; height: 240px; }</style></head><body>
+  <div id="open" class="host"></div>
+  <div id="closed" class="host"></div>
+  <div id="nested" class="host"></div>
+  <div id="late" class="host"></div>
+  <div id="declarative" class="host"><template shadowrootmode="open"><img src="/ai.jpg?declarative" style="display:block;width:320px;height:240px"></template></div>
+  <script>
+    const picture = (src) => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.style.cssText = 'display:block;width:320px;height:240px';
+      return img;
+    };
+    document.getElementById('open').attachShadow({ mode: 'open' }).append(picture('/ai.jpg?open'));
+    document.getElementById('closed').attachShadow({ mode: 'closed' }).append(picture('/ai.jpg?closed'));
+    const inner = document.createElement('div');
+    inner.attachShadow({ mode: 'closed' }).append(picture('/ai.jpg?nested'));
+    document.getElementById('nested').attachShadow({ mode: 'open' }).append(inner);
+    const late = document.getElementById('late').attachShadow({ mode: 'open' });
+    setTimeout(() => late.append(picture('/ai.jpg?late')), 800);
+  </script>
+</body></html>`;
+
 const STRICT_PAGE = `<!doctype html>
 <html><head><meta charset="utf-8"><style>.box { display: block; width: 320px; height: 240px; }</style></head><body>
   <img id="blob" class="box">
@@ -166,6 +190,7 @@ beforeAll(async () => {
           'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'",
         })
         .end(STRICT_PAGE);
+    else if (path === '/shadow') res.writeHead(200, { 'content-type': 'text/html' }).end(SHADOW_PAGE);
     else if (path === '/variants') res.writeHead(200, { 'content-type': 'text/html' }).end(variantsPage(origin.replace('127.0.0.1', 'localhost')));
     else if (path === '/variant.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
     else if (path === '/variant-large.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(variantLarge);
@@ -448,6 +473,14 @@ describe('background', () => {
 
   it('reads a SynthID declaration from the C2PA manifest', async () => {
     expect(await classify('/synthid-c2pa.png')).toEqual({ ok: true, score: 1, source: 'metadata', reason: 'synthid' });
+  }, 60_000);
+});
+
+describe('page that renders images inside shadow roots', () => {
+  it('marks images in open, closed, nested, declarative and late shadow roots', async () => {
+    await driver.get(`${origin}/shadow`);
+    const badges = await waitForBadges({ open: ['ai'], closed: ['ai'], nested: ['ai'], late: ['ai'], declarative: ['ai'] });
+    for (const owner of ['open', 'closed', 'nested', 'late', 'declarative']) expect(kindOf(badges, owner)).toBe('ai');
   }, 60_000);
 });
 
