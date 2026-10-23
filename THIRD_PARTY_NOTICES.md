@@ -40,6 +40,7 @@ Fine-tuning data (not shipped):
 
 The files in [`src/background/synthid-templates/`](src/background/synthid-templates/) contain spectral phases and weights averaged over many watermarked images. They contain no images and no image can be reconstructed from them. Sources, revisions and image counts are recorded in [`synthid.json`](synthid.json).
 
+- [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) by Mark Adams. Curation licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the dataset states that the images themselves carry no copyright. Changes: images reduced to averaged FFT phases.
 - [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection), MIT License, files pinned in [`tools/synthid/openai_sources.json`](tools/synthid/openai_sources.json)
 - [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid), no license stated
 - Amazon Nova Canvas images from 10 GitHub repositories, pinned to the commits in [`tools/synthid/amazon_sources.json`](tools/synthid/amazon_sources.json): aws-samples/amazon-nova-samples, aws-samples/sample-amazon-nova-prompt-examples, aws-samples/sample-devops-agent-demo, camila-hinojosa-anez/practice-speaking-with-sonic and niravdd/ArtSmoker (MIT-0), baochen10luo/stagenthand (MIT), asha1-alt/AITraining-1, ExamProCo/aws-storage-genai-workshop, leegilmorecode/llm-image-assertions and stellarshenson/stellars-jupyterhub-ds (no license stated). Changes: images reduced to averaged FFT phases.

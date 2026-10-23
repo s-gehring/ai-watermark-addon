@@ -18,10 +18,10 @@ def reencode(rgb, fmt, **options):
     return synthid.load_rgb(io.BytesIO(buffer.getvalue()))
 
 
-def rescale(rgb, factor):
+def rescale(rgb, factor, resample=Image.Resampling.LANCZOS):
     image = Image.fromarray(rgb.astype(np.uint8))
     size = (round(image.width * factor), round(image.height * factor))
-    return np.asarray(image.resize(size, Image.Resampling.LANCZOS), np.float64)
+    return np.asarray(image.resize(size, resample), np.float64)
 
 
 def web(rgb, longest_side, quality):
@@ -45,8 +45,10 @@ TRANSFORMS = {
     "JPEG 90 (4:4:4)": lambda a: reencode(a, "JPEG", quality=90, subsampling=0),
     "JPEG 90 (4:2:0)": lambda a: reencode(a, "JPEG", quality=90, subsampling=2),
     "WebP 80": lambda a: reencode(a, "WEBP", quality=80),
+    "WebP 75": lambda a: reencode(a, "WEBP", quality=75),
     "web 1280 px, JPEG 80": lambda a: web(a, 1280, 80),
     "web 800 px, JPEG 75": lambda a: web(a, 800, 75),
+    "screenshot 60 %": lambda a: rescale(a, 0.6, Image.Resampling.BILINEAR),
     "crop 95 %": lambda a: crop(a, 0.95),
 }
 

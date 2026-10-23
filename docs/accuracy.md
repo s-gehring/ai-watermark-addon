@@ -75,23 +75,30 @@ Measured with a script over the 4,906 images of the model measurement and the 2,
 
 ### Google
 
-Measured with `tools/synthid/eval.py` on [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0, images from September 2026, `tools/synthid/fetch_research.py`), same prompts for all generators. None of these images is part of the template.
+Measured with `tools/synthid/crossval.py google --transforms`: both templates are built from two thirds of the 988 template images and tested on the remaining third, in turn for each third (z ≥ 10).
 
-| Gemini 3.1 Flash Image (200 JPEGs, 2048 × 2048 as delivered by Gemini) | detected |
-|---|---|
-| as delivered | 100 % |
-| downscaled to 50 % or 33 % | 100 % or 100 % |
-| re-encoded as JPEG 90, without or with chroma subsampling (4:4:4 or 4:2:0) | 100 % or 99 % |
-| re-encoded as JPEG 75 with chroma subsampling | 91 % |
-| re-encoded as WebP 80 | 0 % |
-| cropped to 95 % on all sides | 0 % |
+| | Gemini 3.1 Flash Image ([bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research), 700 JPEGs, 2048 × 2048 as delivered by Gemini) | Nano Banana Pro and Gemini 3.1 Flash Image Preview ([aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid), 288 PNGs, mostly 1408 × 768 and 2816 × 1536) |
+|---|---|---|
+| as delivered | 100 % | 99 % |
+| downscaled to 50 % or 33 % | 100 % or 100 % | 96 % or 88 % |
+| re-encoded as JPEG 90, without or with chroma subsampling (4:4:4 or 4:2:0) | 100 % or 98 % | 87 % or 70 % |
+| re-encoded as WebP 80 or 75 | 90 % or 86 % | 25 % or 14 % |
+| downscaled to 1280 px, JPEG 80 | 88 % | 27 % |
+| downscaled to 800 px, JPEG 75 | 1 % | 0 % |
+| downscaled to 60 % with bilinear filtering, like a screenshot | 100 % | 96 % |
+| cropped to 95 % on all sides | 0 % | 0 % |
 
-| Images | flagged by the Google template |
-|---|---|
-| Gemini 3.1 Flash Image, all 700 JPEGs as delivered | 699 of 700 |
-| gpt-image-2 (400), FLUX.2 (400), Qwen-Image-2.1 (700) | 0 % |
+Images that are not part of the templates:
 
-False positives (measured like `eval.py --ignore-aspect`): 1 of 4,457 real photos, paintings, charts and YouTube thumbnails (ImageNet, DOCCI, COCO, OpenFake's Reddit photos, Cleveland Museum of Art, WikiArt), a 3302 × 4922 photo from a photography subreddit (z 37), possibly edited with Gemini. Otherwise the highest z-score of a real image was 3.6, the standard deviation 1.0. None of 1,711 images from other generators (GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7, Sora 2, Seedream 5, ERNIE-Image, Illustrious and others) reached more than z 5.7. Three more images that OpenFake attributes to GPT-Image 1.5 triggered; they have exactly the resolution of Nano Banana Pro outputs (2752 × 1536 and 1696 × 2528) and are probably Gemini images.
+| Images | as delivered | WebP 80 | 1280 px, JPEG 80 | 800 px, JPEG 75 |
+|---|---|---|---|---|
+| Nano Banana 2 from OpenFake (61) | 84 % | 46 % | 54 % | 2 % |
+| Imagen 4 from OpenFake (391) | 13 % | 1 % | 5 % | 1 % |
+| Imagen 3 from OpenFake (100) | 0 % | 0 % | 0 % | 0 % |
+
+Of 222 Gemini, Imagen and Veo images collected on the web whose origin is documented by a Google C2PA manifest, IPTC metadata or a Google page, 43 % are detected as found and 45 % in browser screenshots (shown at up to 1000 × 700 CSS pixels, device pixel ratio 2 or 3). Re-encoded the way typical services do, 19 % are detected at 2048 px with JPEG 85, 9 % at 1024 px as JPEG like on Google's image servers, 7 % at 1280 px with JPEG 75 and as WebP 80, 6 % at 1080 px with JPEG 80, 1 % at 1000 px as WebP, and none of the 93 WebP versions that Google's blogs serve. Many of these images had already been cropped, downscaled or recompressed when they were posted.
+
+False positives (every image as delivered, as WebP 80 and downscaled to 1280 or 800 px with JPEG 80 or 75): 1 of 49,621 real photos, paintings, charts and YouTube thumbnails (ImageNet, DOCCI, COCO, LAION, Pexels, OpenFake's Reddit photos, ChartQA, WikiArt, the Metropolitan Museum, the Cleveland Museum of Art and Google Arts & Culture), a 3302 × 4922 photo from a photography subreddit (z 48), possibly edited with Gemini. Otherwise the highest z-score of a real image was 7.7 (a 1080 × 1350 Reddit photo) and then 4.5, the standard deviation 1.0. Of 25,610 images from other generators (OpenFake's generators, GPT-Image 1.5 and 2, FLUX.2, Qwen-Image, Z-Image, Midjourney 7, Sora 2, Seedream 5, Illustrious and others), 3 trigger because they reproduce the brightness part of the Google pattern: 2 of 19 ERNIE-Image images (z 21) and 1 of 7 images from the FLUX fine-tune twbabeflux in OpenFake (z 10.5). No other image from another generator reached more than z 5.7. Three more images that OpenFake attributes to GPT-Image 1.5 triggered; they have exactly the resolution of Nano Banana Pro outputs (2752 × 1536 and 1696 × 2528) and are probably Gemini images.
 
 ### OpenAI
 
@@ -128,10 +135,11 @@ False positives: none of 16,221 images without an OpenAI watermark (8,016 real p
 
 - This is a reconstruction from public sample images, not Google's decoder. Only images from Gemini 3 Pro Image (Nano Banana Pro), Gemini 3.1 Flash Image and GPT-Image 2 (ChatGPT and API) are tested, other models are unverified.
 - OpenAI images are found less reliably after WebP compression (82 %), after downscaling to 33 % (81 %) and at 800 px with JPEG 75 (42 %). The OpenAI template comes from one source, and no image at 1024 × 1024 with a verified watermark is known, so that size is untested. OpenAI images from before May 2026 carry no SynthID.
-- Cropping destroys the signal completely, and WebP erases it in Gemini images. Gemini images that are downscaled and then saved as JPEG, as under the model's web conditions (1280 or 800 px, JPEG 80 or 75), are no longer detected, ChatGPT images in the template sizes still are. Images from social networks are therefore often not detected; then the model takes over.
-- Google's blogs serve WebP renditions, which erase the pattern. The add-on loads the original from `original_images/` instead, which works only where the rendition's file name is not shortened. Of 182 images on 15 posts about Nano Banana, Nano Banana Pro and Imagen 4, it finds the original of 91; SynthID or the C2PA metadata flag 29 images (2 without this), and 87 are flagged in total (80 without).
+- Cropping destroys the signal completely. Gemini images that are downscaled to 800 px and saved as JPEG are no longer detected, and Nano Banana Pro images are mostly lost already as WebP or at 1280 px with JPEG 80. Images from social networks are therefore often not detected; then the model takes over.
+- Google's blogs serve WebP renditions, which erase the pattern. The add-on loads the original from `original_images/` instead, which works only where the rendition's file name is not shortened. Of 182 images on 15 posts about Nano Banana, Nano Banana Pro and Imagen 4, it finds the original of 91; SynthID or the C2PA metadata flag 31 images (2 without this), and 87 are flagged in total (80 without).
 - Real photos edited with Gemini carry SynthID as well and are flagged, those edited with ChatGPT probably too.
-- The Google template is computed from the Hugging Face dataset [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there), the OpenAI templates from [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
+- Some images from ERNIE-Image and FLUX fine-tunes reproduce the brightness part of Google's pattern and are then reported as Google SynthID.
+- The Google templates are computed from the Hugging Face datasets [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there) and [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0), the OpenAI templates from [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
 
 ## Amazon Nova Canvas watermark
 
@@ -205,7 +213,7 @@ Real images that carry the logo, labeled by eye: 12 of the 33 images in Wikimedi
 | downscaled to 33 %, JPEG 80 | 8 | 18 |
 | cropped to 95 % on all sides | 0 | 0 |
 
-The misses as downloaded: two logos on graffiti and across the edge of a sheet of paper (0.82 and 0.77), one on wet asphalt (0.82), and two Reddit images that were cropped or letterboxed after generation, so the logo is no longer where the layout puts it. The Google SynthID template finds 8 of these 34 images.
+The misses as downloaded: two logos on graffiti and across the edge of a sheet of paper (0.82 and 0.77), one on wet asphalt (0.82), and two Reddit images that were cropped or letterboxed after generation, so the logo is no longer where the layout puts it. The Google SynthID templates find 20 of the 32 of these images that are still available.
 
 Synthetic test: the logo overlaid with the alpha maps and positions of GeminiWatermarkTool in five layouts on 200 AI images without it (100 each from the OpenFake test split and bigdatamark/synthid-research):
 

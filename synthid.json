@@ -4,8 +4,8 @@
       "provider": "google",
       "file": "google.bin",
       "size": 512,
-      "weightScale": 0.003755008637003095,
-      "threshold": 12,
+      "weightScale": 0.003843954371339662,
+      "threshold": 10,
       "source": {
         "datasets": [
           {
@@ -17,9 +17,47 @@
               "gemini_random"
             ],
             "images": 288
+          },
+          {
+            "dataset": "bigdatamark/synthid-research",
+            "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
+            "folders": [
+              "gemini-3.1-flash-image"
+            ],
+            "images": 700
           }
         ],
-        "images": 288
+        "images": 988
+      }
+    },
+    {
+      "provider": "google",
+      "file": "google-robust.bin",
+      "size": 512,
+      "weightScale": 0.002039670633062206,
+      "threshold": 10,
+      "source": {
+        "datasets": [
+          {
+            "dataset": "aoxo/reverse-synthid",
+            "revision": "7a4fbc2ba0277b0a73a9d6e9a1ebcfa36deb15bf",
+            "folders": [
+              "nano-banana-pro-preview/diverse",
+              "gemini-3.1-flash-image-preview/diverse",
+              "gemini_random"
+            ],
+            "images": 288
+          },
+          {
+            "dataset": "bigdatamark/synthid-research",
+            "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
+            "folders": [
+              "gemini-3.1-flash-image"
+            ],
+            "images": 700
+          }
+        ],
+        "images": 988
       }
     },
     {

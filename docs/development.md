@@ -78,10 +78,10 @@ The weights are trained on OpenFake, which is licensed under CC BY-NC 4.0, so th
 
 ```bash
 .venv/bin/pip install numpy pillow pyarrow fsspec aiohttp huggingface_hub
-.venv/bin/python tools/synthid/build_templates.py   # 288 Gemini, 2,034 OpenAI and 75 Nova Canvas images (about 6 GB) -> src/background/synthid-templates/, synthid.json
+.venv/bin/python tools/synthid/build_templates.py   # 988 Gemini, 2,034 OpenAI and 75 Nova Canvas images (about 8 GB) -> src/background/synthid-templates/, synthid.json
 .venv/bin/python tools/synthid/build_templates.py openai   # only the OpenAI templates, from the files pinned in tools/synthid/openai_sources.json
 .venv/bin/python tools/synthid/build_templates.py amazon   # only the Nova Canvas template, from the GitHub commits in tools/synthid/amazon_sources.json
-.venv/bin/python tools/synthid/crossval.py --transforms   # OpenAI: templates from two thirds of the images of every output size, test on the remaining third (--leave-size-out also without the tested size); Amazon: leave one repository out
+.venv/bin/python tools/synthid/crossval.py --transforms   # Google: templates from two thirds of the images, test on the remaining third; OpenAI: templates from two thirds of the images of every output size, test on the remaining third (--leave-size-out also without the tested size); Amazon: leave one repository out
 .venv/bin/python tools/synthid/fetch_openfake.py    # test images to tools/synthid/.cache/openfake (about 9 GB download)
 .venv/bin/python tools/synthid/eval.py --transforms tools/synthid/.cache/openfake/fake/nano-banana-pro
 .venv/bin/python tools/synthid/eval.py tools/synthid/.cache/openfake/real/* tools/synthid/.cache/openfake/fake/*

@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from multiprocessing import Pool
 
@@ -12,12 +13,16 @@ from build_templates import (
     AMAZON_MIN_FREQUENCY,
     AMAZON_SIZE,
     CR,
+    GOOGLE_SIZE,
+    META,
     OPENAI_BORDER,
     OPENAI_CHANNELS,
     OPENAI_MAX_FREQUENCY,
     OPENAI_TEMPLATES,
     amazon_images,
+    google_images,
     openai_images,
+    survival,
 )
 from eval import PRESCREEN_SCORE, TRANSFORMS
 
@@ -27,6 +32,43 @@ SCORING = {}
 
 def rates(z, thresholds):
     return "  ".join(f"z >= {t:g}: {np.mean(z >= t) * 100:5.1f} %" for t in thresholds)
+
+
+def google_scores(args):
+    path, templates, transforms = args
+    rgb = synthid.load_rgb(path)
+    scores = {}
+    for name in transforms:
+        image = TRANSFORMS[name](rgb)
+        u = synthid.spectrum(image, GOOGLE_SIZE)[0]
+        height, width, _ = image.shape
+        scores[name] = [synthid.score_spectrum(u, height, width, w, p) for w, p in templates]
+    return scores
+
+
+def google(transforms, thresholds):
+    shipped = [t for t in json.loads(META.read_text())["templates"] if t["provider"] == "google"]
+    images = google_images()
+    paths = sorted(p for group in images.values() for p in group)
+    dataset = {p: d for d, group in images.items() for p in group}
+    results = []
+    for fold in range(3):
+        train, test = [p for i, p in enumerate(paths) if i % 3 != fold], [p for i, p in enumerate(paths) if i % 3 == fold]
+        weights, phases, _ = synthid.build(train, GOOGLE_SIZE)
+        templates = [synthid.dequantize(*synthid.quantize(w, phases)) for w in (weights, weights * survival(train, GOOGLE_SIZE))]
+        with Pool() as pool:
+            for path, scores in zip(test, pool.imap(google_scores, [(p, templates, list(transforms)) for p in test])):
+                results.append((dataset[path], scores))
+        print(f"google fold {fold}: train {len(train)}, test {len(test)}", flush=True)
+    for source in images:
+        for name in transforms:
+            z = np.array([scores[name] for d, scores in results if d == source])
+            hit = np.any(z >= [t["threshold"] for t in shipped], axis=1)
+            print(
+                f"{source:32s} {name:16s} n={len(z):3d}  median z {np.median(z[:, 0]):5.1f} / {np.median(z[:, 1]):5.1f}  detected {hit.mean() * 100:5.1f} %  "
+                f"{rates(z.max(axis=1), thresholds)}",
+                flush=True,
+            )
 
 
 def accumulate(task):
@@ -121,9 +163,9 @@ def amazon(transforms, thresholds):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Score held-out images: OpenAI templates from two thirds of the images of every output size, the Amazon template leaving out one repository at a time."
+        description="Score held-out images: Google templates from two thirds of their images, OpenAI templates from two thirds of the images of every output size, the Amazon template leaving out one repository at a time."
     )
-    parser.add_argument("providers", nargs="*", choices=["openai", "amazon"], default=["openai", "amazon"])
+    parser.add_argument("providers", nargs="*", choices=["google", "openai", "amazon"], default=["google", "openai", "amazon"])
     parser.add_argument("--transforms", action="store_true", help="also score re-encoded, rescaled and cropped copies")
     parser.add_argument("--thresholds", type=float, nargs="+", default=[8, 9, 10, 12])
     parser.add_argument("--leave-size-out", action="store_true", help="OpenAI: also build each template without the tested output size")
@@ -132,6 +174,8 @@ def main():
     args = parser.parse_args()
 
     transforms = TRANSFORMS if args.transforms else {"original": TRANSFORMS["original"]}
+    if "google" in args.providers:
+        google(transforms, args.thresholds)
     if "openai" in args.providers:
         openai(transforms, args.thresholds, args.leave_size_out, args.max_test, args.workers)
     if "amazon" in args.providers:
