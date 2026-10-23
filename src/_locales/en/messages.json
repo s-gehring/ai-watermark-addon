@@ -15,6 +15,8 @@
   "reason_grok": { "message": "Created with Grok (xAI) according to the image metadata." },
   "reason_ideogram": { "message": "Created with Ideogram according to the image metadata." },
   "reason_aigc_label": { "message": "AI-generated according to the image metadata (Chinese labeling standard GB 45438-2025)." },
+  "reason_civitai": { "message": "Created with Civitai according to the image metadata." },
+  "reason_reve": { "message": "Created with Reve according to the image metadata." },
   "popupFlagged": { "message": "AI images on this page" },
   "popupInactive": { "message": "Not active on this page." },
   "popupUnavailable": { "message": "This page cannot be checked." },

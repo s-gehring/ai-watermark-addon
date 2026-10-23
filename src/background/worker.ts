@@ -44,7 +44,7 @@ async function loadDetector(entry: (typeof synthIdConfig.templates)[number]): Pr
   return {
     provider: entry.provider as TemplateProvider,
     threshold: entry.threshold,
-    aspect: entry.outputSize && entry.outputSize[0] / entry.outputSize[1],
+    prescreen: entry.prescreen,
     size: entry.size,
     weightScale: entry.weightScale,
     minChannelStd: entry.minChannelStd,

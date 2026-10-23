@@ -29,6 +29,8 @@ MARKS = {
     "grok-2024": {"scheme": "grok-visible", "scan": (0.062, 0.104), "native": 88.7, "folder": "grok-2024", "rows": 14, "threshold": 0.8},
     "grok-aurora": {"scheme": "grok-visible", "scan": (0.167, 0.167), "native": 65.8, "folder": "grok-aurora", "rows": 18, "threshold": 0.65},
     "grok": {"scheme": "grok-visible", "scan": (0.146, 0.167), "native": 67.8, "folder": "grok", "rows": 17, "threshold": 0.65},
+    "bing": {"scheme": "bing-visible", "anchor": "bl", "short": (0.0293, 0.0140, 0.0036), "columns": 24, "min": 12, "folder": "bing", "rows": 31, "threshold": 0.7},
+    "meta": {"scheme": "meta-visible", "short": (0.0859, 0.0341, 0.0306), "folder": "meta", "rows": 12, "threshold": 0.6},
 }
 SCAN_RANGE = (0.04, 0.10)
 THRESHOLD = 1.0
@@ -48,36 +50,53 @@ def boxes(mark, width, height):
     return out
 
 
+def origin(anchor, width, height, horizontal, vertical, columns, rows, scale, dx, dy):
+    if anchor[1] == "r":
+        x0 = width - horizontal - (columns + PAD - dx) * scale
+        fits_x = horizontal >= (PAD + dx) * scale
+    else:
+        x0 = horizontal - (PAD - dx) * scale
+        fits_x = x0 >= 0
+    if anchor[0] == "b":
+        y0 = height - vertical - (rows + PAD - dy) * scale
+        fits_y = vertical >= (PAD + dy) * scale
+    else:
+        y0 = vertical - (PAD - dy) * scale
+        fits_y = y0 >= 0
+    return (x0, y0) if x0 >= 0 and y0 >= 0 and fits_x and fits_y else None
+
+
 def placements(mark, width, height, columns, rows):
     scales = range(-SCALES, SCALES + 1) if "short" in mark else (0,)
-    for logo, right, bottom in boxes(mark, width, height):
-        if logo < MIN_LOGO:
+    for logo, horizontal, vertical in boxes(mark, width, height):
+        if logo < mark.get("min", MIN_LOGO):
             continue
         for e in scales:
             factor = STEP**e
             scale = logo * factor / columns
             for dy in OFFSETS:
                 for dx in OFFSETS:
-                    x0 = width - right * factor - (columns + PAD - dx) * scale
-                    y0 = height - bottom * factor - (rows + PAD - dy) * scale
-                    if x0 >= 0 and y0 >= 0 and right * factor >= (PAD + dx) * scale and bottom * factor >= (PAD + dy) * scale:
-                        yield x0, y0, scale
+                    corner = origin(mark.get("anchor", "br"), width, height, horizontal * factor, vertical * factor, columns, rows, scale, dx, dy)
+                    if corner:
+                        yield corner[0], corner[1], scale
 
 
-def alpha_contrast(name):
+def alpha_contrast(mark):
+    name = mark["alpha"]
     path = CACHE / "alpha" / name
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         urllib.request.urlretrieve(ALPHA_SOURCE + name, path)
     alpha = Image.open(path).convert("L")
-    rows = round(COLUMNS * alpha.height / alpha.width)
-    a = np.asarray(Image.fromarray((np.asarray(alpha, np.float64) / 255).astype(np.float32)).resize((COLUMNS, rows), Image.Resampling.BOX), np.float64)
+    columns = mark.get("columns", COLUMNS)
+    rows = round(columns * alpha.height / alpha.width)
+    a = np.asarray(Image.fromarray((np.asarray(alpha, np.float64) / 255).astype(np.float32)).resize((columns, rows), Image.Resampling.BOX), np.float64)
     return -np.log1p(-np.clip(a, 0, 0.95))
 
 
 def mean_contrast(mark):
-    rows = mark["rows"]
-    total, paths = np.zeros((rows, COLUMNS)), sorted((REAL / mark["folder"]).iterdir())
+    rows, columns = mark["rows"], mark.get("columns", COLUMNS)
+    total, paths = np.zeros((rows, columns)), sorted((REAL / mark["folder"]).iterdir())
     for path in paths:
         rgb = load_rgb(path)
         height, width, _ = rgb.shape
@@ -86,9 +105,9 @@ def mean_contrast(mark):
         else:
             logo = mark["native"]
             right, bottom = mark["scan"][0] * logo, mark["scan"][1] * logo
-        scale = logo / COLUMNS
-        x0, y0 = width - right - (COLUMNS + PAD) * scale, height - bottom - (rows + PAD) * scale
-        grid = feature_grid(rgb.min(axis=2).astype(np.float64), x0, y0, scale, COLUMNS, rows)[PAD:-PAD, PAD:-PAD]
+        scale = logo / columns
+        x0, y0 = origin(mark.get("anchor", "br"), width, height, right, bottom, columns, rows, scale, 0, 0)
+        grid = feature_grid(rgb.min(axis=2).astype(np.float64), x0, y0, scale, columns, rows)[PAD:-PAD, PAD:-PAD]
         total += grid - np.median(np.concatenate([grid[0], grid[-1], grid[:, 0], grid[:, -1]]))
     return np.clip(total / len(paths), 0, None), len(paths)
 
@@ -97,7 +116,7 @@ def build():
     meta = {"marks": {}}
     for name, mark in MARKS.items():
         if "alpha" in mark:
-            c, source, images = alpha_contrast(mark["alpha"]), ALPHA_SOURCE + mark["alpha"], None
+            c, source, images = alpha_contrast(mark), ALPHA_SOURCE + mark["alpha"], None
         else:
             c, images = mean_contrast(mark)
             source = mark["folder"]
@@ -105,6 +124,8 @@ def build():
         layout = {"short": list(mark["short"])} if "short" in mark else {"scan": list(mark["scan"])}
         meta["marks"][name] = {
             "scheme": mark["scheme"],
+            **({"anchor": mark["anchor"]} if "anchor" in mark else {}),
+            **({"min": mark["min"]} if "min" in mark else {}),
             "source": source,
             **({"images": images} if images else {}),
             **layout,
