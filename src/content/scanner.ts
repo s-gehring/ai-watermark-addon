@@ -1,6 +1,6 @@
 import { isFlagged, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
 import type { Settings } from '../shared/settings';
-import { hasBackgroundImage, imageUrlOf, isLargeEnough, largerVariantOf } from './candidates';
+import { hasBackgroundImage, imageUrlOf, isLargeEnough, knownOriginals, largerVariantsOf } from './candidates';
 import { BadgeLayer } from './overlay';
 
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
@@ -168,12 +168,13 @@ export class Scanner {
     return verdict;
   }
 
-  private originalFor(url: string, element: Element): string | undefined {
+  private originalFor(url: string, element: Element): string[] | undefined {
     const { checkMetadata, checkWatermark } = this.settings;
-    if (this.originals >= MAX_ORIGINALS || !(checkMetadata || checkWatermark) || !(element instanceof HTMLImageElement)) return undefined;
-    const original = largerVariantOf(element, url);
-    if (original) this.originals++;
-    return original ?? undefined;
+    if (this.originals >= MAX_ORIGINALS || !(checkMetadata || checkWatermark)) return undefined;
+    const originals = element instanceof HTMLImageElement ? largerVariantsOf(element, url) : knownOriginals(url);
+    if (!originals.length) return undefined;
+    this.originals++;
+    return originals;
   }
 }
 
@@ -185,7 +186,7 @@ async function send(request: BackgroundRequest): Promise<Verdict> {
   }
 }
 
-async function requestVerdict(url: string, element: Element, original?: string): Promise<Verdict> {
+async function requestVerdict(url: string, element: Element, original?: string[]): Promise<Verdict> {
   const verdict = url.startsWith('blob:') ? await classifyBlob(url) : await send({ type: 'classify', url, original });
   if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
   const bytes = await pixelsOf(element);
