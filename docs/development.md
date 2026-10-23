@@ -62,13 +62,18 @@ npm run eval -- members --members=detectra-openfake,angelhd25/ull-ai-image-detec
 Needs a CUDA GPU with 12 GB (measured on an RTX 4070 Ti) and about 130 GB of disk space.
 
 ```bash
-.venv/bin/pip install torch timm safetensors pyarrow pillow numpy huggingface_hub onnx onnxruntime
+.venv/bin/pip install torch timm safetensors pyarrow pillow numpy huggingface_hub onnx onnxruntime tokenizers
 .venv/bin/python tools/train/fetch_data.py   # Detectra weights, 16 OpenFake files, single rows from 319 more and negatives to tools/train/.cache/
-.venv/bin/python tools/train/train.py --name full   # 3 epochs, about 1 h
-.venv/bin/python tools/train/export_onnx.py tools/train/.cache/runs/full/epoch3.safetensors   # -> vendor/models/detectra-openfake/model.onnx
+.venv/bin/python tools/train/train.py --name photo --modern-photo-weight 0.5 --hard-negative-weight 2   # 3 epochs, about 1 h
+.venv/bin/python tools/train/train.py --name art   # 3 epochs, about 1 h
+.venv/bin/python tools/train/route_clip.py path/to/clip-vit-base-patch16   # p(art) per training image -> tools/train/.cache/router.json
+.venv/bin/python tools/train/distill.py tools/train/.cache/runs/{photo,art}/epoch3.safetensors --photo-platt W,B --art-platt W,B --name distill   # 2 epochs, about 30 min
+.venv/bin/python tools/train/export_onnx.py tools/train/.cache/runs/distill/epoch2.safetensors   # -> vendor/models/detectra-openfake/model.onnx
 ```
 
-The datasets are pinned to fixed revisions. The rows taken from the other OpenFake files are listed in [`openfake_rows.json`](../tools/train/openfake_rows.json); `fetch_data.py` reads only the pages of the image column that hold them (about 16 GB). Self-generated images are not downloaded; `train.py` adds Parquet files from `selfgen/` in the data folder when it exists. The last of the 16 OpenFake files is held out; `train.py` prints AUC and the detection rate at 1 % false positives on it after every epoch.
+`route_clip.py` reads the ONNX files and the tokenizer of [Xenova/clip-vit-base-patch16](https://huggingface.co/Xenova/clip-vit-base-patch16). `--photo-platt` and `--art-platt` are the Platt parameters of the two models, from `npm run eval -- bundled --calibrate` with each of them exported and bundled.
+
+The datasets are pinned to fixed revisions. The rows taken from the other OpenFake files are listed in [`openfake_rows.json`](../tools/train/openfake_rows.json); `fetch_data.py` reads only the pages of the image column that hold them (about 16 GB). Self-generated images, modern photos, mined hard negatives and the artworks with their AI counterparts are not downloaded; the scripts add Parquet files from `selfgen/`, `modern-photos/` and `hard-negatives/` in the data folder when they exist, `distill.py` also from `art-real/` and `art-fake/`. The last of the 16 OpenFake files is held out (`distill.py` uses the first three and holds out the fourth); both scripts print AUC and the detection rate at 1 % false positives on it after every epoch.
 
 Training is not bit-for-bit reproducible. After a new run, put the SHA-256 printed by `export_onnx.py` into `model.json`, upload the model together with [`tools/train/MODEL_CARD.md`](../tools/train/MODEL_CARD.md) as `README.md` to the Hugging Face repository, update `revision` in `model.json`, and run `npm run eval -- bundled --calibrate` for the new calibration.
 
