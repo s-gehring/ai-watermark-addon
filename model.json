@@ -16,17 +16,17 @@
         "std": [0.229, 0.224, 0.225]
       },
       "files": {
-        "model.onnx": "809203b8e965327548926480bd132197e9dd3cde815273b39ee9fe4650549ba0"
+        "model.onnx": "55fd3b83232d4d951e3bbf769edb07d2655e5fc1d5f58eeb4606f6f98fa74e85"
       }
     }
   ],
   "calibration": {
-    "weights": [0.6788],
-    "bias": 1.1857
+    "weights": [0.6535],
+    "bias": 1.6906
   },
   "cascade": {
-    "band": [0.5, 0.95],
+    "band": [0.5, 0.92],
     "shortestEdges": [576, 768]
   },
-  "threshold": 0.95
+  "threshold": 0.92
 }
