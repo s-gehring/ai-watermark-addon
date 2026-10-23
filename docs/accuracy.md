@@ -249,7 +249,7 @@ The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the lo
 
 ## Further visible marks
 
-Measured with `tools/visible/eval.py --logo marks`; a hit needs a correlation of at least 0.6 for the Chinese labels, 0.65 for the current Grok marks and 0.8 for the 2024 Grok mark.
+Measured with `tools/visible/eval.py --logo marks` (and `--logo dalle` for the DALL·E 2 bar); a hit needs a correlation of at least 0.6 for the Chinese labels and Meta AI, 0.65 for the current Grok marks, 0.7 for Bing and 0.8 for the 2024 Grok mark.
 
 Real images with the mark, labeled by eye:
 
@@ -273,11 +273,19 @@ Missed marks sit on bright backgrounds, where the white text leaves little contr
 
 False positives: none of 10,432 images without these marks (the images of the Kling logo test without duplicates and without 8 Aurora images, all of which carry the Grok mark and are found), as downloaded and after downscaling to 50 % with JPEG 80. The highest correlations are 0.52 for the Chinese labels, 0.53 for the current Grok marks and 0.70 for the 2024 Grok mark.
 
-All seven marks together take about 9 times as long as the Kling check, mostly for the Grok scan.
+Those seven marks together take about 9 times as long as the Kling check, mostly for the Grok scan.
+
+### Bing Image Creator, Meta AI and the DALL·E 2 bar
+
+- **Bing Image Creator (the "b" in the bottom left corner, 1,024 × 1,024):** 9 images on Wikimedia Commons (public domain, CC0 and CC BY-SA) form the template. 41 further images with the mark, labeled by eye among the 3,465 DALL·E 3 images of [ProGamerGov/dalle-3-reddit-dataset](https://huggingface.co/datasets/ProGamerGov/dalle-3-reddit-dataset), are the test set: the check finds 33 of them (80 %) as downloaded, after downscaling to 1,280 px with JPEG 80 and to 800 px with JPEG 75. It misses marks on bright or busy backgrounds and a second, stylized variant of the "b" (3 images). Left out of the average, 8 of the 9 Commons images still score 0.87 or more.
+- **Meta AI (the words "Meta AI" with its symbol, bottom right):** 4 images from 2025 on Wikimedia Commons (public domain and CC0). The average of the other three finds 3 of them with 0.72 to 0.88; the fourth, at 1,792 px, scores 0.42.
+- **DALL·E 2 (the bar of five colored squares, 105 × 20 px at a width of 1,024, in the bottom right corner):** a check of the five colors instead of a correlation, since the squares are opaque and always the same. It finds both images on Wikimedia Commons (public domain and CC BY-SA 4.0) whose edge is untouched, both with 1.0 as downloaded, 0.90 and 0.93 after downscaling to 1,280 px with JPEG 80 and 0.86 and 0.83 after 800 px with JPEG 75. A crop that cuts off the bar is missed.
+
+False positives: none of 12,454 images without these marks (7,226 images of the photo, art, chart, COCO, Reddit and YouTube sets, 1,804 Kling images without the logo and Odd One Out images, and the 3,424 Reddit DALL·E 3 images without the mark), as downloaded and under both web conditions. The highest correlations are 0.61 for Bing and 0.34 for Meta AI; the highest bar score is below zero. With all three, the visible check takes 2 to 5 ms (4 to 7 %) longer per image in Node.
 
 ### Limitations
 
-- The test sets are small: 4 to 21 images per Chinese label, most from a single source, and 7 images of the two older Grok marks.
+- The test sets are small: 4 to 21 images per Chinese label, most from a single source, 7 images of the two older Grok marks, 4 of Meta AI and 2 of the DALL·E 2 bar. Almost all Bing test images come from one dataset in one size.
 - The Chinese labels have to be in the size and place that GB 45438-2025 makes the providers use; cropping and added borders move them away. Other providers (Yuanbao, Baidu and others) and Kling's labels with other versions are not covered.
 - Grok's marks are searched only between 4 % and 10 % of the long side, which covers originals with a long side of about 660 to 1,650 px (890 to 2,200 px for the 2024 mark). Marks narrower than 20 px are not searched.
 - Every image with such a mark in this place is flagged, also a copy that a model painted into an image.
@@ -293,5 +301,5 @@ All seven marks together take about 9 times as long as the Kling check, mostly f
 - **fev v13** ([angelhd25/ull-ai-image-detector](https://huggingface.co/angelhd25/ull-ai-image-detector), MIT), like Detectra a fine-tune of the Community Forensics ViT-S for a browser add-on: alone it detects 37–39 % of AI images under web conditions, but flags 7 % of paintings. In an ensemble with Detectra v3 it added no hits at no more than 5 % flagged paintings, but costs 88 MB and 0.7 s per image. It was also partly trained on the OpenFake validation split (CC BY-NC 4.0), whose generators and photo sources do not appear in the test split used here.
 - **Other detectors from Hugging Face** (capcheck/ai-image-detection, ai-image-detect-distilled, SMOGY and others): many are trained on small datasets like CIFAKE and separate AI images under web conditions hardly or not at all better than chance (AUC 0.46 to 0.62). Larger models like SwinV2-Large detectors or SigLIP-DINOv2 ensembles would be too big for the add-on at 200 MB to 2 GB.
 - **Amazon Titan Image Generator watermark:** Titan images (G1 and G1 v2, 35 images with C2PA from 12 GitHub repositories and 37 from an AWS blog post) share a phase pattern only when they were generated with the same seed (0 and 42 are common defaults). Images with random seeds from other repositories show none (z ≈ 0), so no fixed template is possible. Unmodified Titan images are recognized by their C2PA manifest.
-- **Other visible marks:** Meta AI has shown no visible mark since Muse Image (July 2026), and there are no public examples of its older "Imagined with AI" label. Samsung Galaxy AI marks come with localized text, Hailuo (MiniMax) marks only videos, and Grok's paid plans and API add no mark. For Samsung and the older Meta label no real examples were found to measure positions and false positives.
+- **Other visible marks:** Meta AI has shown no visible mark since Muse Image (July 2026), and there are no public examples of its older "Imagined with AI" label. Samsung Galaxy AI marks come with localized text, Hailuo (MiniMax), Vidu and Sora mark only videos, and Grok's paid plans and API add no mark. For Samsung, Tencent Yuanbao (two variants with one or four examples each), Microsoft Copilot ("Made with AI") and the older Meta label no real examples were found to measure positions and false positives. Google Pixel and Photos edits, Adobe Firefly, Ideogram, Leonardo, Craiyon and Apple Image Playground add no visible mark to their images.
 - **Stability AI on Amazon Bedrock:** the newer models (SD3 Large, SD3.5 Large, Stable Image Ultra) write no `invisible-watermark` and show no fixed phase pattern in 434 PNGs from 61 GitHub repositories and 23 PNGs from AWS blog posts. Only the SDXL outputs among them carry the SDXL watermark and the EXIF fields of the Stability API.

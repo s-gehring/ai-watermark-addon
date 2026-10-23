@@ -395,6 +395,9 @@ const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   'doubao-visible': 'Doubao',
   'jimeng-visible': 'Jimeng',
   'qwen-visible': 'Qwen',
+  'bing-visible': 'Bing Image Creator',
+  'meta-visible': 'Meta AI',
+  'dalle-visible': 'DALL·E 2',
 };
 
 const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set([
@@ -404,6 +407,9 @@ const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set([
   'doubao-visible',
   'jimeng-visible',
   'qwen-visible',
+  'bing-visible',
+  'meta-visible',
+  'dalle-visible',
 ]);
 
 function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
