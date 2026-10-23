@@ -20,19 +20,12 @@ GOOGLE = [
         "folders": ["nano-banana-pro-preview/diverse", "gemini-3.1-flash-image-preview/diverse", "gemini_random"],
     }
 ]
-OPENAI = [
-    {
-        "dataset": "bigdatamark/synthid-research",
-        "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
-        "folders": ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"],
-    },
-    {
-        "dataset": "winrisef/gpt-generated-image-collection",
-        "revision": "b0837d79e6bdd203ef7f4f3af819a8f0105f0adf",
-        "folders": ["images/batch-0001", "images/batch-0002", "images/batch-0003"],
-    },
+OPENAI = json.loads((Path(__file__).parent / "openai_sources.json").read_text())
+OPENAI_TEMPLATES = [
+    {"file": "openai-512.bin", "size": 512},
+    {"file": "openai-1024.bin", "size": 1024, "prescreen": True},
 ]
-OPENAI_SIZES = {(1254, 1254): 512, (1448, 1086): 1024, (1672, 941): 1024, (1122, 1402): 1024}
+OPENAI_CHANNELS = (0,)
 OPENAI_MAX_FREQUENCY = 384
 OPENAI_BORDER = 0.02
 WATERMARK_ACTION = b"c2pa.watermarked"
@@ -47,14 +40,17 @@ NOVA_MANIFEST = (b"Amazon_Bedrock", b"Nova Canvas")
 
 def download(source):
     local = CACHE / source["dataset"].split("/")[1]
+    patterns = source.get("files") or [f"{folder}/*" for folder in source["folders"]]
     snapshot_download(
         source["dataset"],
         repo_type="dataset",
         revision=source["revision"],
         local_dir=local,
-        allow_patterns=[f"{folder}/*" for folder in source["folders"]],
+        allow_patterns=patterns,
         max_workers=8,
     )
+    if "files" in source:
+        return sorted(local / file for file in source["files"])
     return sorted(p for folder in source["folders"] for p in (local / folder).rglob("*.png"))
 
 
@@ -63,14 +59,10 @@ def google_images():
 
 
 def openai_images():
-    groups = {}
-    for source in OPENAI:
-        for path in download(source):
-            with Image.open(path) as image:
-                size = image.size
-            if size in OPENAI_SIZES and WATERMARK_ACTION in path.read_bytes():
-                groups.setdefault(size, {}).setdefault(source["dataset"], []).append(path)
-    return groups
+    return {
+        source["dataset"]: [path for path in download(source) if WATERMARK_ACTION in path.read_bytes()]
+        for source in OPENAI
+    }
 
 
 def amazon_images():
@@ -100,7 +92,11 @@ def build(entry, sources, paths_by_dataset, existing, **options):
     w, p, scale = synthid.quantize(weights, phases)
     target = ROOT / synthid.TEMPLATE_DIR / entry["file"]
     synthid.save(target, w, p)
-    datasets = [{**s, "images": len(paths_by_dataset[s["dataset"]])} for s in sources if s.get("dataset") in paths_by_dataset]
+    datasets = [
+        {**{k: v for k, v in s.items() if k != "files"}, "images": len(paths_by_dataset[s["dataset"]])}
+        for s in sources
+        if s.get("dataset") in paths_by_dataset
+    ]
     repositories = [
         {"repository": s["repository"], "revision": s["revision"], "images": len(paths_by_dataset[s["repository"]])}
         for s in sources
@@ -126,16 +122,19 @@ def main():
         entry = {"provider": "google", "file": "google.bin", "size": 512, "threshold": 12}
         templates[entry["file"]] = build(entry, GOOGLE, {GOOGLE[0]["dataset"]: google_images()}, existing)
     if "openai" in args.providers:
-        for (width, height), paths_by_dataset in openai_images().items():
-            entry = {
-                "provider": "openai",
-                "file": f"openai-{width}x{height}.bin",
-                "size": OPENAI_SIZES[(width, height)],
-                "outputSize": [width, height],
-                "threshold": 8,
-            }
+        templates = {file: t for file, t in templates.items() if t["provider"] != "openai"}
+        paths_by_dataset = openai_images()
+        for template in OPENAI_TEMPLATES:
+            entry = {"provider": "openai", **template, "threshold": 8}
             templates[entry["file"]] = build(
-                entry, OPENAI, paths_by_dataset, existing, max_frequency=OPENAI_MAX_FREQUENCY, border=OPENAI_BORDER
+                entry,
+                OPENAI,
+                paths_by_dataset,
+                existing,
+                max_frequency=OPENAI_MAX_FREQUENCY,
+                border=OPENAI_BORDER,
+                channels=OPENAI_CHANNELS,
+                masked=True,
             )
     if "amazon" in args.providers:
         entry = {
@@ -148,7 +147,7 @@ def main():
         templates[entry["file"]] = build(
             entry, AMAZON, amazon_images(), existing, min_frequency=AMAZON_MIN_FREQUENCY, border=AMAZON_BORDER, channels=(CR,)
         )
-    order = ["google.bin", *(f"openai-{w}x{h}.bin" for w, h in OPENAI_SIZES), "amazon-nova-canvas.bin"]
+    order = ["google.bin", *(t["file"] for t in OPENAI_TEMPLATES), "amazon-nova-canvas.bin"]
     ordered = sorted(templates.values(), key=lambda t: order.index(t["file"]) if t["file"] in order else len(order))
     META.write_text(json.dumps({"templates": ordered}, indent=2) + "\n")
 
