@@ -9,7 +9,9 @@ export type MetadataReason =
   | 'stability-ai'
   | 'grok'
   | 'ideogram'
-  | 'aigc-label';
+  | 'aigc-label'
+  | 'civitai'
+  | 'reve';
 
 export type SynthIdProvider = 'google' | 'openai';
 

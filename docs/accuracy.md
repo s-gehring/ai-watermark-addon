@@ -63,6 +63,14 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 - Compression and downscaling cost detection (AUC 0.99 as original files, 0.97–0.98 under web conditions).
 - Calibration and measurement use separate images but the same sources; the threshold also uses the measured photos. Sites with a different image mix or their own compression may differ.
 
+## Metadata
+
+Measured with a script over the 4,906 images of the model measurement and the 2,320 further images (see above), which keep the metadata of their source files. The metadata check flags 154 of the 300 AI images from OpenFake, 874 of the 1,678 further AI images, none of the 188 AI images from Reddit and none of the 4,460 real photos, paintings, charts and thumbnails.
+
+- **Civitai:** the on-site generator writes the EXIF tag `Artist: ai`, which Civitai's own [media-metadata](https://github.com/civitai/media-metadata) reader uses as its marker. 62 of these AI images (GPT-Image 1.5, Z-Image, Illustrious and Sora 2 images generated on the site) have no other label.
+- **ComfyUI:** the `prompt` graph is recognized by sampler, loader and text encoder nodes (not only `KSampler` and `SamplerCustom`), the `workflow` chunk by `last_node_id`, and the graph also in the EXIF user comment, where it is stored as UTF-16. Of the AI images, 4 have no other label.
+- **Reve:** the EXIF field `Software: Reve.art` is on 4 of 30 images of one Hugging Face dataset ([Rapidata/Flux-2-pro_t2i_human_preference](https://huggingface.co/datasets/Rapidata/Flux-2-pro_t2i_human_preference)).
+
 ## SynthID watermark
 
 ### Google
