@@ -8,11 +8,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
+import dalle_bar
 import gemini_logo
 import kling_logo
 import marks
 
-LOGOS = {"gemini": gemini_logo, "kling": kling_logo, "marks": marks}
+LOGOS = {"gemini": gemini_logo, "kling": kling_logo, "marks": marks, "dalle": dalle_bar}
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 

@@ -63,6 +63,14 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 - Compression and downscaling cost detection (AUC 0.99 as original files, 0.97–0.98 under web conditions).
 - Calibration and measurement use separate images but the same sources; the threshold also uses the measured photos. Sites with a different image mix or their own compression may differ.
 
+## Metadata
+
+Measured with a script over the 4,906 images of the model measurement and the 2,320 further images (see above), which keep the metadata of their source files. The metadata check flags 154 of the 300 AI images from OpenFake, 874 of the 1,678 further AI images, none of the 188 AI images from Reddit and none of the 4,460 real photos, paintings, charts and thumbnails.
+
+- **Civitai:** the on-site generator writes the EXIF tag `Artist: ai`, which Civitai's own [media-metadata](https://github.com/civitai/media-metadata) reader uses as its marker. 62 of these AI images (GPT-Image 1.5, Z-Image, Illustrious and Sora 2 images generated on the site) have no other label.
+- **ComfyUI:** the `prompt` graph is recognized by sampler, loader and text encoder nodes (not only `KSampler` and `SamplerCustom`), the `workflow` chunk by `last_node_id`, and the graph also in the EXIF user comment, where it is stored as UTF-16. Of the AI images, 4 have no other label.
+- **Reve:** the EXIF field `Software: Reve.art` is on 4 of 30 images of one Hugging Face dataset ([Rapidata/Flux-2-pro_t2i_human_preference](https://huggingface.co/datasets/Rapidata/Flux-2-pro_t2i_human_preference)).
+
 ## SynthID watermark
 
 ### Google
@@ -94,31 +102,44 @@ False positives (every image as delivered, as WebP 80 and downscaled to 1280 or 
 
 ### OpenAI
 
-Measured with `tools/synthid/crossval.py`: each template is built from two thirds of the images of its size and tested on the remaining third (z ≥ 8).
+Measured with `tools/synthid/crossval.py`: the templates are built from two thirds of the images of every output size and tested on the remaining third (up to 60 images per size, z ≥ 8). 2,034 images with a verified watermark in 14 output sizes, up to 200 per size, from [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection).
 
-| Output size (test images) | Original (PNG) | downscaled to 50 % / 33 % | JPEG 90, 4:4:4 / 4:2:0 | WebP 80 |
-|---|---|---|---|---|
-| 1254 × 1254 (141) | 100 % | 100 % / 100 % | 100 % / 100 % | 97 % |
-| 1448 × 1086 (73) | 100 % | 100 % / 100 % | 100 % / 100 % | 99 % |
-| 1672 × 941 (41) | 100 % | 100 % / 100 % | 100 % / 100 % | 98 % |
-| 1122 × 1402 (64) | 100 % | 100 % / 100 % | 100 % / 100 % | 95 % |
+| Output size (test images) | Original (PNG) | downscaled to 50 % / 33 % | JPEG 90, 4:4:4 / 4:2:0 | WebP 80 | 1280 px, JPEG 80 | 800 px, JPEG 75 |
+|---|---|---|---|---|---|---|
+| 1536 × 1024 (60) | 98 % | 97 % / 78 % | 98 % / 98 % | 68 % | 95 % | 10 % |
+| 1024 × 1536 (60) | 95 % | 90 % / 67 % | 93 % / 93 % | 75 % | 90 % | 15 % |
+| 1254 × 1254 (60) | 100 % | 88 % / 73 % | 98 % / 98 % | 73 % | 98 % | 63 % |
+| 1448 × 1086 (60) | 97 % | 93 % / 82 % | 95 % / 95 % | 88 % | 93 % | 58 % |
+| 1672 × 941 (60) | 100 % | 98 % / 82 % | 100 % / 100 % | 83 % | 98 % | 5 % |
+| 1122 × 1402 (60) | 100 % | 100 % / 93 % | 100 % / 100 % | 93 % | 100 % | 78 % |
+| 8 further sizes (258) | 98 % | 97 % / 83 % | 98 % / 98 % | 85 % | 96 % | 46 % |
+| all 14 sizes (618) | 98 % | 96 % / 81 % | 98 % / 98 % | 82 % | 96 % | 42 % |
 
-Cropped to 95 % on all sides: 0 %. The shipped templates are built from all images (424, 219, 123 and 193).
+Cropped to 95 % on all sizes: 0 %. Built without the tested output size (`--leave-size-out`), the 618 test images give the same rates: 99 % original, 95 % at 50 %, 95 % at 1280 px with JPEG 80. The pattern therefore does not depend on the output size.
 
-Other output sizes: ChatGPT picks the size from the aspect ratio of the input image, so many images have no template of their own. Of 2,165 GPT-Image 2 PNGs with a C2PA watermark assertion in 67 other sizes (1086 × 1448, 1559 × 1009, 1537 × 1023, 1024 × 1536, 1536 × 1024 and others; from the MLLM dataset [zr-zhang/MLLM-Generated-Image-Detection-Dataset](https://huggingface.co/datasets/zr-zhang/MLLM-Generated-Image-Detection-Dataset), wafflefan/felix-chatgpt-generated-images, mramazan/Synthetic-Character-Dataset-for-FLUX-LORA and winrisef), 99 % trigger.
+Independent images, none of them used for the template:
 
-In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](https://huggingface.co/datasets/Sarim-Hash/liars-dividend-GPT-image-2-photoreal), 80 images at 1024 × 1024 without C2PA), one image reaches z 195 with the 1254 template, probably a downscaled copy. The other 79 have the uncovered size 1024 × 1024 and do not trigger.
+| Images | Original | downscaled to 33 % | 1280 px, JPEG 80 |
+|---|---|---|---|
+| GPT-Image 2 PNGs with a C2PA watermark assertion in 416 different output sizes (700 from the MLLM dataset [zr-zhang/MLLM-Generated-Image-Detection-Dataset](https://huggingface.co/datasets/zr-zhang/MLLM-Generated-Image-Detection-Dataset)) | 100 % | 99.9 % | 99.9 % |
+| gpt-image-2, gpt-image-2.5-flare and gpt-image-2.5-sunburst at 1254 × 1254 (400, [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research)) | 100 % | 99 % | 100 % |
+| Wikimedia Commons files with a C2PA watermark assertion (33, many edited afterwards) | 85 % | 79 % | 85 % |
 
-False positives (measured like `eval.py --ignore-aspect`, so every template on every image): none of 8,830 images without an OpenAI watermark (4,457 real photos, paintings, charts and YouTube thumbnails from the sources above, 1,873 images from Gemini, GPT-Image 1.5, FLUX.2, Qwen-Image, Z-Image, Midjourney 7 and other generators, and 1,500 real photos and 1,000 FLUX.2, Qwen-Image 2.1 and Nano Banana 2 images from the MLLM dataset). The highest z-score was 4.4, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 110 trigger, all GPT-Image 2 images from one dataset (110 of 120, mostly JPEGs at 900 × 1200); the 300 images of the other three datasets do not. In OpenFake, 14 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
+The undetected Commons files are mostly screenshots and edited versions, where the pixels no longer carry the pattern. 3840 × 2160 files are found as well (z 24 to 163).
+
+In an independent dataset ([Sarim-Hash/liars-dividend-GPT-image-2-photoreal](https://huggingface.co/datasets/Sarim-Hash/liars-dividend-GPT-image-2-photoreal), 100 images at 1024 × 1024 without C2PA), one image reaches z 117, apparently from ChatGPT. The other 99 do not trigger. No image at 1024 × 1024 with a verified watermark is known, so this size is not tested.
+
+False positives: none of 16,221 images without an OpenAI watermark (8,016 real photos, paintings, charts and thumbnails and images from Gemini, GPT-Image 1 and 1.5, FLUX.2, Qwen-Image, Midjourney 7 and other generators, and 8,205 images from OpenFake, among them 1,281 from GPT-Image 1, 860 from DALL-E 3, 802 LAION and 698 Pexels photos). The highest z-score was 4.5, the standard deviation 1.0. Of 420 further OpenAI images from four Hugging Face datasets without C2PA evidence, 113 trigger, 112 of them GPT-Image 2 images from one dataset (112 of 120, mostly JPEGs at 900 × 1200); of the other three datasets 1 of 300 triggers. In OpenFake, 16 of 36 GPT-Image 2 images (mostly 1024 × 1536) and none of 80 GPT-Image 1.5 images trigger.
 
 ### Limitations
 
 - This is a reconstruction from public sample images, not Google's decoder. Only images from Gemini 3 Pro Image (Nano Banana Pro), Gemini 3.1 Flash Image and GPT-Image 2 (ChatGPT and API) are tested, other models are unverified.
-- OpenAI images in sizes without their own template are found less reliably once they are downscaled and saved as JPEG (102 of 109 JPEGs at 900 × 1200, 14 of 30 OpenFake images at 1024 × 1536 and 1536 × 1024). Images at 1024 × 1024 without C2PA are almost never found, and there are no such images with a verified watermark. Every template is based on at most two sources. OpenAI images from before May 2026 carry no SynthID.
-- Cropping destroys the signal completely. Gemini images that are downscaled to 800 px and saved as JPEG are no longer detected, and Nano Banana Pro images are mostly lost already as WebP or at 1280 px; ChatGPT images in the template sizes still are found. Images from social networks are therefore often not detected; then the model takes over.
+- OpenAI images are found less reliably after WebP compression (82 %), after downscaling to 33 % (81 %) and at 800 px with JPEG 75 (42 %). The OpenAI template comes from one source, and no image at 1024 × 1024 with a verified watermark is known, so that size is untested. OpenAI images from before May 2026 carry no SynthID.
+- Cropping destroys the signal completely. Gemini images that are downscaled to 800 px and saved as JPEG are no longer detected, and Nano Banana Pro images are mostly lost already as WebP or at 1280 px with JPEG 80. Images from social networks are therefore often not detected; then the model takes over.
+- Google's blogs serve WebP renditions, which erase the pattern. The add-on loads the original from `original_images/` instead, which works only where the rendition's file name is not shortened. Of 182 images on 15 posts about Nano Banana, Nano Banana Pro and Imagen 4, it finds the original of 91; SynthID or the C2PA metadata flag 29 images (2 without this), and 87 are flagged in total (80 without).
 - Real photos edited with Gemini carry SynthID as well and are flagged, those edited with ChatGPT probably too.
 - ERNIE-Image reproduces the brightness part of Google's pattern in some images, which are then reported as Google SynthID.
-- The Google templates are computed from the Hugging Face datasets [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there) and [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0), the OpenAI templates from [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0) and [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
+- The Google templates are computed from the Hugging Face datasets [aoxo/reverse-synthid](https://huggingface.co/datasets/aoxo/reverse-synthid) (no license stated there) and [bigdatamark/synthid-research](https://huggingface.co/datasets/bigdatamark/synthid-research) (CC BY 4.0), the OpenAI templates from [winrisef/gpt-generated-image-collection](https://huggingface.co/datasets/winrisef/gpt-generated-image-collection) (MIT). For OpenAI, only images whose C2PA manifest records the watermark (`c2pa.watermarked.unbound`) count. All revisions are pinned; only averaged phases and weights are shipped, no images.
 
 ## Amazon Nova Canvas watermark
 
@@ -257,7 +278,7 @@ The check takes 2.5 to 5.3 ms per image in Node, depending on the size of the lo
 
 ## Further visible marks
 
-Measured with `tools/visible/eval.py --logo marks`; a hit needs a correlation of at least 0.6 for the Chinese labels, 0.65 for the current Grok marks and 0.8 for the 2024 Grok mark.
+Measured with `tools/visible/eval.py --logo marks` (and `--logo dalle` for the DALL·E 2 bar); a hit needs a correlation of at least 0.6 for the Chinese labels and Meta AI, 0.65 for the current Grok marks, 0.7 for Bing and 0.8 for the 2024 Grok mark.
 
 Real images with the mark, labeled by eye:
 
@@ -281,11 +302,19 @@ Missed marks sit on bright backgrounds, where the white text leaves little contr
 
 False positives: none of 10,432 images without these marks (the images of the Kling logo test without duplicates and without 8 Aurora images, all of which carry the Grok mark and are found), as downloaded and after downscaling to 50 % with JPEG 80. The highest correlations are 0.52 for the Chinese labels, 0.53 for the current Grok marks and 0.70 for the 2024 Grok mark.
 
-All seven marks together take about 9 times as long as the Kling check, mostly for the Grok scan.
+Those seven marks together take about 9 times as long as the Kling check, mostly for the Grok scan.
+
+### Bing Image Creator, Meta AI and the DALL·E 2 bar
+
+- **Bing Image Creator (the "b" in the bottom left corner, 1,024 × 1,024):** 9 images on Wikimedia Commons (public domain, CC0 and CC BY-SA) form the template. 41 further images with the mark, labeled by eye among the 3,465 DALL·E 3 images of [ProGamerGov/dalle-3-reddit-dataset](https://huggingface.co/datasets/ProGamerGov/dalle-3-reddit-dataset), are the test set: the check finds 33 of them (80 %) as downloaded, after downscaling to 1,280 px with JPEG 80 and to 800 px with JPEG 75. It misses marks on bright or busy backgrounds and a second, stylized variant of the "b" (3 images). Left out of the average, 8 of the 9 Commons images still score 0.87 or more.
+- **Meta AI (the words "Meta AI" with its symbol, bottom right):** 4 images from 2025 on Wikimedia Commons (public domain and CC0). The average of the other three finds 3 of them with 0.72 to 0.88; the fourth, at 1,792 px, scores 0.42.
+- **DALL·E 2 (the bar of five colored squares, 105 × 20 px at a width of 1,024, in the bottom right corner):** a check of the five colors instead of a correlation, since the squares are opaque and always the same. It finds both images on Wikimedia Commons (public domain and CC BY-SA 4.0) whose edge is untouched, both with 1.0 as downloaded, 0.90 and 0.93 after downscaling to 1,280 px with JPEG 80 and 0.86 and 0.83 after 800 px with JPEG 75. A crop that cuts off the bar is missed.
+
+False positives: none of 12,454 images without these marks (7,226 images of the photo, art, chart, COCO, Reddit and YouTube sets, 1,804 Kling images without the logo and Odd One Out images, and the 3,424 Reddit DALL·E 3 images without the mark), as downloaded and under both web conditions. The highest correlations are 0.61 for Bing and 0.34 for Meta AI; the highest bar score is below zero. With all three, the visible check takes 2 to 5 ms (4 to 7 %) longer per image in Node.
 
 ### Limitations
 
-- The test sets are small: 4 to 21 images per Chinese label, most from a single source, and 7 images of the two older Grok marks.
+- The test sets are small: 4 to 21 images per Chinese label, most from a single source, 7 images of the two older Grok marks, 4 of Meta AI and 2 of the DALL·E 2 bar. Almost all Bing test images come from one dataset in one size.
 - The Chinese labels have to be in the size and place that GB 45438-2025 makes the providers use; cropping and added borders move them away. Other providers (Yuanbao, Baidu and others) and Kling's labels with other versions are not covered.
 - Grok's marks are searched only between 4 % and 10 % of the long side, which covers originals with a long side of about 660 to 1,650 px (890 to 2,200 px for the 2024 mark). Marks narrower than 20 px are not searched.
 - Every image with such a mark in this place is flagged, also a copy that a model painted into an image.
@@ -301,5 +330,5 @@ All seven marks together take about 9 times as long as the Kling check, mostly f
 - **fev v13** ([angelhd25/ull-ai-image-detector](https://huggingface.co/angelhd25/ull-ai-image-detector), MIT), like Detectra a fine-tune of the Community Forensics ViT-S for a browser add-on: alone it detects 37–39 % of AI images under web conditions, but flags 7 % of paintings. In an ensemble with Detectra v3 it added no hits at no more than 5 % flagged paintings, but costs 88 MB and 0.7 s per image. It was also partly trained on the OpenFake validation split (CC BY-NC 4.0), whose generators and photo sources do not appear in the test split used here.
 - **Other detectors from Hugging Face** (capcheck/ai-image-detection, ai-image-detect-distilled, SMOGY and others): many are trained on small datasets like CIFAKE and separate AI images under web conditions hardly or not at all better than chance (AUC 0.46 to 0.62). Larger models like SwinV2-Large detectors or SigLIP-DINOv2 ensembles would be too big for the add-on at 200 MB to 2 GB.
 - **Amazon Titan Image Generator watermark:** Titan images (G1 and G1 v2, 35 images with C2PA from 12 GitHub repositories and 37 from an AWS blog post) share a phase pattern only when they were generated with the same seed (0 and 42 are common defaults). Images with random seeds from other repositories show none (z ≈ 0), so no fixed template is possible. Unmodified Titan images are recognized by their C2PA manifest.
-- **Other visible marks:** Meta AI has shown no visible mark since Muse Image (July 2026), and there are no public examples of its older "Imagined with AI" label. Samsung Galaxy AI marks come with localized text, Hailuo (MiniMax) marks only videos, and Grok's paid plans and API add no mark. For Samsung and the older Meta label no real examples were found to measure positions and false positives.
+- **Other visible marks:** Meta AI has shown no visible mark since Muse Image (July 2026), and there are no public examples of its older "Imagined with AI" label. Samsung Galaxy AI marks come with localized text, Hailuo (MiniMax), Vidu and Sora mark only videos, and Grok's paid plans and API add no mark. For Samsung, Tencent Yuanbao (two variants with one or four examples each), Microsoft Copilot ("Made with AI") and the older Meta label no real examples were found to measure positions and false positives. Google Pixel and Photos edits, Adobe Firefly, Ideogram, Leonardo, Craiyon and Apple Image Playground add no visible mark to their images.
 - **Stability AI on Amazon Bedrock:** the newer models (SD3 Large, SD3.5 Large, Stable Image Ultra) write no `invisible-watermark` and show no fixed phase pattern in 434 PNGs from 61 GitHub repositories and 23 PNGs from AWS blog posts. Only the SDXL outputs among them carry the SDXL watermark and the EXIF fields of the Stability API.

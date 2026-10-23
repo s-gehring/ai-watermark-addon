@@ -4,7 +4,7 @@ import {
   firstCssUrl,
   isCheckableUrl,
   isLargeEnough,
-  knownOriginal,
+  knownOriginals,
   largestCandidate,
   parseSrcset,
 } from '../../src/content/candidates';
@@ -84,37 +84,46 @@ describe('largestCandidate', () => {
   });
 });
 
-describe('knownOriginal', () => {
+describe('knownOriginals', () => {
   it('maps thumbnails of known image hosts to the original file', () => {
     expect(
-      knownOriginal('https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/A%C3%A9.png/960px-A%C3%A9.png?utm_source=en.wikipedia.org'),
-    ).toBe('https://upload.wikimedia.org/wikipedia/commons/6/69/A%C3%A9.png');
-    expect(knownOriginal('https://upload.wikimedia.org/wikipedia/en/thumb/a/ab/X.jpg/250px-X.jpg')).toBe(
-      'https://upload.wikimedia.org/wikipedia/en/a/ab/X.jpg',
+      knownOriginals('https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/A%C3%A9.png/960px-A%C3%A9.png?utm_source=en.wikipedia.org'),
+    ).toEqual(['https://upload.wikimedia.org/wikipedia/commons/6/69/A%C3%A9.png']);
+    expect(knownOriginals('https://upload.wikimedia.org/wikipedia/en/thumb/a/ab/X.jpg/250px-X.jpg')).toEqual(['https://upload.wikimedia.org/wikipedia/en/a/ab/X.jpg']);
+    expect(knownOriginals('https://preview.redd.it/abc123.png?width=640&crop=smart&auto=webp&s=f00')).toEqual(['https://i.redd.it/abc123.png']);
+    expect(knownOriginals('https://preview.redd.it/a-captive-audience-v0-hjdnilqr13wh1.jpeg?width=640&auto=webp&s=f00')).toEqual(['https://i.redd.it/hjdnilqr13wh1.jpeg']);
+    expect(knownOriginals('https://blog.test/wp-content/uploads/2026/05/photo-1024x683.jpg')).toEqual(['https://blog.test/wp-content/uploads/2026/05/photo.jpg']);
+    expect(knownOriginals('https://blog.test/wp-content/uploads/2026/05/photo-scaled.jpg')).toEqual(['https://blog.test/wp-content/uploads/2026/05/photo.jpg']);
+    expect(knownOriginals('https://news.test/wp-content/uploads/2026/05/photo.jpg?quality=90&w=680')).toEqual(['https://news.test/wp-content/uploads/2026/05/photo.jpg']);
+    expect(knownOriginals('https://lh3.googleusercontent.com/AbC-dEf_123=w800-h600-rw')).toEqual(['https://lh3.googleusercontent.com/AbC-dEf_123=s0']);
+  });
+
+  it('maps the renditions of Google blogs to the original image, trying PNG and JPEG behind WebP', () => {
+    const bucket = 'https://storage.googleapis.com/gweb-uniblog-publish-prod';
+    expect(knownOriginals(`${bucket}/images/Final_Tennis.width-1000.format-webp.webp`)).toEqual([
+      `${bucket}/original_images/Final_Tennis.png`,
+      `${bucket}/original_images/Final_Tennis.jpg`,
+      `${bucket}/original_images/Final_Tennis.jpeg`,
+    ]);
+    expect(knownOriginals(`${bucket}/images/Final_Tennis.2e16d0ba.fill-600x600.format-webp.webp`)[0]).toBe(
+      `${bucket}/original_images/Final_Tennis.png`,
     );
-    expect(knownOriginal('https://preview.redd.it/abc123.png?width=640&crop=smart&auto=webp&s=f00')).toBe('https://i.redd.it/abc123.png');
-    expect(knownOriginal('https://preview.redd.it/a-captive-audience-v0-hjdnilqr13wh1.jpeg?width=640&auto=webp&s=f00')).toBe(
-      'https://i.redd.it/hjdnilqr13wh1.jpeg',
-    );
-    expect(knownOriginal('https://blog.test/wp-content/uploads/2026/05/photo-1024x683.jpg')).toBe(
-      'https://blog.test/wp-content/uploads/2026/05/photo.jpg',
-    );
-    expect(knownOriginal('https://blog.test/wp-content/uploads/2026/05/photo-scaled.jpg')).toBe(
-      'https://blog.test/wp-content/uploads/2026/05/photo.jpg',
-    );
-    expect(knownOriginal('https://news.test/wp-content/uploads/2026/05/photo.jpg?quality=90&w=680')).toBe(
-      'https://news.test/wp-content/uploads/2026/05/photo.jpg',
-    );
-    expect(knownOriginal('https://lh3.googleusercontent.com/AbC-dEf_123=w800-h600-rw')).toBe('https://lh3.googleusercontent.com/AbC-dEf_123=s0');
+    expect(knownOriginals(`${bucket}/images/Labs_Social.width-1300.png`)).toEqual([`${bucket}/original_images/Labs_Social.png`]);
+    expect(knownOriginals('https://storage.googleapis.com/gweb-developer-goog-blog-assets/images/hero.2e16d0ba.fill-800x400.jpg')).toEqual([
+      'https://storage.googleapis.com/gweb-developer-goog-blog-assets/original_images/hero.jpg',
+    ]);
   });
 
   it('leaves originals, vector thumbnails and unknown hosts alone', () => {
-    expect(knownOriginal('https://upload.wikimedia.org/wikipedia/commons/6/69/X.png')).toBeNull();
-    expect(knownOriginal('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Sign.svg/500px-Sign.svg.png')).toBeNull();
-    expect(knownOriginal('https://blog.test/wp-content/uploads/2026/05/photo.jpg')).toBeNull();
-    expect(knownOriginal('https://blog.test/wp-content/uploads/2026/05/photo.jpg?ver=2')).toBeNull();
-    expect(knownOriginal('https://lh3.googleusercontent.com/AbC-dEf_123=s0')).toBeNull();
-    expect(knownOriginal('https://cdn.test/photo-1024x683.jpg')).toBeNull();
+    expect(knownOriginals('https://upload.wikimedia.org/wikipedia/commons/6/69/X.png')).toEqual([]);
+    expect(knownOriginals('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Sign.svg/500px-Sign.svg.png')).toEqual([]);
+    expect(knownOriginals('https://blog.test/wp-content/uploads/2026/05/photo.jpg')).toEqual([]);
+    expect(knownOriginals('https://blog.test/wp-content/uploads/2026/05/photo.jpg?ver=2')).toEqual([]);
+    expect(knownOriginals('https://lh3.googleusercontent.com/AbC-dEf_123=s0')).toEqual([]);
+    expect(knownOriginals('https://cdn.test/photo-1024x683.jpg')).toEqual([]);
+    expect(knownOriginals('https://storage.googleapis.com/gweb-uniblog-publish-prod/original_images/Final_Tennis.png')).toEqual([]);
+    expect(knownOriginals('https://storage.googleapis.com/gweb-developer-goog-blog-assets/images/hero.original.png')).toEqual([]);
+    expect(knownOriginals('https://storage.googleapis.com/other-bucket/images/hero.width-1000.format-webp.webp')).toEqual([]);
   });
 });
 

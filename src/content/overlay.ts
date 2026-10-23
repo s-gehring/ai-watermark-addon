@@ -1,5 +1,6 @@
 import model from '../../model.json';
 import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
+import { composedContains, LAYER_TAG, parentOf } from './dom';
 
 const INSET = 6;
 const GAP = 6;
@@ -92,7 +93,7 @@ interface Badge {
 }
 
 export class BadgeLayer {
-  private readonly host = document.createElement('ai-watermark-layer');
+  private readonly host = document.createElement(LAYER_TAG);
   private readonly page: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly details: HTMLElement;
@@ -272,8 +273,8 @@ export class BadgeLayer {
   private isCovered(element: Element, x: number, y: number): boolean {
     for (const hit of document.elementsFromPoint(x, y)) {
       if (hit === this.host) continue;
-      if (hit === element || hit.contains(element) || element.contains(hit)) return false;
-      for (let node: Element | null = hit; node && !node.contains(element); node = node.parentElement) {
+      if (composedContains(hit, element) || composedContains(element, hit)) return false;
+      for (let node: Element | null = hit; node && !composedContains(node, element); node = parentOf(node)) {
         const { position } = getComputedStyle(node);
         if (position === 'fixed' || position === 'sticky') return true;
       }
@@ -292,7 +293,7 @@ function visibleBox(element: Element, viewportWidth: number, viewportHeight: num
     bottom: rect.bottom,
   };
   let fixed = false;
-  for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+  for (let node = parentOf(element); node && node !== document.body; node = parentOf(node)) {
     if (box.right <= box.left || box.bottom <= box.top) return null;
     const style = getComputedStyle(node);
     if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
@@ -395,6 +396,9 @@ const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   'doubao-visible': 'Doubao',
   'jimeng-visible': 'Jimeng',
   'qwen-visible': 'Qwen',
+  'bing-visible': 'Bing Image Creator',
+  'meta-visible': 'Meta AI',
+  'dalle-visible': 'DALL·E 2',
 };
 
 const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set([
@@ -404,6 +408,9 @@ const VISIBLE_SCHEMES: ReadonlySet<WatermarkScheme> = new Set([
   'doubao-visible',
   'jimeng-visible',
   'qwen-visible',
+  'bing-visible',
+  'meta-visible',
+  'dalle-visible',
 ]);
 
 function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {

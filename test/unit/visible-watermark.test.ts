@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { detectVisibleWatermark, geminiLogoScore, klingLogoScore, visibleMarkScores } from '../../src/background/visible-watermark';
+import { dalleBarScore, detectVisibleWatermark, geminiLogoScore, klingLogoScore, visibleMarkScores } from '../../src/background/visible-watermark';
 
 async function load(name: string) {
   const path = new URL(`./fixtures/${name}`, import.meta.url).pathname;
@@ -33,6 +33,9 @@ describe('detectVisibleWatermark', () => {
     ['grok-2024', 'grok-visible'],
     ['grok-aurora', 'grok-visible'],
     ['grok', 'grok-visible'],
+    ['bing', 'bing-visible'],
+    ['meta', 'meta-visible'],
+    ['dalle2', 'dalle-visible'],
   ])('finds the %s mark', async (name, scheme) => {
     expect(detectVisibleWatermark(await load(`visible-watermark/${name}.jpg`))).toBe(scheme);
   });
@@ -49,6 +52,7 @@ describe('detectVisibleWatermark', () => {
     const tiny = { width: 40, height: 40, channels: 3 as const, data: new Uint8Array(40 * 40 * 3) };
     expect(geminiLogoScore(tiny)).toBe(-1);
     expect(klingLogoScore(tiny)).toBe(-1);
+    expect(dalleBarScore(tiny)).toBe(-1);
     expect(Math.max(...Object.values(visibleMarkScores(tiny)))).toBe(-1);
   });
 });
@@ -80,6 +84,8 @@ describe('visibleMarkScores', () => {
     ['grok-2024', 0.92458],
     ['grok-aurora', 0.92138],
     ['grok', 0.9398],
+    ['bing', 0.98068],
+    ['meta', 0.81228],
   ] as const)('matches the Python reference implementation for %s', async (name, score) => {
     expect(visibleMarkScores(await load(`visible-watermark/${name}.jpg`))[name]).toBeCloseTo(score, 4);
   });
@@ -93,5 +99,15 @@ describe('visibleMarkScores', () => {
     expect(scores['grok-2024']).toBeCloseTo(0.22446, 4);
     expect(scores['grok-aurora']).toBeCloseTo(0.23728, 4);
     expect(scores.grok).toBeCloseTo(0.04992, 4);
+    expect(scores.bing).toBeCloseTo(0.32185, 4);
+    expect(scores.meta).toBeCloseTo(-0.02684, 4);
+  });
+});
+
+describe('dalleBarScore', () => {
+  it('matches the Python reference implementation', async () => {
+    expect(dalleBarScore(await load('visible-watermark/dalle2.jpg'))).toBeCloseTo(0.80063, 4);
+    expect(dalleBarScore(await load('visible-watermark/clean.jpg'))).toBe(-1);
+    expect(dalleBarScore(await load('visible-watermark/bing.jpg'))).toBe(-1);
   });
 });

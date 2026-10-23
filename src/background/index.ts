@@ -2,7 +2,7 @@ import { LruCache } from '../shared/lru';
 import type { BackgroundRequest, Verdict } from '../shared/messages';
 import { loadSettings, onSettingsChanged, type Settings } from '../shared/settings';
 import { evaluate } from './inference';
-import { TaskQueue } from './queue';
+import { firstResult, TaskQueue } from './queue';
 import { forgetTab, updateTabStats } from './tab-stats';
 import type { EncodedImage } from './worker';
 
@@ -36,11 +36,11 @@ async function fetchBytes(url: string, maxBytes = MAX_BYTES): Promise<EncodedIma
   }
 }
 
-async function classify(url: string, provided?: ArrayBuffer, original?: string): Promise<Verdict> {
+async function classify(url: string, provided?: ArrayBuffer, original?: string[]): Promise<Verdict> {
   await settingsReady;
   const [fetched, larger] = await Promise.all([
     provided ? { bytes: provided, type: '' } : fetchBytes(url),
-    original ? originals.run(() => fetchBytes(original, MAX_ORIGINAL_BYTES)) : null,
+    original ? originals.run(() => firstResult(original, (candidate) => fetchBytes(candidate, MAX_ORIGINAL_BYTES))) : null,
   ]);
   if (!fetched) return { ok: false, error: 'fetch' };
   if (fetched.type.includes('svg')) return { ok: false, error: 'unsupported' };
@@ -48,7 +48,7 @@ async function classify(url: string, provided?: ArrayBuffer, original?: string):
   return evaluate(fetched, larger, { checkMetadata, checkWatermark });
 }
 
-function classifyCached(url: string, bytes?: ArrayBuffer, original?: string): Promise<Verdict> {
+function classifyCached(url: string, bytes?: ArrayBuffer, original?: string[]): Promise<Verdict> {
   const hit = cache.get(url);
   if (hit) return Promise.resolve(hit);
   let pending = inflight.get(url);

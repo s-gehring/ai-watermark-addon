@@ -9,7 +9,9 @@ export type MetadataReason =
   | 'stability-ai'
   | 'grok'
   | 'ideogram'
-  | 'aigc-label';
+  | 'aigc-label'
+  | 'civitai'
+  | 'reve';
 
 export type SynthIdProvider = 'google' | 'openai';
 
@@ -24,7 +26,10 @@ export type WatermarkScheme =
   | 'grok-visible'
   | 'doubao-visible'
   | 'jimeng-visible'
-  | 'qwen-visible';
+  | 'qwen-visible'
+  | 'bing-visible'
+  | 'meta-visible'
+  | 'dalle-visible';
 
 export type CheckStatus = 'clear' | 'off';
 
@@ -45,7 +50,7 @@ export interface FrameStats {
 }
 
 export type BackgroundRequest =
-  | { type: 'classify'; url: string; bytes?: ArrayBuffer; original?: string }
+  | { type: 'classify'; url: string; bytes?: ArrayBuffer; original?: string[] }
   | { type: 'page-stats'; stats: FrameStats; initial: boolean };
 
 export type ContentRequest = { type: 'get-status' };
