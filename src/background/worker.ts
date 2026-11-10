@@ -138,10 +138,17 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
   return { ok: true, ...scored, source: 'model', metadata, watermark: 'clear' };
 }
 
+async function check(request: WorkerRequest): Promise<Verdict> {
+  try {
+    const reason = request.checkMetadata ? detectAiMetadata(new Uint8Array(request.bytes)) : null;
+    if (reason) return { ok: true, score: 1, source: 'metadata', reason };
+    return await queue.run(() => score(request, request.original, request));
+  } catch (error) {
+    console.error('[ai-watermark] check failed', error);
+    return { ok: false, error: 'model' };
+  }
+}
+
 scope.onmessage = ({ data }) => {
-  const reason = data.checkMetadata ? detectAiMetadata(new Uint8Array(data.bytes)) : null;
-  const verdict: Promise<Verdict> = reason
-    ? Promise.resolve({ ok: true, score: 1, source: 'metadata', reason })
-    : queue.run(() => score(data, data.original, data));
-  void verdict.then((v) => scope.postMessage({ id: data.id, verdict: v }));
+  void check(data).then((verdict) => scope.postMessage({ id: data.id, verdict }));
 };

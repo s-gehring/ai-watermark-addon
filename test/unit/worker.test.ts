@@ -5,10 +5,13 @@ import type { WorkerRequest, WorkerResponse } from '../../src/background/worker'
 const classifier = vi.hoisted(() => ({ decodeImage: vi.fn(), reencodeAsJpeg: vi.fn(), scoreImage: vi.fn() }));
 const synthid = vi.hoisted(() => ({ detectSynthId: vi.fn(), searchCroppedSynthId: vi.fn() }));
 const noMark = vi.hoisted(() => () => null);
+const invisible = vi.hoisted(() => ({ detectInvisibleWatermark: vi.fn() }));
+const metadata = vi.hoisted(() => ({ detectAiMetadata: vi.fn() }));
 
 vi.mock('../../src/background/classifier', () => classifier);
 vi.mock('../../src/background/synthid', () => synthid);
-vi.mock('../../src/background/invisible-watermark', () => ({ detectInvisibleWatermark: noMark }));
+vi.mock('../../src/background/invisible-watermark', () => invisible);
+vi.mock('../../src/background/metadata', () => metadata);
 vi.mock('../../src/background/bytedance-watermark', () => ({ detectBytedanceWatermark: noMark }));
 vi.mock('../../src/background/visible-watermark', () => ({ detectVisibleWatermark: noMark }));
 
@@ -18,12 +21,12 @@ let nextId = 0;
 
 const encoded = (width: number, height: number) => ({ bytes: new Uint16Array([width, height]).buffer as ArrayBuffer, type: 'image/png' });
 
-function run(displayed: [number, number], original: [number, number] | null, checkWatermark = false): Promise<WorkerResponse> {
+function run(displayed: [number, number], original: [number, number] | null, checkWatermark = false, checkMetadata = false): Promise<WorkerResponse> {
   const id = nextId++;
   return new Promise((resolve) => {
     scope.postMessage.mockImplementation((response: WorkerResponse) => response.id === id && resolve(response));
     scope.onmessage!({
-      data: { id, ...encoded(...displayed), original: original && encoded(...original), checkMetadata: false, checkWatermark },
+      data: { id, ...encoded(...displayed), original: original && encoded(...original), checkMetadata, checkWatermark },
     });
   });
 }
@@ -46,6 +49,8 @@ beforeEach(() => {
   classifier.scoreImage.mockResolvedValue({ score: 0.1, models: [0.1] });
   synthid.detectSynthId.mockReturnValue(null);
   synthid.searchCroppedSynthId.mockReturnValue(null);
+  invisible.detectInvisibleWatermark.mockReturnValue(null);
+  metadata.detectAiMetadata.mockReturnValue(null);
 });
 
 describe('worker', () => {
@@ -73,5 +78,20 @@ describe('worker', () => {
     await run([...displayed], original && [...original]);
     expect(classifier.reencodeAsJpeg).not.toHaveBeenCalled();
     expect(sizeOf(classifier.scoreImage.mock.calls[0][0])).toEqual([...displayed]);
+  });
+
+  it('answers with a model error when a check throws, and keeps answering afterwards', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    invisible.detectInvisibleWatermark.mockImplementationOnce(() => {
+      throw new Error('broken check');
+    });
+    expect((await run([400, 300], null, true)).verdict).toEqual({ ok: false, error: 'model' });
+    metadata.detectAiMetadata.mockImplementationOnce(() => {
+      throw new Error('broken parser');
+    });
+    expect((await run([400, 300], null, false, true)).verdict).toEqual({ ok: false, error: 'model' });
+    expect(logged).toHaveBeenCalledTimes(2);
+    logged.mockRestore();
+    expect((await run([400, 300], null, true)).verdict).toMatchObject({ ok: true, source: 'model' });
   });
 });

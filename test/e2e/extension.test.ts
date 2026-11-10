@@ -177,6 +177,40 @@ const TIERS_PAGE = `<!doctype html>
   <img id="borderline" src="/borderline.png">
 </body></html>`;
 
+const REMOVED_FRAME_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+  <iframe id="frame" src="/frame"></iframe>
+  <script>
+    const frame = document.getElementById('frame');
+    frame.addEventListener('load', () => setTimeout(() => {
+      const inner = frame.contentDocument;
+      inner.body.append(inner.createElement('div'));
+      frame.remove();
+      setTimeout(() => {
+        inner.body.append(inner.createElement('div'));
+        document.body.dataset.done = 'true';
+      }, 300);
+    }, 600));
+  </script>
+</body></html>`;
+
+const BUSY_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+  <div>${'<span>x</span>'.repeat(1500)}</div>
+  <img id="behind" src="/ai.jpg?busy" style="display:block;width:320px;height:240px">
+  <script>
+    const until = performance.now() + 10000;
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      const end = performance.now() + 40;
+      while (performance.now() < end);
+      if (performance.now() < until) channel.port2.postMessage(0);
+      else document.body.dataset.calm = 'true';
+    };
+    channel.port2.postMessage(0);
+  </script>
+</body></html>`;
+
 const variantsPage = (foreignOrigin: string) => `<!doctype html>
 <html><head><meta charset="utf-8"><style>img { display: block; width: 320px; height: 240px; }</style></head><body>
   <img id="srcset" srcset="/variant.jpg?srcset 480w, /variant-large.jpg?srcset 1280w" sizes="320px">
@@ -213,6 +247,9 @@ beforeAll(async () => {
         })
         .end(STRICT_PAGE);
     else if (path === '/shadow') res.writeHead(200, { 'content-type': 'text/html' }).end(SHADOW_PAGE);
+    else if (path === '/removed-frame') res.writeHead(200, { 'content-type': 'text/html' }).end(REMOVED_FRAME_PAGE);
+    else if (path === '/frame') res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><body><div></div></body>');
+    else if (path === '/busy') res.writeHead(200, { 'content-type': 'text/html' }).end(BUSY_PAGE);
     else if (path === '/tiers') res.writeHead(200, { 'content-type': 'text/html' }).end(TIERS_PAGE);
     else if (path === '/borderline.png') res.writeHead(200, { 'content-type': 'image/png' }).end(borderline);
     else if (path === '/variants') res.writeHead(200, { 'content-type': 'text/html' }).end(variantsPage(origin.replace('127.0.0.1', 'localhost')));
@@ -284,6 +321,33 @@ async function openExtensionPage(path: string): Promise<void> {
   await driver.setContext(firefox.Context.CONTENT);
   await driver.wait(async () => (await driver.getAllWindowHandles()).length > 1, 10_000);
   await driver.switchTo().window((await driver.getAllWindowHandles()).at(-1)!);
+}
+
+async function contentScriptErrors(): Promise<string[]> {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return await driver.executeScript<string[]>((script: string) => {
+      const g = globalThis as unknown as {
+        Services: {
+          wm: { getMostRecentWindow(type: string): { contentScriptErrors?: string[] } };
+          console: { registerListener(listener: { observe(message: { message?: string }): void }): void };
+        };
+      };
+      const store = g.Services.wm.getMostRecentWindow('navigator:browser');
+      if (!store.contentScriptErrors) {
+        const errors: string[] = (store.contentScriptErrors = []);
+        g.Services.console.registerListener({
+          observe(message) {
+            const text = String(message.message ?? message);
+            if (text.includes(script)) errors.push(text);
+          },
+        });
+      }
+      return store.contentScriptErrors.splice(0);
+    }, `moz-extension://${ADDON_UUID}/content.js`);
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
 }
 
 async function visibleBadges(): Promise<BadgeInfo[]> {
@@ -558,6 +622,31 @@ describe('page that renders images inside shadow roots', () => {
     await driver.get(`${origin}/shadow`);
     const badges = await waitForBadges({ open: ['ai'], closed: ['ai'], nested: ['ai'], late: ['ai'], declarative: ['ai'] });
     for (const owner of ['open', 'closed', 'nested', 'late', 'declarative']) expect(kindOf(badges, owner)).toBe('ai');
+  }, 60_000);
+});
+
+describe('page that removes a frame whose content still changes', () => {
+  it('raises no error in the content script of the removed frame', async () => {
+    await contentScriptErrors();
+    await driver.get(`${origin}/removed-frame`);
+    await driver.wait(() => driver.executeScript(() => document.body.dataset.done === 'true'), 10_000);
+    await driver.sleep(300);
+    expect(await contentScriptErrors()).toEqual([]);
+  }, 60_000);
+});
+
+describe('page that never goes idle', () => {
+  it('still finds an image behind many elements', async () => {
+    await driver.get(`${origin}/busy`);
+    let state = { badges: 0, calm: false };
+    await driver.wait(async () => {
+      state = await driver.executeScript(() => ({
+        badges: document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelectorAll('.badge').length ?? 0,
+        calm: document.body.dataset.calm === 'true',
+      }));
+      return state.badges > 0 || state.calm;
+    }, 20_000);
+    expect(state).toEqual({ badges: 1, calm: false });
   }, 60_000);
 });
 
