@@ -498,7 +498,7 @@ function thresholdForFpr(realProbabilities, fpr) {
 const pct = (v) => `${(v * 100).toFixed(1)}%`;
 const cell = (s, width = 20) => String(s).padEnd(width);
 
-function report(rows, threshold) {
+function report(rows, threshold, possibleFrom) {
   const conditions = Object.keys(CONDITIONS);
   const by = (filter) => Object.fromEntries(conditions.map((k) => [k, rows.filter((s) => s.condition === k && filter(s))]));
   const line = (name, values) => console.log(cell(name, 34) + values.map((v) => cell(v)).join(''));
@@ -513,6 +513,7 @@ function report(rows, threshold) {
   };
   const model = rate((s) => s.p >= threshold);
   const addon = rate((s) => s.p >= threshold || s.check);
+  const possible = rate((s) => s.p >= possibleFrom && s.p < threshold && !s.check);
   const largePhotos = `photos ≥ ${LARGE_SHORT_SIDE} px`;
   line('', conditions);
 
@@ -534,10 +535,8 @@ function report(rows, threshold) {
   const fake = Object.fromEntries(fakeGroups.map((g) => [g, by((s) => s.split === 'test' && s.fake && s.group === g)]));
   for (const g of fakeGroups) each(`  detected ${g} (n=${count(fake[g])})`, fake[g], model);
   const realSources = [...new Set(rows.filter((s) => s.split === 'test' && !s.fake).map((s) => `${s.group}/${s.source}`))].sort();
-  for (const source of realSources) {
-    const group = by((s) => s.split === 'test' && !s.fake && `${s.group}/${s.source}` === source);
-    each(`  flagged ${source.split('/')[1]} (n=${count(group)})`, group, model);
-  }
+  const realBySource = realSources.map((source) => [source.split('/')[1], by((s) => s.split === 'test' && !s.fake && `${s.group}/${s.source}` === source)]);
+  for (const [source, group] of realBySource) each(`  flagged ${source} (n=${count(group)})`, group, model);
   const real = by((s) => s.split === 'test' && !s.fake && isRelevant(s));
   const largeReal = by((s) => s.split === 'test' && !s.fake && isRelevant(s) && s.large);
   each('  flagged photos (pooled)', real, model);
@@ -549,6 +548,15 @@ function report(rows, threshold) {
     each('  flagged photos (pooled)', real, addon);
     each(`  flagged ${largePhotos}`, largeReal, addon);
     each('  check hits on real images', by((s) => s.split === 'test' && !s.fake), (g) => `${g.filter((s) => s.check).length}/${g.length}`);
+  }
+
+  if (possibleFrom < threshold) {
+    console.log(`second badge tier, score ${possibleFrom} to below ${threshold}${withChecks ? ' without a metadata or watermark hit' : ''}:`);
+    for (const g of fakeGroups) each(`  AI ${g}`, fake[g], possible);
+    each('  AI (pooled)', by((s) => s.split === 'test' && s.fake), possible);
+    for (const [source, group] of realBySource) each(`  real ${source}`, group, possible);
+    each('  photos (pooled)', real, possible);
+    each(`  ${largePhotos}`, largeReal, possible);
   }
 
   if (perGenerator) {
@@ -569,7 +577,13 @@ function report(rows, threshold) {
     each('  AUC', both, (r) => auc(ps(r, true), ps(r, false)).toFixed(3));
     each('  detected', ai, model);
     each('  flagged', other, model);
-    each(`  flagged ≥ ${LARGE_SHORT_SIDE} px (n=${count(by((s) => s.split === 'heldout' && s.group === g && !s.fake && s.large))})`, by((s) => s.split === 'heldout' && s.group === g && !s.fake && s.large), model);
+    const largeOther = by((s) => s.split === 'heldout' && s.group === g && !s.fake && s.large);
+    each(`  flagged ≥ ${LARGE_SHORT_SIDE} px (n=${count(largeOther)})`, largeOther, model);
+    if (possibleFrom < threshold) {
+      each('  second badge tier AI', ai, possible);
+      each('  second badge tier real', other, possible);
+      each(`  second badge tier real ≥ ${LARGE_SHORT_SIDE} px`, largeOther, possible);
+    }
     if (!withChecks) continue;
     each('  detected with checks', ai, addon);
     each('  flagged with checks', other, addon);
@@ -599,5 +613,5 @@ for (const c of CANDIDATES) {
   console.log(`\n${c.label}${ms === null ? '' : ` | ${ms.toFixed(0)} ms/img`}`);
   const target = `${pct(TARGET_FPR)} flagged photos${c.members.length > 1 ? ` and at most ${pct(ART_LIMIT)} flagged paintings` : ''} on ${CALIBRATION_CONDITIONS.join(', ')}`;
   console.log(`calibration ${JSON.stringify(calibration)} threshold ${threshold}${fitted ? ` (fitted for ${target})` : ' (model.json)'}`);
-  report(reported, threshold);
+  report(reported, threshold, c.config?.possibleThreshold ?? threshold);
 }

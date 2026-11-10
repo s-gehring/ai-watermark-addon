@@ -1,5 +1,5 @@
 import model from '../../model.json';
-import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Platform, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
+import { EMPTY_STATS, type CheckStatus, type FrameStats, type Platform, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
 import { composedContains, LAYER_TAG, parentOf } from './dom';
 
 const INSET = 6;
@@ -23,6 +23,10 @@ const STYLE = `
 }
 .badge[hidden] { display: none; }
 .ai { padding: 0 8px; background: rgba(91, 33, 182, 0.92); }
+.possible {
+  padding: 0 8px; background: rgba(24, 24, 27, 0.7); color: #ddd6fe;
+  border: 1px dashed rgba(196, 181, 253, 0.85); box-shadow: none; font-weight: 600;
+}
 .clean, .pending, .failed { width: 22px; }
 .clean { background: rgba(21, 128, 61, 0.88); }
 .failed { background: rgba(82, 82, 91, 0.85); font-size: 12px; }
@@ -51,6 +55,7 @@ const STYLE = `
 .check { display: grid; grid-template-columns: 8px 1fr auto; column-gap: 8px; align-items: baseline; }
 .dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
 .hit .dot { background: #a78bfa; }
+.maybe .dot { box-sizing: border-box; border: 2px solid #a78bfa; }
 .clear .dot { background: #4ade80; }
 .off .dot { background: #71717a; }
 .value { text-align: right; font-variant-numeric: tabular-nums; }
@@ -61,6 +66,7 @@ const STYLE = `
 .bar { position: relative; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.15); }
 .bar > span { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px; background: #e4e4e7; }
 .bar::after { content: ""; position: absolute; top: -2px; bottom: -2px; left: var(--threshold); width: 1px; background: #fbbf24; }
+.bar.tiered::before { content: ""; position: absolute; z-index: 1; top: -2px; bottom: -2px; left: var(--possible); width: 1px; background: #a78bfa; }
 .hint { margin-top: 10px; }
 `;
 
@@ -70,6 +76,7 @@ type ModelVerdict = Extract<Verdict, { ok: true; source: 'model' }>;
 export type BadgeState =
   | { kind: 'pending' }
   | { kind: 'ai'; verdict: OkVerdict }
+  | { kind: 'possible'; verdict: ModelVerdict }
   | { kind: 'clean'; verdict: ModelVerdict }
   | { kind: 'failed'; error: VerdictError };
 
@@ -77,6 +84,7 @@ export interface DisplayOptions {
   showScore: boolean;
   showChecked: boolean;
   threshold: number;
+  possibleFrom: number | null;
 }
 
 interface Box {
@@ -98,7 +106,7 @@ export class BadgeLayer {
   private readonly screen: HTMLElement;
   private readonly details: HTMLElement;
   private readonly badges = new Map<Element, Badge>();
-  private options: DisplayOptions = { showScore: true, showChecked: true, threshold: model.threshold };
+  private options: DisplayOptions = { showScore: true, showChecked: true, threshold: model.threshold, possibleFrom: null };
   private open: Element | null = null;
   private closeTimer = 0;
   private frame = 0;
@@ -217,7 +225,7 @@ export class BadgeLayer {
     const badge = this.open && this.badges.get(this.open);
     if (!badge) return;
     const hint = text('div', 'note hint', browser.i18n.getMessage('tooltipDismiss'));
-    this.details.replaceChildren(...detailsContent(badge.state, this.options.threshold), hint);
+    this.details.replaceChildren(...detailsContent(badge.state, this.options), hint);
   }
 
   private placeDetails(anchor: HTMLElement): void {
@@ -318,7 +326,7 @@ function visibleBox(element: Element, viewportWidth: number, viewportHeight: num
 }
 
 function isDisplayed(state: BadgeState, options: DisplayOptions): boolean {
-  return state.kind === 'ai' || options.showChecked;
+  return state.kind === 'ai' || state.kind === 'possible' || options.showChecked;
 }
 
 function isRendered(element: Element): boolean {
@@ -335,6 +343,9 @@ function render(badge: Badge, options: DisplayOptions): void {
   switch (state.kind) {
     case 'ai':
       node.replaceChildren(aiLabel(state.verdict, options.showScore));
+      break;
+    case 'possible':
+      node.replaceChildren(aiLabel(state.verdict, options.showScore, 'AI?'));
       break;
     case 'clean':
       node.replaceChildren(checkMark());
@@ -367,9 +378,9 @@ function checkMark(): SVGElement {
   return svg;
 }
 
-function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
+function aiLabel(verdict: OkVerdict, showScore: boolean, label = 'AI'): DocumentFragment {
   const fragment = document.createDocumentFragment();
-  fragment.append('AI');
+  fragment.append(label);
   let detail: string | null = null;
   if (verdict.source === 'synthid' || (verdict.source === 'metadata' && verdict.reason === 'synthid')) detail = 'SynthID';
   else if (verdict.source === 'watermark') detail = browser.i18n.getMessage('badgeWatermark');
@@ -424,7 +435,15 @@ function reasonText(verdict: Extract<Verdict, { source: 'metadata' }>): string {
   return browser.i18n.getMessage(`reason_${verdict.reason.replace('-', '_')}`);
 }
 
-function detailsContent(state: BadgeState, threshold: number): HTMLElement[] {
+type ScoredState = Extract<BadgeState, { verdict: OkVerdict }>;
+
+const MODEL_RESULT = {
+  ai: { headline: 'detailsLikelyAi', status: 'hit' },
+  possible: { headline: 'detailsPossibleAi', status: 'maybe' },
+  clean: { headline: 'detailsClean', status: 'clear' },
+} as const;
+
+function detailsContent(state: BadgeState, options: DisplayOptions): HTMLElement[] {
   switch (state.kind) {
     case 'pending':
       return [text('div', 'title', browser.i18n.getMessage('tooltipPending'))];
@@ -434,17 +453,17 @@ function detailsContent(state: BadgeState, threshold: number): HTMLElement[] {
         text('div', 'note', browser.i18n.getMessage(`error_${state.error}`)),
       ];
     case 'clean':
+    case 'possible':
     case 'ai':
-      return [text('div', 'title', headline(state.verdict, threshold)), checkList(state.verdict, threshold)];
+      return [text('div', 'title', headline(state)), checkList(state, options)];
   }
 }
 
-function headline(verdict: OkVerdict, threshold: number): string {
-  if (verdict.source !== 'model') return browser.i18n.getMessage('detailsLabeledAi');
-  return browser.i18n.getMessage(isFlagged(verdict, threshold) ? 'detailsLikelyAi' : 'detailsClean');
+function headline({ kind, verdict }: ScoredState): string {
+  return browser.i18n.getMessage(verdict.source === 'model' ? MODEL_RESULT[kind].headline : 'detailsLabeledAi');
 }
 
-function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
+function checkList({ kind, verdict }: ScoredState, options: DisplayOptions): HTMLElement {
   const message = (key: string, substitutions?: string[]) => browser.i18n.getMessage(key, substitutions);
   if (verdict.source === 'platform') {
     const note = text('div', 'note', message(`platform_${verdict.platform}`));
@@ -472,12 +491,7 @@ function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
         : row(message('detailsWatermark'), 'off', message('detailsSkipped'));
   const models =
     verdict.source === 'model'
-      ? row(
-          message('detailsModels'),
-          isFlagged(verdict, threshold) ? 'hit' : 'clear',
-          percent(verdict.score),
-          modelTable(verdict, threshold),
-        )
+      ? row(message('detailsModels'), MODEL_RESULT[kind].status, percent(verdict.score), modelTable(verdict, options))
       : row(message('detailsModels'), 'off', message('detailsSkipped'));
   const list = text('ul', 'checks');
   list.append(metadata, watermark, models);
@@ -488,18 +502,19 @@ function statusRow(name: string, status: CheckStatus, clearText: string): HTMLEl
   return status === 'clear' ? row(name, 'clear', clearText) : row(name, 'off', browser.i18n.getMessage('detailsOff'));
 }
 
-function row(name: string, status: 'hit' | 'clear' | 'off', value: string, extra?: HTMLElement): HTMLElement {
+function row(name: string, status: 'hit' | 'maybe' | 'clear' | 'off', value: string, extra?: HTMLElement): HTMLElement {
   const item = text('li', `check ${status}`);
   item.append(text('span', 'dot'), text('span', 'name', name), text('span', 'value', value));
   if (extra) item.append(extra);
   return item;
 }
 
-function modelTable(verdict: ModelVerdict, threshold: number): HTMLElement {
+function modelTable(verdict: ModelVerdict, { threshold, possibleFrom }: DisplayOptions): HTMLElement {
   const table = text('div', 'models');
   verdict.models.forEach((score, i) => {
-    const bar = text('span', 'bar');
+    const bar = text('span', possibleFrom === null ? 'bar' : 'bar tiered');
     bar.style.setProperty('--threshold', `${threshold * 100}%`);
+    if (possibleFrom !== null) bar.style.setProperty('--possible', `${possibleFrom * 100}%`);
     const fill = text('span');
     fill.style.width = `${score * 100}%`;
     bar.append(fill);
@@ -512,7 +527,8 @@ function modelTable(verdict: ModelVerdict, threshold: number): HTMLElement {
     weights.length > 1
       ? browser.i18n.getMessage('detailsModelNote', [percent(threshold), shares])
       : browser.i18n.getMessage('detailsThreshold', [percent(threshold)]);
-  table.append(text('div', 'note', note));
+  const tier = possibleFrom === null ? '' : ` · ${browser.i18n.getMessage('detailsPossibleFrom', [percent(possibleFrom)])}`;
+  table.append(text('div', 'note', note + tier));
   return table;
 }
 

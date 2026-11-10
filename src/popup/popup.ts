@@ -82,6 +82,7 @@ function render(stats: FrameStats, status: PageStatus | null): void {
 
   const parts: string[] = [];
   if (progress === null && checked > 0) parts.push(t('popupDone', checked));
+  if (stats.possible > 0) parts.push(t('popupPossible', stats.possible));
   if (stats.clean > 0) parts.push(t('popupClean', stats.clean));
   if (stats.failed > 0) parts.push(t('popupFailed', stats.failed));
   if (checked === 0 && stats.pending === 0 && status?.active) parts.push(t('popupNone'));

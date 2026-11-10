@@ -10,6 +10,7 @@ export interface Settings {
   includeBackgrounds: boolean;
   showScore: boolean;
   showChecked: boolean;
+  showPossible: boolean;
   disabledHosts: string[];
 }
 
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   includeBackgrounds: true,
   showScore: true,
   showChecked: true,
+  showPossible: false,
   disabledHosts: [],
 };
 
@@ -32,7 +34,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 export function normalizeSettings(raw: unknown): Settings {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof Settings, unknown>>;
-  const bool = (key: 'enabled' | 'checkMetadata' | 'checkWatermark' | 'checkPlatform' | 'includeBackgrounds' | 'showScore' | 'showChecked') =>
+  const bool = (key: 'enabled' | 'checkMetadata' | 'checkWatermark' | 'checkPlatform' | 'includeBackgrounds' | 'showScore' | 'showChecked' | 'showPossible') =>
     typeof input[key] === 'boolean' ? (input[key] as boolean) : DEFAULT_SETTINGS[key];
   const num = (key: 'minSize' | 'threshold', min: number, max: number) => {
     const value = Number(input[key]);
@@ -51,6 +53,7 @@ export function normalizeSettings(raw: unknown): Settings {
     includeBackgrounds: bool('includeBackgrounds'),
     showScore: bool('showScore'),
     showChecked: bool('showChecked'),
+    showPossible: bool('showPossible'),
     disabledHosts: hosts,
   };
 }
@@ -61,6 +64,10 @@ export function normalizeHost(host: string): string {
 
 export function isActiveOn(settings: Settings, hostname: string): boolean {
   return settings.enabled && !settings.disabledHosts.includes(normalizeHost(hostname));
+}
+
+export function possibleFrom(settings: Settings): number | null {
+  return settings.showPossible && settings.threshold > model.possibleThreshold ? model.possibleThreshold : null;
 }
 
 export function toStorage(settings: Settings): Record<string, unknown> {

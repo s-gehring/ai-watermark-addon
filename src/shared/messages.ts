@@ -47,6 +47,7 @@ export type Verdict =
 
 export interface FrameStats {
   flagged: number;
+  possible: number;
   clean: number;
   pending: number;
   failed: number;
@@ -63,16 +64,21 @@ export interface PageStatus {
   active: boolean;
 }
 
-export const EMPTY_STATS: Readonly<FrameStats> = { flagged: 0, clean: 0, pending: 0, failed: 0 };
+export const EMPTY_STATS: Readonly<FrameStats> = { flagged: 0, possible: 0, clean: 0, pending: 0, failed: 0 };
 
 export function isFlagged(verdict: Verdict, threshold: number): boolean {
   return verdict.ok && (verdict.source !== 'model' || verdict.score >= threshold);
+}
+
+export function isPossible(verdict: Verdict, threshold: number, possibleFrom: number | null): boolean {
+  return possibleFrom !== null && verdict.ok && verdict.source === 'model' && verdict.score >= possibleFrom && verdict.score < threshold;
 }
 
 export function sumStats(all: Iterable<FrameStats>): FrameStats {
   const total = { ...EMPTY_STATS };
   for (const s of all) {
     total.flagged += s.flagged;
+    total.possible += s.possible;
     total.clean += s.clean;
     total.pending += s.pending;
     total.failed += s.failed;
@@ -81,7 +87,7 @@ export function sumStats(all: Iterable<FrameStats>): FrameStats {
 }
 
 export function checkedCount(stats: FrameStats): number {
-  return stats.flagged + stats.clean + stats.failed;
+  return stats.flagged + stats.possible + stats.clean + stats.failed;
 }
 
 export function progressOf(stats: FrameStats): number | null {
