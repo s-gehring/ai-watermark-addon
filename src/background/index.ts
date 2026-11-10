@@ -96,7 +96,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === 'platform-labels') {
     const [tabId, frameId] = [sender.tab?.id ?? -1, sender.frameId ?? 0];
-    return platformLookup.labeled(request.platform, request.keys, () => labelBudget.take(tabId, frameId, request.page));
+    return platformLookup.labels(request.platform, request.keys, () => labelBudget.take(tabId, frameId, request.page));
   }
   if (request?.type === 'page-stats' && sender.tab?.id !== undefined) {
     if (request.initial) {

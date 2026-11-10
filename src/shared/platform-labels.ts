@@ -4,10 +4,11 @@ export type LookupPlatform = 'pixiv' | 'commons';
 
 export interface LookupResult {
   labels: Map<string, boolean>;
-  complete: boolean;
+  truncated: boolean;
 }
 
 export const LOOKUP_BATCH: Readonly<Record<LookupPlatform, number>> = { pixiv: 50, commons: 20 };
+const MAX_ENCODED_TITLES = 4000;
 
 const WIKIMEDIA_HOST =
   /(?:^|\.)(?:wikipedia|wikimedia|wiktionary|wikibooks|wikinews|wikiquote|wikisource|wikiversity|wikivoyage|wikidata|mediawiki)\.org$/;
@@ -59,6 +60,23 @@ export function isLookupKey(platform: LookupPlatform, key: string): boolean {
   return /^File:[^|#<>[\]{}\x00-\x1f]{1,240}$/.test(key);
 }
 
+export function lookupBatches(platform: LookupPlatform, keys: string[]): string[][] {
+  const batches: string[][] = [];
+  let length = 0;
+  for (const key of keys) {
+    const cost = platform === 'commons' ? encodeURIComponent(key).length + 3 : 0;
+    const batch = batches.at(-1);
+    if (batch && batch.length < LOOKUP_BATCH[platform] && length + cost <= MAX_ENCODED_TITLES) {
+      batch.push(key);
+      length += cost;
+    } else {
+      batches.push([key]);
+      length = cost;
+    }
+  }
+  return batches;
+}
+
 export function lookupUrl(platform: LookupPlatform, keys: string[]): string {
   if (platform === 'pixiv') {
     const query = keys.map((id) => `illust_ids%5B%5D=${id}`).join('&');
@@ -89,7 +107,7 @@ function pixivLabels(response: unknown): LookupResult {
   for (const work of listOf(recordOf(recordOf(response).body).illusts)) {
     if (typeof work.id === 'string' || typeof work.id === 'number') labels.set(String(work.id), work.aiType === 2);
   }
-  return { labels, complete: true };
+  return { labels, truncated: false };
 }
 
 export function isAiCategory(name: string): boolean {
@@ -105,16 +123,18 @@ const withoutNamespace = (title: unknown) => String(title ?? '').replace(/^Categ
 function commonsLabels(response: unknown): LookupResult {
   const { query, continue: more } = recordOf(response);
   const { pages, normalized } = recordOf(query);
+  const resumesAt = more === undefined ? Infinity : parseInt(String(recordOf(more).clcontinue), 10);
   const labels = new Map<string, boolean>();
   for (const page of listOf(pages)) {
-    if (typeof page.title !== 'string') continue;
+    const listed = page.missing === true || (typeof page.pageid === 'number' && page.pageid < resumesAt);
+    if (typeof page.title !== 'string' || !listed) continue;
     labels.set(page.title, hasAiCategory(listOf(page.categories).map((category) => withoutNamespace(category.title))));
   }
   for (const { from, to } of listOf(normalized)) {
     const label = typeof to === 'string' ? labels.get(to) : undefined;
     if (typeof from === 'string' && label !== undefined) labels.set(from, label);
   }
-  return { labels, complete: more === undefined };
+  return { labels, truncated: more !== undefined };
 }
 
 export function parseLookup(platform: LookupPlatform, response: unknown): LookupResult {

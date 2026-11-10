@@ -87,7 +87,7 @@ The labels of pixiv, DeviantArt and Wikimedia Commons are set by uploaders and e
 
 - Unlabeled AI works stay unlabeled and go through the other checks.
 - DeviantArt works loaded after the page itself carry no label.
-- pixiv and Commons labels depend on one request per page view; if it fails, the other checks decide.
+- pixiv and Commons labels depend on one request per page view; if it fails, the other checks decide and the work is asked again on the next page view.
 
 ## Metadata
 

@@ -7,6 +7,7 @@ import {
   isAiCategory,
   isLookupKey,
   labelKeyOf,
+  lookupBatches,
   lookupUrl,
   parseLookup,
   platformOf,
@@ -47,15 +48,16 @@ describe('pixiv', () => {
     expect(labelKeyOf('pixiv', 'https://example.com/img-master/img/2025/10/20/17/13/22/136500000_p0_master1200.jpg')).toBeNull();
   });
 
-  it('counts only aiType 2 as labeled', () => {
-    const { labels, complete } = parseLookup('pixiv', response);
+  it('counts only aiType 2 as labeled and answers only for the works in the response', () => {
+    const { labels, truncated } = parseLookup('pixiv', response);
     expect([...labels]).toEqual([
       ['136500000', true],
       ['137590173', true],
       ['130000000', true],
       ['125000000', false],
     ]);
-    expect(complete).toBe(true);
+    expect(labels.has('151848495')).toBe(false);
+    expect(truncated).toBe(false);
   });
 
   it('asks for several works in one request to pixiv', () => {
@@ -117,11 +119,11 @@ describe('Wikimedia Commons', () => {
   });
 
   it('labels files in categories for AI-generated images', () => {
-    const { labels, complete } = parseLookup('commons', response);
+    const { labels, truncated } = parseLookup('commons', response);
     expect(labels.get('File:Home Caimán - IA Midjourney versión 2.png')).toBe(true);
     expect(labels.get('File:Vaporwave sunset.jpg')).toBe(true);
     expect(labels.get('File:Vaporwave_sunset.jpg')).toBe(true);
-    expect(complete).toBe(true);
+    expect(truncated).toBe(false);
   });
 
   it('does not label photographs of AI images, AI restorations, other files and missing files', () => {
@@ -132,8 +134,28 @@ describe('Wikimedia Commons', () => {
     expect(labels.get('File:Does not exist 12345.jpg')).toBe(false);
   });
 
-  it('reports a truncated category list as incomplete', () => {
-    expect(parseLookup('commons', { ...response, continue: { clcontinue: '1|X', continue: '||' } }).complete).toBe(false);
+  it('answers only for files whose category list is complete when Commons cuts the response off', () => {
+    const { labels, truncated } = parseLookup('commons', JSON.parse(fixture('commons-categories-truncated.json')));
+    expect(truncated).toBe(true);
+    expect([...labels]).toEqual([['File:Does not exist 12345.jpg', false]]);
+    const cutLater = { ...response, continue: { clcontinue: '154241961|Vaporwave', continue: '||' } };
+    expect([...parseLookup('commons', cutLater).labels.keys()]).toEqual([
+      'File:Does not exist 12345.jpg',
+      'File:Mona Lisa, by Leonardo da Vinci, from C2RMF retouched.jpg',
+      'File:Home Caimán - IA Midjourney versión 2.png',
+      'File:Wikimedia Czech Republic Stickers - Máte tam chybu.jpg',
+    ]);
+  });
+
+  it('keeps the request URL short for long non-Latin titles', () => {
+    const long = Array.from({ length: 20 }, (_, i) => `File:${'画'.repeat(200)}${i}.jpg`);
+    const batches = lookupBatches('commons', long);
+    expect(batches.flat()).toEqual(long);
+    expect(batches.length).toBeGreaterThan(1);
+    for (const batch of batches) expect(lookupUrl('commons', batch).length).toBeLessThan(4300);
+    const short = Array.from({ length: 45 }, (_, i) => `File:Short ${i}.jpg`);
+    expect(lookupBatches('commons', short).map((batch) => batch.length)).toEqual([20, 20, 5]);
+    expect(lookupBatches('pixiv', Array.from({ length: 120 }, (_, i) => String(i))).map((batch) => batch.length)).toEqual([50, 50, 20]);
   });
 
   it('tells categories of AI images from categories about them', () => {
