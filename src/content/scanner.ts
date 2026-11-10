@@ -1,5 +1,5 @@
-import { isFlagged, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
-import type { Settings } from '../shared/settings';
+import { isFlagged, isPossible, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
+import { possibleFrom, type Settings } from '../shared/settings';
 import { hasBackgroundImage, imageUrlOf, isLargeEnough, knownOriginals, largerVariantsOf } from './candidates';
 import { shadowRootOf } from './dom';
 import { BadgeLayer } from './overlay';
@@ -30,7 +30,7 @@ export class Scanner {
 
   start(): void {
     const { showScore, showChecked, threshold } = this.settings;
-    this.layer.setOptions({ showScore, showChecked, threshold });
+    this.layer.setOptions({ showScore, showChecked, threshold, possibleFrom: possibleFrom(this.settings) });
     this.shadowRoots = new WeakSet();
     this.mo.observe(document.documentElement, OBSERVED);
     document.addEventListener('load', this.onLoad, true);
@@ -157,7 +157,8 @@ export class Scanner {
       if (!verdict.ok) {
         this.layer.set(element, { kind: 'failed', error: verdict.error });
       } else if (verdict.source === 'model' && !isFlagged(verdict, this.settings.threshold)) {
-        this.layer.set(element, { kind: 'clean', verdict });
+        const possible = isPossible(verdict, this.settings.threshold, possibleFrom(this.settings));
+        this.layer.set(element, { kind: possible ? 'possible' : 'clean', verdict });
       } else {
         this.layer.set(element, { kind: 'ai', verdict });
       }
