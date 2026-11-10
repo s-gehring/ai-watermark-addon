@@ -39,6 +39,8 @@ const ORIGINAL_RULES: [RegExp, string][] = [
   [/^(https?:\/\/[^?#]+\/wp-content\/uploads\/[^?#]+?)(?:-scaled|-\d+x\d+)(\.(?:jpe?g|png|webp|avif|gif))(?:\?[^#]*)?$/i, '$1$2'],
   [/^(https?:\/\/[^?#]+\/wp-content\/uploads\/[^?#]+\.(?:jpe?g|png|webp|avif|gif))\?(?:[^#]*&)?(?:w|h|resize|fit)=[^#]*$/i, '$1'],
   [/^(https:\/\/[\w-]+\.googleusercontent\.com\/[^?#=]+)=[^/?#]+$/i, '$1=s0'],
+  [/^(https:\/\/image\.civitai\.com\/[\w-]+\/[0-9a-f-]{36})\/(?![^/?#]*(?:original|transcode)=true)[^/?#]*\bwidth=\d+[^/?#]*\/([^/?#]+\.(?:jpe?g|png|webp))$/i, '$1/original=true/$2'],
+  [/^(https:\/\/(?:live|farm\d+)\.staticflickr\.com\/\d+\/\d+_[0-9a-f]+)(?:_[tmnwzc])?\.jpg$/, '$1_b.jpg'],
 ];
 
 export interface SrcsetCandidate {
@@ -91,7 +93,21 @@ export function largestCandidate(candidates: SrcsetCandidate[], current: string)
 const WAGTAIL_RENDITION =
   /^(https:\/\/storage\.googleapis\.com\/gweb-[\w-]+)\/images\/([^/?#]+?)(?:\.[0-9a-f]{8})?\.(?:width|height|fill|max|min|scale)-[^/?#]*\.(png|jpe?g|gif|webp)(?:[?#].*)?$/i;
 
+const X_MEDIA =
+  /^(https:\/\/pbs\.twimg\.com\/media\/[\w-]+)(?:\?format=(jpg|png|webp)&name=(?:small|medium|large|900x900|4096x4096)|\.(jpg|png)(?::(?:small|medium|large))?)$/;
+
+function xOriginals(url: string): string[] | null {
+  const media = X_MEDIA.exec(url);
+  if (!media) return null;
+  const [, base, queryFormat, extension] = media;
+  const format = queryFormat ?? extension;
+  const uploads = format === 'png' ? ['png'] : ['jpg', 'png'];
+  return [...uploads.map((upload) => `${base}?format=${upload}&name=orig`), `${base}?format=${format}&name=large`].filter((candidate) => candidate !== url);
+}
+
 export function knownOriginals(url: string): string[] {
+  const onX = xOriginals(url);
+  if (onX) return onX;
   const rendition = WAGTAIL_RENDITION.exec(url);
   if (rendition) {
     const [, bucket, name, extension] = rendition;

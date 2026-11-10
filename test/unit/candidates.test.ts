@@ -116,6 +116,59 @@ describe('knownOriginals', () => {
     ]);
   });
 
+  it('maps Civitai previews to the uploaded file', () => {
+    const image = 'https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/01234567-89ab-cdef-0123-456789abcdef';
+    expect(knownOriginals(`${image}/anim=false,width=450,optimized=true/picture-0.jpeg`)).toEqual([`${image}/original=true/picture-0.jpeg`]);
+    expect(knownOriginals(`${image}/width=1200/2026-11-03%20a,b@c.png`)).toEqual([`${image}/original=true/2026-11-03%20a,b@c.png`]);
+    expect(knownOriginals(`${image}/original=true/picture-0.jpeg`)).toEqual([]);
+    expect(knownOriginals(`${image}/original=true,quality=90/picture-0.jpeg`)).toEqual([]);
+    expect(knownOriginals(`${image}/anim=false,transcode=true,width=450,optimized=true/clip.jpeg`)).toEqual([]);
+    expect(knownOriginals(`${image}/anim=false,width=450/clip.mp4`)).toEqual([]);
+    expect(knownOriginals('https://image.civitai.test/xG1nkqKTMzGDvpLrqFT7WA/01234567-89ab-cdef-0123-456789abcdef/width=450/a.jpeg')).toEqual([]);
+    expect(knownOriginals('https://civitai.com/images/01234567-89ab-cdef-0123-456789abcdef/width=450/a.jpeg')).toEqual([]);
+  });
+
+  it('maps X media to the upload, trying JPEG and then PNG before the largest rendition', () => {
+    const media = 'https://pbs.twimg.com/media/AbCdEfGh-_12345';
+    expect(knownOriginals(`${media}?format=webp&name=small`)).toEqual([
+      `${media}?format=jpg&name=orig`,
+      `${media}?format=png&name=orig`,
+      `${media}?format=webp&name=large`,
+    ]);
+    expect(knownOriginals(`${media}?format=jpg&name=large`)).toEqual([`${media}?format=jpg&name=orig`, `${media}?format=png&name=orig`]);
+    expect(knownOriginals(`${media}?format=png&name=medium`)).toEqual([`${media}?format=png&name=orig`, `${media}?format=png&name=large`]);
+    expect(knownOriginals(`${media}.jpg:small`)).toEqual([
+      `${media}?format=jpg&name=orig`,
+      `${media}?format=png&name=orig`,
+      `${media}?format=jpg&name=large`,
+    ]);
+    expect(knownOriginals(`${media}.png`)).toEqual([`${media}?format=png&name=orig`, `${media}?format=png&name=large`]);
+    expect(knownOriginals(`${media}?format=jpg&name=orig`)).toEqual([]);
+    expect(knownOriginals(`${media}?format=jpg&name=360x360`)).toEqual([]);
+    expect(knownOriginals(`${media}?format=jpg&name=thumb`)).toEqual([]);
+    expect(knownOriginals('https://pbs.twimg.com/card_img/1234567890/AbCdEfGh?format=webp&name=medium')).toEqual([]);
+    expect(knownOriginals('https://pbs.twimg.com/amplify_video_thumb/1234567890/img/AbCdEfGh?format=webp&name=medium')).toEqual([]);
+    expect(knownOriginals('https://pbs.twimg.com/profile_banners/1234567890/1700000000/600x200')).toEqual([]);
+    expect(knownOriginals('https://pbs.twimg.com.cdn.test/media/AbCdEfGh-_12345?format=jpg&name=small')).toEqual([]);
+  });
+
+  it('maps Flickr sizes that keep the aspect ratio to the 1024 px size', () => {
+    const photo = 'https://live.staticflickr.com/65535/12345678901_0123abcdef';
+    expect(knownOriginals(`${photo}_w.jpg`)).toEqual([`${photo}_b.jpg`]);
+    expect(knownOriginals(`${photo}_m.jpg`)).toEqual([`${photo}_b.jpg`]);
+    expect(knownOriginals(`${photo}.jpg`)).toEqual([`${photo}_b.jpg`]);
+    expect(knownOriginals('https://farm66.staticflickr.com/65535/12345678901_0123abcdef_z.jpg')).toEqual([
+      'https://farm66.staticflickr.com/65535/12345678901_0123abcdef_b.jpg',
+    ]);
+    expect(knownOriginals(`${photo}_b.jpg`)).toEqual([]);
+    expect(knownOriginals(`${photo}_k.jpg`)).toEqual([]);
+    expect(knownOriginals(`${photo}_o.jpg`)).toEqual([]);
+    expect(knownOriginals(`${photo}_q.jpg`)).toEqual([]);
+    expect(knownOriginals(`${photo}_s.jpg`)).toEqual([]);
+    expect(knownOriginals('https://live.staticflickr.com/65535/buddyicons/12345678@N00_r.jpg')).toEqual([]);
+    expect(knownOriginals('https://live.staticflickr.test/65535/12345678901_0123abcdef_w.jpg')).toEqual([]);
+  });
+
   it('leaves originals, vector thumbnails and unknown hosts alone', () => {
     expect(knownOriginals('https://upload.wikimedia.org/wikipedia/commons/6/69/X.png')).toEqual([]);
     expect(knownOriginals('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Sign.svg/500px-Sign.svg.png')).toEqual([]);
