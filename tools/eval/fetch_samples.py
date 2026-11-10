@@ -14,7 +14,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pyarrow.parquet as pq
-from huggingface_hub import HfApi, HfFileSystem, snapshot_download
+from huggingface_hub import HfApi, HfFileSystem, hf_hub_download, snapshot_download
 from PIL import Image
 
 
@@ -31,6 +31,7 @@ def main_checkout():
 
 CACHE = main_checkout() / "tools" / "eval" / ".cache"
 OUT = CACHE / "samples"
+HELDOUT = CACHE / "heldout"
 OPENFAKE = "datasets/ComplexDataLab/OpenFake"
 
 OPENFAKE_SOURCES = [
@@ -53,6 +54,12 @@ RESEARCH = {
     "revision": "af707a1b8823b277f260a1ebfbae3c9877d3d897",
     "folders": ["gemini-3.1-flash-image", "qwen-image-2.1", "flux.2", "gpt-image-2"],
     "per_folder": 150,
+}
+
+WILD = {
+    "repo": "yuzj1997yzj/WildAIGC-Bench",
+    "revision": "5a9fb9d896882976214244fc512f30155af96150",
+    "labels": {"aigc": "fake", "real": "real"},
 }
 
 MUSEUM = {
@@ -146,6 +153,20 @@ def fetch_research(rng, spec):
     return Counter(path.split("/", 1)[0] for path in chosen)
 
 
+def fetch_wild(spec):
+    local = CACHE / "downloads" / spec["repo"].split("/")[1]
+    options = {"repo_type": "dataset", "revision": spec["revision"], "local_dir": local}
+    rows = [json.loads(line) for line in Path(hf_hub_download(spec["repo"], "metadata.jsonl", **options)).read_text().splitlines()]
+    snapshot_download(spec["repo"], allow_patterns=[row["processed_path"] for row in rows], max_workers=8, **options)
+    shutil.rmtree(HELDOUT / "wild", ignore_errors=True)
+    for row in rows:
+        path = local / row["processed_path"]
+        target = HELDOUT / "wild" / spec["labels"][row["label"]]
+        target.mkdir(parents=True, exist_ok=True)
+        os.link(path, target / f"{row['sample_id']}__wildaigc-{row['version']}{path.suffix}")
+    return Counter(row["label"] for row in rows)
+
+
 def fetch_museum(rng, spec):
     items, skip = [], 0
     while True:
@@ -203,7 +224,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--only-youtube", action="store_true")
     parser.add_argument("--only-museum", action="store_true")
+    parser.add_argument("--only-wild", action="store_true")
     args = parser.parse_args()
+
+    if args.only_wild:
+        print("wild", dict(fetch_wild(WILD)))
+        return
 
     if args.only_museum:
         for path in (OUT / "art" / "real").glob("*__cma.*"):
@@ -226,6 +252,7 @@ def main():
     print("research", dict(fetch_research(random.Random(f"{args.seed}-research"), RESEARCH)))
     print("museum", fetch_museum(random.Random(f"{args.seed}-museum"), MUSEUM))
     print("youtube", fetch_youtube(random.Random(f"{args.seed}-youtube"), YOUTUBE))
+    print("wild", dict(fetch_wild(WILD)))
 
 
 if __name__ == "__main__":
