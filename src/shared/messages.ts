@@ -31,12 +31,15 @@ export type WatermarkScheme =
   | 'meta-visible'
   | 'dalle-visible';
 
+export type Platform = 'pixiv' | 'deviantart' | 'commons';
+
 export type CheckStatus = 'clear' | 'off';
 
 export type VerdictError = 'fetch' | 'decode' | 'model' | 'unsupported';
 
 export type Verdict =
   | { ok: true; score: number; source: 'model'; models: number[]; metadata: CheckStatus; watermark: CheckStatus }
+  | { ok: true; score: 1; source: 'platform'; platform: Platform }
   | { ok: true; score: 1; source: 'metadata'; reason: MetadataReason }
   | { ok: true; score: 1; source: 'synthid'; provider: SynthIdProvider; metadata: CheckStatus }
   | { ok: true; score: 1; source: 'watermark'; scheme: WatermarkScheme; metadata: CheckStatus }
@@ -51,6 +54,7 @@ export interface FrameStats {
 
 export type BackgroundRequest =
   | { type: 'classify'; url: string; page: string; bytes?: ArrayBuffer; original?: string[] }
+  | { type: 'platform-labels'; platform: 'pixiv' | 'commons'; keys: string[]; page: string }
   | { type: 'page-stats'; stats: FrameStats; initial: boolean };
 
 export type ContentRequest = { type: 'get-status' };

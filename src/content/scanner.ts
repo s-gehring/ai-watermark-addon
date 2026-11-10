@@ -3,6 +3,7 @@ import type { Settings } from '../shared/settings';
 import { hasBackgroundImage, imageUrlOf, isLargeEnough, knownOriginals, largerVariantsOf } from './candidates';
 import { shadowRootOf } from './dom';
 import { BadgeLayer } from './overlay';
+import { PlatformLabels } from './platform-labels';
 
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
@@ -13,6 +14,7 @@ export class Scanner {
   private checkedUrl = new WeakMap<Element, string>();
   private readonly inView = new Set<Element>();
   private shadowRoots = new WeakSet<ShadowRoot>();
+  private readonly platformLabels = PlatformLabels.forPage(() => this.largeImageUrls());
   private readonly layer: BadgeLayer;
   private readonly io: IntersectionObserver;
   private readonly mo: MutationObserver;
@@ -50,9 +52,8 @@ export class Scanner {
 
   restart(settings: Settings): void {
     this.stop();
-    if (settings.checkMetadata !== this.settings.checkMetadata || settings.checkWatermark !== this.settings.checkWatermark) {
-      this.verdicts.clear();
-    }
+    const toggled = (check: 'checkMetadata' | 'checkWatermark' | 'checkPlatform') => settings[check] !== this.settings[check];
+    if (toggled('checkMetadata') || toggled('checkWatermark') || toggled('checkPlatform')) this.verdicts.clear();
     this.settings = settings;
     this.checkedUrl = new WeakMap();
     this.start();
@@ -167,13 +168,24 @@ export class Scanner {
   private verdictFor(url: string, element: Element): Promise<Verdict> {
     let verdict = this.verdicts.get(url);
     if (!verdict) {
-      verdict = requestVerdict(url, element, this.originalFor(url, element)).then((result) => {
+      const check = () => requestVerdict(url, element, this.originalFor(url, element));
+      const labeled = this.settings.checkPlatform ? this.platformLabels?.verdictFor(url) : null;
+      verdict = (labeled ? labeled.then((hit) => hit ?? check()) : check()).then((result) => {
         if (!result.ok && result.error !== 'unsupported' && result.error !== 'decode') this.verdicts.delete(url);
         return result;
       });
       this.verdicts.set(url, verdict);
     }
     return verdict;
+  }
+
+  private largeImageUrls(): string[] {
+    const urls: string[] = [];
+    for (const image of document.images) {
+      const url = image.currentSrc || image.src;
+      if (url && isLargeEnough(image.getBoundingClientRect(), this.settings.minSize)) urls.push(url);
+    }
+    return urls;
   }
 
   private originalFor(url: string, element: Element): string[] | undefined {

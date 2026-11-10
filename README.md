@@ -12,7 +12,7 @@ A Firefox add-on that checks images on web pages for signs of AI generation and 
 
 ## What it checks
 
-Every image whose shorter side is at least 200 px goes through up to three checks. The first one that finds something decides the badge.
+Every image whose shorter side is at least 200 px goes through up to three checks. The first one that finds something decides the badge. On pixiv, DeviantArt and Wikimedia pages the add-on first reads the platform's own AI label (badge "AI · pixiv", "AI · DeviantArt" or "AI · Commons").
 
 | Check | Looks for | Badge |
 |---|---|---|
@@ -47,6 +47,7 @@ Requires Firefox 140 or later, or Firefox for Android 142 or later.
 
 - All checks run locally in a Web Worker. The add-on sends no data to any third party and has no telemetry.
 - To read the original bytes of images from other domains, the add-on fetches each image a second time from the same URL, usually served from the browser cache. If the page offers a larger version of an image from the same site, it also loads that file for the metadata and watermark checks and, for small images, the model.
+- On pixiv and on Wikimedia pages the add-on asks the site itself for the AI labels of the images shown, usually with one request per page view. On DeviantArt it reads them from the page. This can be switched off in the settings.
 - `<all_urls>` is needed to find and fetch images on any page, `storage` to keep your settings.
 
 ## Build from source

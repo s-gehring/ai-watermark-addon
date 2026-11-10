@@ -1,5 +1,5 @@
 import model from '../../model.json';
-import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
+import { EMPTY_STATS, isFlagged, type CheckStatus, type FrameStats, type Platform, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
 import { composedContains, LAYER_TAG, parentOf } from './dom';
 
 const INSET = 6;
@@ -373,6 +373,7 @@ function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
   let detail: string | null = null;
   if (verdict.source === 'synthid' || (verdict.source === 'metadata' && verdict.reason === 'synthid')) detail = 'SynthID';
   else if (verdict.source === 'watermark') detail = browser.i18n.getMessage('badgeWatermark');
+  else if (verdict.source === 'platform') detail = PLATFORM_NAMES[verdict.platform];
   else if (verdict.source === 'metadata') detail = browser.i18n.getMessage('badgeMetadata');
   else if (showScore) detail = `${Math.round(verdict.score * 100)} %`;
   if (detail) {
@@ -383,6 +384,12 @@ function aiLabel(verdict: OkVerdict, showScore: boolean): DocumentFragment {
   }
   return fragment;
 }
+
+const PLATFORM_NAMES: Record<Platform, string> = {
+  pixiv: 'pixiv',
+  deviantart: 'DeviantArt',
+  commons: 'Commons',
+};
 
 const SCHEME_NAMES: Record<WatermarkScheme, string> = {
   'stable-diffusion': 'Stable Diffusion',
@@ -439,6 +446,13 @@ function headline(verdict: OkVerdict, threshold: number): string {
 
 function checkList(verdict: OkVerdict, threshold: number): HTMLElement {
   const message = (key: string, substitutions?: string[]) => browser.i18n.getMessage(key, substitutions);
+  if (verdict.source === 'platform') {
+    const note = text('div', 'note', message(`platform_${verdict.platform}`));
+    const list = text('ul', 'checks');
+    list.append(row(message('detailsPlatform'), 'hit', message('detailsFound'), note));
+    for (const name of ['badgeMetadata', 'detailsWatermark', 'detailsModels']) list.append(row(message(name), 'off', message('detailsSkipped')));
+    return list;
+  }
   const metadata =
     verdict.source === 'metadata'
       ? row(message('badgeMetadata'), 'hit', message('detailsFound'), text('div', 'note', reasonText(verdict)))
