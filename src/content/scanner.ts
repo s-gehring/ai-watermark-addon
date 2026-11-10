@@ -8,6 +8,10 @@ const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
 const DISCOVERY_CHUNK = 400;
 
+export function mayContinue(deadline: IdleDeadline | undefined): boolean {
+  return !deadline || deadline.didTimeout || deadline.timeRemaining() > 1;
+}
+
 export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
   private checkedUrl = new WeakMap<Element, string>();
@@ -106,7 +110,7 @@ export class Scanner {
     this.discovering = true;
     const step = (deadline?: IdleDeadline) => {
       let budget = DISCOVERY_CHUNK;
-      while (this.pendingRoots.length && budget > 0 && (!deadline || deadline.timeRemaining() > 1)) {
+      while (this.pendingRoots.length && budget > 0 && mayContinue(deadline)) {
         const next = this.pendingRoots.pop()!;
         this.observeIfCandidate(next);
         budget--;
