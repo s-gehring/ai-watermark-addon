@@ -4,11 +4,13 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { download } from 'geckodriver';
 import sharp from 'sharp';
+import * as ort from 'onnxruntime-node';
 import { Builder, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import model from '../../model.json';
 import synthIdConfig from '../../synthid.json';
+import { inputShape, selfTestInput, type InputSpec } from '../../src/background/preprocess';
 import { fft } from '../../src/background/synthid';
 
 const ADDON_ID = 'ai-watermark-addon@s-gehring.github.io';
@@ -587,6 +589,15 @@ describe('background', () => {
     expect(verdict.score).toBeGreaterThanOrEqual(0);
     expect(verdict.score).toBeLessThanOrEqual(1);
   }, 120_000);
+
+  it.each(model.models)('keeps the WebGPU self-test value of $name in line with the bundled model', async (entry) => {
+    const file = Object.keys(entry.files).find((name) => name.endsWith('.onnx'))!;
+    const session = await ort.InferenceSession.create(`${DIST}/models/${entry.name}/${file}`);
+    const [width, height] = inputShape(entry.input as InputSpec);
+    const input = new ort.Tensor('float32', selfTestInput(width, height), [1, 3, height, width]);
+    const output = await session.run({ [session.inputNames[0]]: input });
+    expect((output[session.outputNames[0]].data as Float32Array)[0]).toBeCloseTo(entry.selfTestLogit, 3);
+  });
 
   it('finds the SynthID pattern in the pixels of a rescaled image', async () => {
     expect(await classify('/synthid.png')).toEqual({ ok: true, score: 1, source: 'synthid', provider: 'google', metadata: 'clear' });
