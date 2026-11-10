@@ -3,16 +3,19 @@ import { possibleFrom, type Settings } from '../shared/settings';
 import { hasBackgroundImage, imageUrlOf, isLargeEnough, knownOriginals, largerVariantsOf } from './candidates';
 import { shadowRootOf } from './dom';
 import { BadgeLayer } from './overlay';
+import { labelFirst, PlatformLabels } from './platform-labels';
 
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
 const DISCOVERY_CHUNK = 400;
+const LABEL_GRACE_MS = 800;
 
 export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
   private checkedUrl = new WeakMap<Element, string>();
   private readonly inView = new Set<Element>();
   private shadowRoots = new WeakSet<ShadowRoot>();
+  private readonly platformLabels = PlatformLabels.forPage((image) => isLargeEnough(image.getBoundingClientRect(), this.settings.minSize));
   private readonly layer: BadgeLayer;
   private readonly io: IntersectionObserver;
   private readonly mo: MutationObserver;
@@ -152,7 +155,8 @@ export class Scanner {
     if (this.checkedUrl.get(element) === url) return;
     this.checkedUrl.set(element, url);
     this.layer.set(element, { kind: 'pending' });
-    void this.verdictFor(url, element).then((verdict) => {
+    const label = this.settings.checkPlatform ? (this.platformLabels?.verdictFor(url) ?? null) : null;
+    labelFirst(label, () => this.verdictFor(url, element), LABEL_GRACE_MS, (verdict) => {
       if (this.checkedUrl.get(element) !== url) return;
       if (!verdict.ok) {
         this.layer.set(element, { kind: 'failed', error: verdict.error });

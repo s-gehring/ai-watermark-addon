@@ -1,0 +1,40 @@
+{
+  "error": false,
+  "message": "",
+  "body": {
+    "illusts": [
+      {
+        "id": "136500000",
+        "illustType": 0,
+        "xRestrict": 0,
+        "url": "https://i.pximg.net/c/360x360_70/img-master/img/2025/10/20/17/13/22/136500000_p0_square1200.jpg",
+        "aiType": 2,
+        "pageCount": 1
+      },
+      {
+        "id": "137590173",
+        "illustType": 0,
+        "xRestrict": 0,
+        "url": "https://i.pximg.net/c/360x360_70/img-master/img/2025/11/17/22/03/24/137590173_p0_square1200.jpg",
+        "aiType": 2,
+        "pageCount": 1
+      },
+      {
+        "id": "130000000",
+        "illustType": 0,
+        "xRestrict": 0,
+        "url": "https://i.pximg.net/c/360x360_70/img-master/img/2025/05/04/00/00/08/130000000-be93a309fcefb8bfa9a767ac479b092f_p0_square1200.jpg",
+        "aiType": 2,
+        "pageCount": 1
+      },
+      {
+        "id": "125000000",
+        "illustType": 0,
+        "xRestrict": 0,
+        "url": "https://i.pximg.net/c/360x360_70/custom-thumb/img/2024/12/08/11/40/51/125000000_p0_custom1200.jpg",
+        "aiType": 1,
+        "pageCount": 1
+      }
+    ]
+  }
+}

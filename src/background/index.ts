@@ -3,6 +3,7 @@ import type { BackgroundRequest, Verdict } from '../shared/messages';
 import { loadSettings, onSettingsChanged, type Settings } from '../shared/settings';
 import { evaluate } from './inference';
 import { PageBudget } from './page-budget';
+import { PlatformLookup } from './platform-lookup';
 import { firstResult, TaskQueue } from './queue';
 import { forgetTab, updateTabStats } from './tab-stats';
 import type { EncodedImage } from './worker';
@@ -10,11 +11,14 @@ import type { EncodedImage } from './worker';
 const MAX_BYTES = 40 * 1024 * 1024;
 const MAX_ORIGINAL_BYTES = 16 * 1024 * 1024;
 const MAX_ORIGINAL_BYTES_PER_PAGE = 64 * 1024 * 1024;
+const MAX_LABEL_REQUESTS_PER_PAGE = 10;
 
 const cache = new LruCache<string, Verdict>(2000);
 const inflight = new Map<string, Promise<Verdict>>();
 const originals = new TaskQueue(2);
 const originalBudget = new PageBudget(MAX_ORIGINAL_BYTES_PER_PAGE);
+const labelBudget = new PageBudget(MAX_LABEL_REQUESTS_PER_PAGE);
+const platformLookup = new PlatformLookup();
 
 let settings: Settings | null = null;
 const settingsReady = loadSettings().then((s) => (settings = s));
@@ -81,6 +85,7 @@ function classifyCached(url: string, view: PageView, bytes?: ArrayBuffer, origin
 browser.tabs.onRemoved.addListener((tabId) => {
   forgetTab(tabId);
   originalBudget.forgetTab(tabId);
+  labelBudget.forgetTab(tabId);
 });
 
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
@@ -89,8 +94,15 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
     const view = { tabId: sender.tab?.id ?? -1, frameId: sender.frameId ?? 0, page: request.page };
     return classifyCached(request.url, view, request.bytes, request.original);
   }
+  if (request?.type === 'platform-labels') {
+    const [tabId, frameId] = [sender.tab?.id ?? -1, sender.frameId ?? 0];
+    return platformLookup.labels(request.platform, request.keys, () => labelBudget.take(tabId, frameId, request.page));
+  }
   if (request?.type === 'page-stats' && sender.tab?.id !== undefined) {
-    if (request.initial) originalBudget.reset(sender.tab.id, sender.frameId ?? 0);
+    if (request.initial) {
+      originalBudget.reset(sender.tab.id, sender.frameId ?? 0);
+      labelBudget.reset(sender.tab.id, sender.frameId ?? 0);
+    }
     void updateTabStats(sender.tab.id, sender.frameId ?? 0, request.stats, request.initial).catch((error) =>
       console.error('[ai-watermark] stats update failed', error),
     );
