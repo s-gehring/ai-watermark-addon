@@ -28,5 +28,6 @@
     "band": [0.5, 0.95],
     "shortestEdges": [576, 768]
   },
-  "threshold": 0.95
+  "threshold": 0.95,
+  "possibleThreshold": 0.8
 }

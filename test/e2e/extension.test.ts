@@ -32,6 +32,21 @@ async function photoLikeJpeg(): Promise<Buffer> {
   return sharp(pixels, { raw: { width, height, channels: 3 } }).jpeg({ quality: 85 }).toBuffer();
 }
 
+async function borderlinePng(): Promise<Buffer> {
+  const width = 640;
+  const height = 480;
+  const pixels = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 3;
+      pixels[i] = 128 + 120 * Math.sin(x / 23) * Math.cos(y / 31);
+      pixels[i + 1] = 128 + 120 * Math.sin((x - y) / 37);
+      pixels[i + 2] = 128 + 120 * Math.cos((x + 2 * y) / 41);
+    }
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
+}
+
 async function synthIdPng(file: string, width: number, height: number, amplitude = 24): Promise<Buffer> {
   const n = synthIdConfig.templates.find((t) => t.file === file)!.size;
   const half = n / 2 + 1;
@@ -156,6 +171,12 @@ const STRICT_PAGE = `<!doctype html>
   </script>
 </body></html>`;
 
+const TIERS_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><style>img { display: block; width: 320px; height: 240px; margin: 8px; }</style></head><body>
+  <img id="labeled" src="/ai.jpg?tiers">
+  <img id="borderline" src="/borderline.png">
+</body></html>`;
+
 const variantsPage = (foreignOrigin: string) => `<!doctype html>
 <html><head><meta charset="utf-8"><style>img { display: block; width: 320px; height: 240px; }</style></head><body>
   <img id="srcset" srcset="/variant.jpg?srcset 480w, /variant-large.jpg?srcset 1280w" sizes="320px">
@@ -178,6 +199,7 @@ beforeAll(async () => {
   const klingLogo = readFileSync(new URL('../unit/fixtures/visible-watermark/kling-2024.jpg', import.meta.url));
   const grokMark = readFileSync(new URL('../unit/fixtures/visible-watermark/grok-aurora.jpg', import.meta.url));
   const synthIdC2pa = withC2paSynthId(await sharp(await photoLikeJpeg()).png().toBuffer());
+  const borderline = await borderlinePng();
   const variantLarge = withXmp(await sharp(plain).resize(1280, 960).jpeg().toBuffer(), XMP_AI);
   const squareLarge = withXmp(await sharp(plain).resize(1280, 1280, { fit: 'fill' }).jpeg().toBuffer(), XMP_AI);
   server = createServer((req, res) => {
@@ -191,6 +213,8 @@ beforeAll(async () => {
         })
         .end(STRICT_PAGE);
     else if (path === '/shadow') res.writeHead(200, { 'content-type': 'text/html' }).end(SHADOW_PAGE);
+    else if (path === '/tiers') res.writeHead(200, { 'content-type': 'text/html' }).end(TIERS_PAGE);
+    else if (path === '/borderline.png') res.writeHead(200, { 'content-type': 'image/png' }).end(borderline);
     else if (path === '/variants') res.writeHead(200, { 'content-type': 'text/html' }).end(variantsPage(origin.replace('127.0.0.1', 'localhost')));
     else if (path === '/variant.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(plain);
     else if (path === '/variant-large.jpg') res.writeHead(200, { 'content-type': 'image/jpeg' }).end(variantLarge);
@@ -235,6 +259,7 @@ interface BadgeInfo {
 
 interface TabStats {
   flagged: number;
+  possible: number;
   clean: number;
   pending: number;
   failed: number;
@@ -271,7 +296,7 @@ async function visibleBadges(): Promise<BadgeInfo[]> {
         const r = el.getBoundingClientRect();
         return b.left >= r.left && b.right <= r.right && b.top >= r.top && b.bottom <= r.bottom;
       });
-      const kind = ['ai', 'clean', 'pending', 'failed'].find((k) => badge.classList.contains(k)) ?? '';
+      const kind = ['ai', 'possible', 'clean', 'pending', 'failed'].find((k) => badge.classList.contains(k)) ?? '';
       const onTop = document.elementFromPoint((b.left + b.right) / 2, (b.top + b.bottom) / 2) === layer;
       return { kind, text: badge.textContent ?? '', owner: owner?.id ?? null, onTop };
     });
@@ -295,6 +320,8 @@ async function waitForBadges(expected: Record<string, string[]>): Promise<BadgeI
   }, 30_000).catch(() => {});
   return last;
 }
+
+const MODEL_KINDS = ['ai', 'possible', 'clean'];
 
 const kindOf = (badges: BadgeInfo[], owner: string) => badges.find((b) => b.owner === owner)?.kind;
 
@@ -324,6 +351,57 @@ async function openDetails(): Promise<DetailsInfo | null> {
   });
 }
 
+async function onOptionsPage<T>(action: () => Promise<T>): Promise<T> {
+  const pageHandle = await driver.getWindowHandle();
+  await openExtensionPage('options.html');
+  try {
+    await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
+    return await action();
+  } finally {
+    await driver.close();
+    await driver.switchTo().window(pageHandle);
+  }
+}
+
+async function saveOptions(values: Record<string, boolean | number>): Promise<{ possibleDisabled: boolean }> {
+  return onOptionsPage(async () => {
+    await driver.wait(() => driver.executeScript(() => document.querySelector<HTMLOutputElement>('#thresholdValue')!.value !== ''), 10_000);
+    await driver.executeScript((changed: Record<string, boolean | number>) => {
+      const form = document.querySelector('form')!;
+      for (const [name, value] of Object.entries(changed)) {
+        const input = form.elements.namedItem(name) as HTMLInputElement;
+        if (typeof value === 'boolean') input.checked = value;
+        else input.value = String(value);
+      }
+      form.dispatchEvent(new Event('change'));
+    }, values);
+    await driver.wait(() => driver.executeScript(() => !document.getElementById('saved')!.hidden), 10_000);
+    return driver.executeScript(() => ({
+      possibleDisabled: (document.querySelector('form')!.elements.namedItem('showPossible') as HTMLInputElement).disabled,
+    }));
+  });
+}
+
+async function settledTabStats(url: string): Promise<TabStats | null> {
+  return onOptionsPage(async () => {
+    let stats: TabStats | null = null;
+    await driver.wait(async () => {
+      stats = await driver.executeAsyncScript<TabStats | null>((pageUrl: string, done: (v: unknown) => void) => {
+        void (async () => {
+          const tab = (await browser.tabs.query({})).find((t) => t.url === pageUrl);
+          if (tab?.id === undefined) return done(null);
+          const key = `tab:${tab.id}`;
+          const frames = (await browser.storage.session.get(key))[key] as Record<string, Omit<TabStats, 'badgeText'>> | undefined;
+          const [top] = Object.values(frames ?? {});
+          done(top ? { ...top, badgeText: await browser.action.getBadgeText({ tabId: tab.id }) } : null);
+        })();
+      }, url);
+      return stats !== null && stats.pending === 0;
+    }, 10_000).catch(() => {});
+    return stats;
+  });
+}
+
 async function classify(path: string): Promise<Record<string, unknown>> {
   return driver.executeAsyncScript<Record<string, unknown>>(
     (url: string, done: (v: unknown) => void) => {
@@ -338,12 +416,12 @@ async function classify(path: string): Promise<Record<string, unknown>> {
 describe('content script', () => {
   it('marks images with AI metadata, including CSS backgrounds and late additions', async () => {
     await driver.get(`${origin}/`);
-    const badges = await waitForBadges({ meta: ['ai'], bg: ['ai'], late: ['ai'], plain: ['ai', 'clean'] });
+    const badges = await waitForBadges({ meta: ['ai'], bg: ['ai'], late: ['ai'], plain: MODEL_KINDS });
     expect(kindOf(badges, 'meta')).toBe('ai');
     expect(kindOf(badges, 'bg')).toBe('ai');
     expect(kindOf(badges, 'late')).toBe('ai');
     expect(badges.find((b) => b.owner === 'meta')?.text).toMatch(/^AI/);
-    expect(['ai', 'clean']).toContain(kindOf(badges, 'plain'));
+    expect(MODEL_KINDS).toContain(kindOf(badges, 'plain'));
     expect(kindOf(badges, 'small')).toBeUndefined();
   }, 60_000);
 
@@ -351,7 +429,7 @@ describe('content script', () => {
     await driver.actions().move(await badgeCenter('plain')).perform();
     const plain = await openDetails();
     expect(plain?.rows.slice(0, 2)).toEqual(['clear', 'clear']);
-    expect(['hit', 'clear']).toContain(plain?.rows[2]);
+    expect(['hit', 'maybe', 'clear']).toContain(plain?.rows[2]);
     expect(plain?.models).toEqual(model.models.map((m) => m.label));
 
     await driver.actions().move(await badgeCenter('meta')).perform();
@@ -419,7 +497,7 @@ describe('background', () => {
           const all = await browser.storage.session.get(null);
           const entry = Object.entries(all).find(([key]) => key.startsWith('tab:'));
           if (!entry) return done(null);
-          const total = { flagged: 0, clean: 0, pending: 0, failed: 0 };
+          const total = { flagged: 0, possible: 0, clean: 0, pending: 0, failed: 0 };
           for (const frame of Object.values(entry[1] as Record<string, typeof total>)) {
             for (const key of Object.keys(total) as (keyof typeof total)[]) total[key] += frame[key];
           }
@@ -427,11 +505,11 @@ describe('background', () => {
           done({ ...total, badgeText });
         })();
       });
-      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 9;
+      return stats !== null && stats.pending === 0 && stats.flagged + stats.possible + stats.clean === 9;
     }, 20_000).catch(() => {});
     expect(stats).toMatchObject({ pending: 0, failed: 0 });
     expect(stats!.flagged).toBeGreaterThanOrEqual(8);
-    expect(stats!.flagged + stats!.clean).toBe(9);
+    expect(stats!.flagged + stats!.possible + stats!.clean).toBe(9);
     expect(stats!.badgeText).toBe(String(stats!.flagged));
     await driver.close();
     await driver.switchTo().window(pageHandle);
@@ -495,7 +573,7 @@ describe('page with a strict content security policy', () => {
 describe('page that offers larger variants', () => {
   it('reads metadata from the largest variant of the same image on the same origin, not from other crops', async () => {
     await driver.get(`${origin}/variants`);
-    await waitForBadges({ srcset: ['ai', 'clean'], link: ['ai', 'clean'], cropped: ['ai', 'clean'], foreign: ['ai', 'clean'] });
+    await waitForBadges({ srcset: MODEL_KINDS, link: MODEL_KINDS, cropped: MODEL_KINDS, foreign: MODEL_KINDS });
     await openExtensionPage('options.html');
     await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
     expect(await classify('/variant.jpg?srcset')).toMatchObject({ ok: true, source: 'metadata' });
@@ -503,4 +581,28 @@ describe('page that offers larger variants', () => {
     expect(await classify('/variant.jpg?cropped')).toMatchObject({ ok: true, source: 'model' });
     expect(await classify('/variant.jpg?foreign')).toMatchObject({ ok: true, source: 'model' });
   }, 60_000);
+});
+
+describe('page with an image the model scores between the lower bound and the threshold', () => {
+  it('marks it with the weaker badge unless that tier is off or the threshold is at the lower bound', async () => {
+    const page = `${origin}/tiers`;
+    const borderlineBadge = async (kind: string) => (await waitForBadges({ borderline: [kind] })).find((b) => b.owner === 'borderline');
+    await driver.get(page);
+    try {
+      const badges = await waitForBadges({ labeled: ['ai'], borderline: ['possible'] });
+      expect(badges.find((b) => b.owner === 'labeled')).toMatchObject({ kind: 'ai', text: expect.stringMatching(/^AI(?!\?)/) });
+      expect(badges.find((b) => b.owner === 'borderline')).toMatchObject({ kind: 'possible', text: expect.stringMatching(/^AI\?\d+ %$/) });
+      await driver.actions().move(await badgeCenter('borderline')).perform();
+      expect((await openDetails())?.rows).toEqual(['clear', 'clear', 'maybe']);
+      expect(await settledTabStats(page)).toMatchObject({ flagged: 1, possible: 1, clean: 0, badgeText: '1' });
+
+      expect(await saveOptions({ showPossible: false })).toEqual({ possibleDisabled: false });
+      expect(await borderlineBadge('clean')).toMatchObject({ kind: 'clean' });
+
+      expect(await saveOptions({ showPossible: true, threshold: model.possibleThreshold * 100 })).toEqual({ possibleDisabled: true });
+      expect(await borderlineBadge('ai')).toMatchObject({ kind: 'ai', text: expect.stringMatching(/^AI\d+ %$/) });
+    } finally {
+      await saveOptions({ showPossible: true, threshold: model.threshold * 100 });
+    }
+  }, 120_000);
 });

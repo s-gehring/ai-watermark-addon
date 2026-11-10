@@ -1,3 +1,4 @@
+import model from '../../model.json';
 import { localize } from '../shared/i18n';
 import { loadSettings, saveSettings, type Settings } from '../shared/settings';
 
@@ -7,11 +8,16 @@ const thresholdValue = document.getElementById('thresholdValue') as HTMLOutputEl
 const saved = document.getElementById('saved')!;
 let savedTimer = 0;
 
+function showThreshold(percent: number): void {
+  thresholdValue.value = `${percent} %`;
+  field<HTMLInputElement>('showPossible').disabled = percent <= model.possibleThreshold * 100;
+}
+
 function render(settings: Settings): void {
   field<HTMLInputElement>('minSize').value = String(settings.minSize);
   field<HTMLInputElement>('threshold').value = String(Math.round(settings.threshold * 100));
-  thresholdValue.value = `${Math.round(settings.threshold * 100)} %`;
-  for (const key of ['checkMetadata', 'checkWatermark', 'includeBackgrounds', 'showScore', 'showChecked'] as const) {
+  showThreshold(Math.round(settings.threshold * 100));
+  for (const key of ['checkMetadata', 'checkWatermark', 'includeBackgrounds', 'showPossible', 'showScore', 'showChecked'] as const) {
     field<HTMLInputElement>(key).checked = settings[key];
   }
   field<HTMLTextAreaElement>('disabledHosts').value = settings.disabledHosts.join('\n');
@@ -24,21 +30,25 @@ async function save(): Promise<void> {
     checkMetadata: field<HTMLInputElement>('checkMetadata').checked,
     checkWatermark: field<HTMLInputElement>('checkWatermark').checked,
     includeBackgrounds: field<HTMLInputElement>('includeBackgrounds').checked,
+    showPossible: field<HTMLInputElement>('showPossible').checked,
     showScore: field<HTMLInputElement>('showScore').checked,
     showChecked: field<HTMLInputElement>('showChecked').checked,
     disabledHosts: field<HTMLTextAreaElement>('disabledHosts').value.split(/\s+/).filter(Boolean),
   });
-  thresholdValue.value = `${Math.round(next.threshold * 100)} %`;
+  showThreshold(Math.round(next.threshold * 100));
   saved.hidden = false;
   clearTimeout(savedTimer);
   savedTimer = window.setTimeout(() => (saved.hidden = true), 1500);
 }
 
 localize();
+document.getElementById('showPossibleLabel')!.textContent = browser.i18n.getMessage('optionsShowPossible', [
+  `${Math.round(model.possibleThreshold * 100)} %`,
+]);
 void loadSettings().then(render);
 form.addEventListener('input', (event) => {
   if ((event.target as HTMLInputElement).name === 'threshold') {
-    thresholdValue.value = `${field<HTMLInputElement>('threshold').value} %`;
+    showThreshold(Number(field<HTMLInputElement>('threshold').value));
   }
 });
 form.addEventListener('change', () => void save());

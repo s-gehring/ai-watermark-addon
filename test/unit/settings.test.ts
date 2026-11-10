@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import model from '../../model.json';
-import { DEFAULT_SETTINGS, fromStorage, isActiveOn, normalizeSettings, toStorage } from '../../src/shared/settings';
+import { DEFAULT_SETTINGS, fromStorage, isActiveOn, normalizeSettings, possibleFrom, toStorage } from '../../src/shared/settings';
 
 describe('normalizeSettings', () => {
   it('falls back to defaults for missing or invalid input', () => {
@@ -35,6 +35,20 @@ describe('fromStorage', () => {
   it('resets a threshold saved before the cascade was added', () => {
     const saved = { ...DEFAULT_SETTINGS, threshold: 0.5, calibration: JSON.stringify(model.calibration) };
     expect(fromStorage(saved).threshold).toBe(DEFAULT_SETTINGS.threshold);
+  });
+});
+
+describe('possibleFrom', () => {
+  it('starts the second badge tier at the lower bound from model.json by default', () => {
+    expect(model.possibleThreshold).toBeLessThan(model.threshold);
+    expect(possibleFrom(DEFAULT_SETTINGS)).toBe(model.possibleThreshold);
+  });
+
+  it('has no second tier when it is switched off or the threshold is at or below the lower bound', () => {
+    expect(possibleFrom({ ...DEFAULT_SETTINGS, showPossible: false })).toBeNull();
+    expect(possibleFrom({ ...DEFAULT_SETTINGS, threshold: model.possibleThreshold })).toBeNull();
+    expect(possibleFrom({ ...DEFAULT_SETTINGS, threshold: 0.5 })).toBeNull();
+    expect(possibleFrom({ ...DEFAULT_SETTINGS, threshold: 0.81 })).toBe(model.possibleThreshold);
   });
 });
 
