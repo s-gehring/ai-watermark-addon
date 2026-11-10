@@ -5,6 +5,11 @@ export function shadowRootOf(element: Element): ShadowRoot | null {
   return (element as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot ?? element.shadowRoot;
 }
 
+// Firefox returns null in a frame that has been removed from its page.
+export function styleOf(element: Element): CSSStyleDeclaration | null {
+  return getComputedStyle(element) as CSSStyleDeclaration | null;
+}
+
 export function parentOf(element: Element): Element | null {
   if (element.parentElement) return element.parentElement;
   const root = element.getRootNode();

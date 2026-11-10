@@ -1,3 +1,5 @@
+import { styleOf } from './dom';
+
 const SVG_URL = /^data:image\/svg|\.svgz?(?:[?#]|$)/i;
 
 export function firstCssUrl(value: string): string | null {
@@ -21,7 +23,7 @@ export function imageUrlOf(element: Element, includeBackgrounds: boolean): strin
     if (!element.complete || element.naturalWidth === 0) return null;
     url = element.currentSrc || element.src;
   } else if (includeBackgrounds) {
-    const background = getComputedStyle(element).backgroundImage;
+    const background = styleOf(element)?.backgroundImage;
     url = background && background !== 'none' ? firstCssUrl(background) : null;
     if (url) url = new URL(url, document.baseURI).href;
   }
@@ -134,6 +136,6 @@ export function largerVariantsOf(image: HTMLImageElement, current: string): stri
 }
 
 export function hasBackgroundImage(element: Element): boolean {
-  const background = getComputedStyle(element).backgroundImage;
+  const background = styleOf(element)?.backgroundImage;
   return !!background && background !== 'none' && background.includes('url(');
 }

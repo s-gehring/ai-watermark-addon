@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { couldBeSourceOf } from '../../src/background/preprocess';
 import {
   firstCssUrl,
+  hasBackgroundImage,
+  imageUrlOf,
   isCheckableUrl,
   isLargeEnough,
   knownOriginals,
@@ -136,5 +138,34 @@ describe('couldBeSourceOf', () => {
   it('rejects smaller images and other crops', () => {
     expect(couldBeSourceOf({ width: 300, height: 200 }, { width: 330, height: 220 })).toBe(false);
     expect(couldBeSourceOf({ width: 2048, height: 2048 }, { width: 330, height: 220 })).toBe(false);
+  });
+});
+
+describe('background images', () => {
+  const element = {} as Element;
+  const styled = (backgroundImage: string) => vi.stubGlobal('getComputedStyle', () => ({ backgroundImage }));
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('detects a URL background and reads its address', () => {
+    vi.stubGlobal('HTMLImageElement', class {});
+    vi.stubGlobal('document', { baseURI: 'https://a.test/gallery/' });
+    styled('linear-gradient(red, blue), url("cover.jpg")');
+    expect(hasBackgroundImage(element)).toBe(true);
+    expect(imageUrlOf(element, true)).toBe('https://a.test/gallery/cover.jpg');
+  });
+
+  it('finds none without a URL', () => {
+    styled('none');
+    expect(hasBackgroundImage(element)).toBe(false);
+    styled('linear-gradient(red, blue)');
+    expect(hasBackgroundImage(element)).toBe(false);
+  });
+
+  it('finds none in a removed frame, where Firefox has no computed style', () => {
+    vi.stubGlobal('HTMLImageElement', class {});
+    vi.stubGlobal('getComputedStyle', () => null);
+    expect(hasBackgroundImage(element)).toBe(false);
+    expect(imageUrlOf(element, true)).toBeNull();
   });
 });

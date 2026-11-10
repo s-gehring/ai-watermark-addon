@@ -1,6 +1,6 @@
 import model from '../../model.json';
 import { EMPTY_STATS, type CheckStatus, type FrameStats, type Verdict, type VerdictError, type WatermarkScheme } from '../shared/messages';
-import { composedContains, LAYER_TAG, parentOf } from './dom';
+import { composedContains, LAYER_TAG, parentOf, styleOf } from './dom';
 
 const INSET = 6;
 const GAP = 6;
@@ -283,7 +283,7 @@ export class BadgeLayer {
       if (hit === this.host) continue;
       if (composedContains(hit, element) || composedContains(element, hit)) return false;
       for (let node: Element | null = hit; node && !composedContains(node, element); node = parentOf(node)) {
-        const { position } = getComputedStyle(node);
+        const position = styleOf(node)?.position;
         if (position === 'fixed' || position === 'sticky') return true;
       }
     }
@@ -303,7 +303,8 @@ function visibleBox(element: Element, viewportWidth: number, viewportHeight: num
   let fixed = false;
   for (let node = parentOf(element); node && node !== document.body; node = parentOf(node)) {
     if (box.right <= box.left || box.bottom <= box.top) return null;
-    const style = getComputedStyle(node);
+    const style = styleOf(node);
+    if (!style) return null;
     if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
       const clip = node.getBoundingClientRect();
       if (style.overflowX !== 'visible') {
