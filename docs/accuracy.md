@@ -108,6 +108,7 @@ The labels of pixiv, DeviantArt and Wikimedia Commons are set by uploaders and e
 Measured with a script over the 4,906 images of the model measurement and the 2,320 further images (see above), which keep the metadata of their source files. The metadata check flags 154 of the 300 AI images from OpenFake, 874 of the 1,678 further AI images, none of the 188 AI images from Reddit and none of the 4,460 real photos, paintings, charts and thumbnails.
 
 - **Civitai:** the on-site generator writes the EXIF tag `Artist: ai`, which Civitai's own [media-metadata](https://github.com/civitai/media-metadata) reader uses as its marker. 62 of these AI images (GPT-Image 1.5, Z-Image, Illustrious and Sora 2 images generated on the site) have no other label.
+- **Civitai on real pages** (Firefox with the built add-on, 2026-11-10, 34 images on 9 pages): the previews carry AI metadata in 7 images, the uploaded files that the add-on loads for them in 27.
 - **ComfyUI:** the `prompt` graph is recognized by sampler, loader and text encoder nodes (not only `KSampler` and `SamplerCustom`), the `workflow` chunk by `last_node_id`, and the graph also in the EXIF user comment, where it is stored as UTF-16. Of the AI images, 4 have no other label.
 - **Reve:** the EXIF field `Software: Reve.art` is on 4 of 30 images of one Hugging Face dataset ([Rapidata/Flux-2-pro_t2i_human_preference](https://huggingface.co/datasets/Rapidata/Flux-2-pro_t2i_human_preference)).
 
