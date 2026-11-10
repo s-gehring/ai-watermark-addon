@@ -25,7 +25,7 @@ Badge "AI · pixiv", "AI · DeviantArt" or "AI · Commons". These platforms mark
 
 A request asks for all large images of the page at once, so a page view usually needs one. Requests go only to the platform whose page is open (pixiv with the user's session, Commons anonymously), come from the background script, are cached, and stop after 10 per page view.
 
-The three checks below wait up to 0.4 s for the label. A label that arrives in time decides alone: the image is neither fetched again nor scored. A label that arrives later replaces the badge of the checks. A work without a label goes through the checks. So does a work whose label stays unknown (failed request, limit reached, no answer for it); it is asked again on the next page view. The labels are set by uploaders, so a missing label says nothing. The option "Read the AI labels of pixiv, DeviantArt and Wikimedia Commons" switches this off.
+The three checks below wait up to 0.8 s for the label. A label that arrives in time decides alone: the image is neither fetched again nor scored. A label that arrives later replaces the badge of the checks. A work without a label goes through the checks. So does a work whose label stays unknown (failed request, limit reached, no answer for it); it is asked again on the next page view. The labels are set by uploaders, so a missing label says nothing. The option "Read the AI labels of pixiv, DeviantArt and Wikimedia Commons" switches this off.
 
 ## 1. Metadata
 

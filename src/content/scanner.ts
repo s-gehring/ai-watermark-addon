@@ -8,7 +8,7 @@ import { labelFirst, PlatformLabels } from './platform-labels';
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
 const DISCOVERY_CHUNK = 400;
-const LABEL_GRACE_MS = 400;
+const LABEL_GRACE_MS = 800;
 
 export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
