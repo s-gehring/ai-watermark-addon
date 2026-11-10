@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkedCount, isPossible, progressOf, sumStats, type Verdict } from '../../src/shared/messages';
+import { checkedCount, isFlagged, isPossible, progressOf, sumStats, type Verdict } from '../../src/shared/messages';
 
 describe('frame stats', () => {
   it('sums all frames of a tab', () => {
@@ -29,11 +29,16 @@ describe('isPossible', () => {
     expect(isPossible(scored(0.95), 0.95, 0.8)).toBe(false);
   });
 
-  it('never applies to metadata or watermark hits and failed checks', () => {
+  it('never applies to platform, metadata or watermark hits and failed checks', () => {
+    expect(isPossible({ ok: true, score: 1, source: 'platform', platform: 'pixiv' }, 0.99, 0.8)).toBe(false);
     expect(isPossible({ ok: true, score: 1, source: 'metadata', reason: 'ai-generated' }, 0.95, 0.8)).toBe(false);
     expect(isPossible({ ok: true, score: 1, source: 'synthid', provider: 'google', metadata: 'clear' }, 0.99, 0.8)).toBe(false);
     expect(isPossible({ ok: true, score: 1, source: 'watermark', scheme: 'flux', metadata: 'clear' }, 0.99, 0.8)).toBe(false);
     expect(isPossible({ ok: false, error: 'model' }, 0.95, 0.8)).toBe(false);
+  });
+
+  it('leaves a platform label a certain hit at every threshold', () => {
+    expect(isFlagged({ ok: true, score: 1, source: 'platform', platform: 'commons' }, 0.99)).toBe(true);
   });
 
   it('is off without a lower bound', () => {

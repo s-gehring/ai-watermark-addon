@@ -42,4 +42,12 @@ describe('PageBudget', () => {
     expect(await budget.load(2, 0, 'https://a.example/', file(1))).not.toBeNull();
     expect(await budget.load(1, 0, 'https://a.example/', file(1))).toBeNull();
   });
+
+  it('hands out single units until a page view has used them up', () => {
+    const budget = new PageBudget(2);
+    expect(budget.take(1, 0, 'https://a.example/')).toBe(true);
+    expect(budget.take(1, 0, 'https://a.example/')).toBe(true);
+    expect(budget.take(1, 0, 'https://a.example/')).toBe(false);
+    expect(budget.take(1, 0, 'https://a.example/next')).toBe(true);
+  });
 });
