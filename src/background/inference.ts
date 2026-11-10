@@ -1,13 +1,25 @@
 import type { Verdict } from '../shared/messages';
 import type { Checks, EncodedImage, WorkerRequest, WorkerResponse } from './worker';
 
+export const STALL_TIMEOUT_MS = 60_000;
+
 let worker: Worker | null = null;
 let nextId = 0;
+let stallTimer: ReturnType<typeof setTimeout> | undefined;
 const pending = new Map<number, (verdict: Verdict) => void>();
 
-function failAll(): void {
+function watchForStall(): void {
+  clearTimeout(stallTimer);
+  stallTimer = pending.size ? setTimeout(() => discardWorker('gave no answer in time'), STALL_TIMEOUT_MS) : undefined;
+}
+
+function discardWorker(reason: string): void {
+  console.error('[ai-watermark] worker', reason);
+  worker?.terminate();
+  worker = null;
   for (const resolve of pending.values()) resolve({ ok: false, error: 'model' });
   pending.clear();
+  watchForStall();
 }
 
 function ensureWorker(): Worker {
@@ -16,13 +28,9 @@ function ensureWorker(): Worker {
   created.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
     pending.get(data.id)?.(data.verdict);
     pending.delete(data.id);
+    watchForStall();
   };
-  created.onerror = (event) => {
-    console.error('[ai-watermark] worker failed', event.message);
-    created.terminate();
-    worker = null;
-    failAll();
-  };
+  created.onerror = (event) => discardWorker(`failed: ${event.message}`);
   worker = created;
   return created;
 }
@@ -31,6 +39,7 @@ export function evaluate(image: EncodedImage, original: EncodedImage | null, che
   return new Promise((resolve) => {
     const id = nextId++;
     pending.set(id, resolve);
+    if (pending.size === 1) watchForStall();
     const request: WorkerRequest = { id, ...image, original, ...checks };
     ensureWorker().postMessage(request, original ? [image.bytes, original.bytes] : [image.bytes]);
   });
