@@ -184,7 +184,7 @@ describe('crop search', () => {
     [304, 247, 3.2874127584728967],
   ])('matches the Python reference (image %ix%i)', (width, height, expected) => {
     const config: CropSearchConfig = { ...limits, threshold: 8, sizes: { google: [[400, 300], [300, 400], [320, 260]] } };
-    const detector: SynthIdDetector = { ...arithmeticTemplate(512), provider: 'google', threshold: 10, cropSearch: true };
+    const detector: SynthIdDetector = { ...arithmeticTemplate(512), provider: 'google', threshold: 8, cropSearch: true };
     expect(cropSearchScores(patternedImage(width, height), [detector], config).google).toBeCloseTo(expected, 4);
   });
 

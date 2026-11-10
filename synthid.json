@@ -6,7 +6,7 @@
       "size": 512,
       "cropSearch": true,
       "weightScale": 0.003843954371339662,
-      "threshold": 10,
+      "threshold": 8,
       "source": {
         "datasets": [
           {
@@ -37,7 +37,7 @@
       "size": 512,
       "cropSearch": true,
       "weightScale": 0.002039670633062206,
-      "threshold": 10,
+      "threshold": 8,
       "source": {
         "datasets": [
           {
