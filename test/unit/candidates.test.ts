@@ -128,20 +128,6 @@ describe('knownOriginals', () => {
     expect(knownOriginals('https://civitai.com/images/01234567-89ab-cdef-0123-456789abcdef/width=450/a.jpeg')).toEqual([]);
   });
 
-  it('maps Imgur thumbnails that keep the aspect ratio to the uploaded file', () => {
-    expect(knownOriginals('https://i.imgur.com/AbCd123_d.webp?maxwidth=520&shape=thumb&fidelity=high')).toEqual(['https://i.imgur.com/AbCd123.jpeg']);
-    expect(knownOriginals('https://i.imgur.com/AbCd123l.jpg')).toEqual(['https://i.imgur.com/AbCd123.jpeg']);
-    expect(knownOriginals('https://i.imgur.com/AbCd123h.png')).toEqual(['https://i.imgur.com/AbCd123.jpeg']);
-    expect(knownOriginals('https://i.imgur.com/AbCd123.jpeg')).toEqual([]);
-    expect(knownOriginals('https://i.imgur.com/AbCd123.png')).toEqual([]);
-    expect(knownOriginals('https://i.imgur.com/AbCd123b.jpg')).toEqual([]);
-    expect(knownOriginals('https://i.imgur.com/AbCd123s.jpg')).toEqual([]);
-    expect(knownOriginals('https://i.imgur.com/AbCd1l.jpg')).toEqual([]);
-    expect(knownOriginals('https://i.imgur.com/AbCd123l.mp4')).toEqual([]);
-    expect(knownOriginals('https://imgur.com/AbCd123l.jpg')).toEqual([]);
-    expect(knownOriginals('https://i.imgur.com.cdn.test/AbCd123l.jpg')).toEqual([]);
-  });
-
   it('maps X media to the upload, trying JPEG and then PNG before the largest rendition', () => {
     const media = 'https://pbs.twimg.com/media/AbCdEfGh-_12345';
     expect(knownOriginals(`${media}?format=webp&name=small`)).toEqual([

@@ -40,7 +40,6 @@ const ORIGINAL_RULES: [RegExp, string][] = [
   [/^(https?:\/\/[^?#]+\/wp-content\/uploads\/[^?#]+\.(?:jpe?g|png|webp|avif|gif))\?(?:[^#]*&)?(?:w|h|resize|fit)=[^#]*$/i, '$1'],
   [/^(https:\/\/[\w-]+\.googleusercontent\.com\/[^?#=]+)=[^/?#]+$/i, '$1=s0'],
   [/^(https:\/\/image\.civitai\.com\/[\w-]+\/[0-9a-f-]{36})\/(?![^/?#]*(?:original|transcode)=true)[^/?#]*\bwidth=\d+[^/?#]*\/([^/?#]+\.(?:jpe?g|png|webp))$/i, '$1/original=true/$2'],
-  [/^https:\/\/i\.imgur\.com\/([A-Za-z0-9]{7})(?:[tmlh]|_d)\.(?:jpe?g|png|webp|gif)(?:[?#].*)?$/, 'https://i.imgur.com/$1.jpeg'],
   [/^(https:\/\/(?:live|farm\d+)\.staticflickr\.com\/\d+\/\d+_[0-9a-f]+)(?:_[tmnwzc])?\.jpg$/, '$1_b.jpg'],
 ];
 
