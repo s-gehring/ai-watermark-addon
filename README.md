@@ -46,7 +46,7 @@ Requires Firefox 140 or later, or Firefox for Android 142 or later.
 ## Privacy and permissions
 
 - All checks run locally in a Web Worker. The add-on sends no data to any third party and has no telemetry.
-- To read the original bytes of images from other domains, the add-on fetches each image a second time from the same URL, usually served from the browser cache. If the page offers a larger version of an image from the same site, it also loads that file for the metadata and watermark checks.
+- To read the original bytes of images from other domains, the add-on fetches each image a second time from the same URL, usually served from the browser cache. If the page offers a larger version of an image from the same site, it also loads that file for the metadata and watermark checks and, for small images, the model.
 - `<all_urls>` is needed to find and fetch images on any page, `storage` to keep your settings.
 
 ## Build from source

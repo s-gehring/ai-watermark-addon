@@ -86,6 +86,13 @@ export function couldBeSourceOf(candidate: Pick<PixelImage, 'width' | 'height'>,
   return candidate.width >= image.width && candidate.height >= image.height && Math.abs(aspect - 1) <= 0.02;
 }
 
+export const VARIANT_SCORING = { below: 440, longestEdge: 800, resample: 'bicubic', jpegQuality: 0.8 } as const;
+
+export function scoresVariant(image: Pick<PixelImage, 'width' | 'height'>, variant: Pick<PixelImage, 'width' | 'height'>): boolean {
+  const short = Math.min(image.width, image.height);
+  return short < VARIANT_SCORING.below && Math.min(variant.width, variant.height) > short;
+}
+
 export function resizedSize(width: number, height: number, shortestEdge: number): [number, number] {
   const scale = shortestEdge / Math.min(width, height);
   return [Math.trunc(width * scale), Math.trunc(height * scale)];
@@ -95,17 +102,18 @@ export function inputShape(spec: InputSpec): [width: number, height: number] {
   return 'size' in spec ? spec.size : [spec.crop, spec.crop];
 }
 
-export function toModelInput(
+function resampled(
   image: PixelImage,
-  spec: InputSpec,
-  [outW, outH] = 'size' in spec ? spec.size : resizedSize(image.width, image.height, spec.shortestEdge),
-): Float32Array {
+  resample: Resample,
+  outW: number,
+  outH: number,
+  stride: 3 | 4,
+  left = 0,
+  top = 0,
+  cropW = outW,
+  cropH = outH,
+): Uint8ClampedArray {
   const { width, height, channels, data } = image;
-  const [cropW, cropH] = inputShape(spec);
-  const left = Math.floor((outW - cropW) / 2);
-  const top = Math.floor((outH - cropH) / 2);
-
-  const resample = spec.resample ?? 'bicubic';
   const horizontal = coefficients(width, outW, resample);
   const vertical = coefficients(height, outH, resample);
   const firstRow = vertical.bounds[top * 2];
@@ -137,8 +145,8 @@ export function toModelInput(
     }
   }
 
-  const plane = cropW * cropH;
-  const out = new Float32Array(3 * plane);
+  const out = new Uint8ClampedArray(cropW * cropH * stride);
+  if (stride === 4) out.fill(255);
   for (let yy = 0; yy < cropH; yy++) {
     const oy = yy + top;
     const ymin = vertical.bounds[oy * 2] - firstRow;
@@ -155,13 +163,40 @@ export function toModelInput(
         g += temp[t + 1] * w;
         b += temp[t + 2] * w;
       }
-      const i = yy * cropW + xx;
-      out[i] = (clip8(r) / 255 - spec.mean[0]) / spec.std[0];
-      out[plane + i] = (clip8(g) / 255 - spec.mean[1]) / spec.std[1];
-      out[2 * plane + i] = (clip8(b) / 255 - spec.mean[2]) / spec.std[2];
+      const i = (yy * cropW + xx) * stride;
+      out[i] = clip8(r);
+      out[i + 1] = clip8(g);
+      out[i + 2] = clip8(b);
     }
   }
   return out;
+}
+
+export function toModelInput(
+  image: PixelImage,
+  spec: InputSpec,
+  [outW, outH] = 'size' in spec ? spec.size : resizedSize(image.width, image.height, spec.shortestEdge),
+): Float32Array {
+  const [cropW, cropH] = inputShape(spec);
+  const left = Math.floor((outW - cropW) / 2);
+  const top = Math.floor((outH - cropH) / 2);
+  const rgb = resampled(image, spec.resample ?? 'bicubic', outW, outH, 3, left, top, cropW, cropH);
+  const plane = cropW * cropH;
+  const out = new Float32Array(3 * plane);
+  for (let i = 0; i < plane; i++) {
+    out[i] = (rgb[i * 3] / 255 - spec.mean[0]) / spec.std[0];
+    out[plane + i] = (rgb[i * 3 + 1] / 255 - spec.mean[1]) / spec.std[1];
+    out[2 * plane + i] = (rgb[i * 3 + 2] / 255 - spec.mean[2]) / spec.std[2];
+  }
+  return out;
+}
+
+export function fitWithin(image: PixelImage, longestEdge: number, resample: Resample): PixelImage {
+  const scale = longestEdge / Math.max(image.width, image.height);
+  if (scale >= 1) return image;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  return { width, height, channels: 4, data: resampled(image, resample, width, height, 4) };
 }
 
 export function extraViews(image: PixelImage, spec: InputSpec, shortestEdges: number[]): Float32Array[] {

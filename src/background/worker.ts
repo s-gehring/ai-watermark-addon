@@ -6,7 +6,7 @@ import { detectBytedanceWatermark } from './bytedance-watermark';
 import { detectInvisibleWatermark } from './invisible-watermark';
 import { isLossyWebp } from './format';
 import { detectAiMetadata } from './metadata';
-import { couldBeSourceOf, isScorable, type PixelImage } from './preprocess';
+import { couldBeSourceOf, fitWithin, isScorable, scoresVariant, VARIANT_SCORING, type PixelImage } from './preprocess';
 import { TaskQueue } from './queue';
 import {
   detectSynthId,
@@ -99,6 +99,14 @@ async function decode({ bytes, type }: EncodedImage): Promise<PixelImage | null>
   }
 }
 
+async function modelInput(displayed: EncodedImage, image: PixelImage, source: PixelImage | null): Promise<PixelImage> {
+  if (source && scoresVariant(image, source)) {
+    const { longestEdge, resample, jpegQuality } = VARIANT_SCORING;
+    return reencodeAsJpeg(fitWithin(source, longestEdge, resample), jpegQuality);
+  }
+  return isLossyWebp(new Uint8Array(displayed.bytes)) ? reencodeAsJpeg(image, WEBP_AS_JPEG_QUALITY) : image;
+}
+
 async function score(displayed: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict> {
   const image = await decode(displayed);
   if (!image) return { ok: false, error: 'decode' };
@@ -119,7 +127,7 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
   if (!isScorable(image)) return { ok: false, error: 'unsupported' };
   let scored: Awaited<ReturnType<typeof scoreImage>>;
   try {
-    scored = await scoreImage(isLossyWebp(new Uint8Array(displayed.bytes)) ? await reencodeAsJpeg(image, WEBP_AS_JPEG_QUALITY) : image);
+    scored = await scoreImage(await modelInput(displayed, image, source));
   } catch (error) {
     console.error('[ai-watermark] inference failed', error);
     return { ok: false, error: 'model' };

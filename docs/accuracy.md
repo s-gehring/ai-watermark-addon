@@ -29,6 +29,8 @@ On 2,320 further images that are neither in the training data nor in this measur
 
 Saved as WebP instead (1280 px with quality 80, 800 px with quality 75 or 60, shorter edge 360 px with quality 80), the measurement's AI images are detected at 65 % (further images: 55 %), photos are flagged at 0.6 % (0.9 %) and paintings at 3.2 %. The add-on re-encodes lossy WebP files without transparency as JPEG with quality 89 before scoring them. Scored directly, WebP photos and paintings get much higher scores than the same images as JPEG (photos flagged at 1.9 % and 1.7 %, paintings at 5.4 %). The re-encoded files also separate AI images from photos better: for seven of the eight combinations of WebP setting and image set the AUC is higher (by up to 0.01).
 
+Small images, measured on the 305 AI images, 463 photos and 151 WikiArt paintings of the test half with a shorter side of at least 440 px: downscaled to a shorter side of 300 or 400 px (JPEG 80), 44 % and 50 % of the AI images are detected, no more than 0.2 % of the photos and 1.3 % of the paintings are flagged. If the page offers a larger file, the add-on scores that file instead, reduced to 800 px and re-encoded as JPEG 80. With the 1280 px web version or the original as the larger file this detects 62 % and 65 % and flags 0.4 % of the photos and 3.3 % and 4.0 % of the paintings.
+
 Other thresholds (web 1280 px, all AI images against real photos):
 
 | Threshold | AI images detected | real photos flagged |

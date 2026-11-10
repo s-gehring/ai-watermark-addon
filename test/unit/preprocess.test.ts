@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extraViews, inputShape, isScorable, resizedSize, toModelInput, type InputSpec } from '../../src/background/preprocess';
+import { extraViews, fitWithin, inputShape, isScorable, resizedSize, scoresVariant, toModelInput, type InputSpec } from '../../src/background/preprocess';
 import cases from './fixtures/pil-bicubic.json';
 import bilinearCases from './fixtures/pil-bilinear.json';
 
@@ -95,5 +95,31 @@ describe('isScorable', () => {
     expect(isScorable({ width: 640, height: 480 })).toBe(true);
     expect(isScorable({ width: 31, height: 400 })).toBe(false);
     expect(isScorable({ width: 2000, height: 200 })).toBe(false);
+  });
+});
+
+describe('fitWithin', () => {
+  const [c] = bilinearCases;
+  const image = { width: c.width, height: c.height, channels: 3 as const, data: c.pixels };
+
+  it('reduces the longer side with the resampling of the model input and returns opaque RGBA', () => {
+    const fitted = fitWithin(image, 24, 'bilinear');
+    expect([fitted.width, fitted.height, fitted.channels]).toEqual([24, 16, 4]);
+    const data = Array.from(fitted.data);
+    const reference = toModelInput(image, { size: [24, 16], resample: 'bilinear', mean: [0, 0, 0], std: [1, 1, 1] });
+    expect(data.filter((_, i) => i % 4 !== 3)).toEqual(toHwc(reference, 24 * 16));
+    expect(data.filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true);
+  });
+
+  it('returns images within the limit unchanged', () => {
+    expect(fitWithin(image, c.width, 'bilinear')).toBe(image);
+  });
+});
+
+describe('scoresVariant', () => {
+  it('prefers a larger variant only for images with a short side under 440 px', () => {
+    expect(scoresVariant({ width: 600, height: 439 }, { width: 1200, height: 878 })).toBe(true);
+    expect(scoresVariant({ width: 600, height: 440 }, { width: 1200, height: 880 })).toBe(false);
+    expect(scoresVariant({ width: 400, height: 300 }, { width: 400, height: 300 })).toBe(false);
   });
 });

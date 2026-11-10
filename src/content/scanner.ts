@@ -7,7 +7,6 @@ import { BadgeLayer } from './overlay';
 const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
 const DISCOVERY_CHUNK = 400;
-const MAX_ORIGINALS = 20;
 
 export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
@@ -19,7 +18,6 @@ export class Scanner {
   private readonly mo: MutationObserver;
   private pendingRoots: Element[] = [];
   private discovering = false;
-  private originals = 0;
 
   constructor(
     private settings: Settings,
@@ -180,11 +178,9 @@ export class Scanner {
 
   private originalFor(url: string, element: Element): string[] | undefined {
     const { checkMetadata, checkWatermark } = this.settings;
-    if (this.originals >= MAX_ORIGINALS || !(checkMetadata || checkWatermark)) return undefined;
+    if (!(checkMetadata || checkWatermark)) return undefined;
     const originals = element instanceof HTMLImageElement ? largerVariantsOf(element, url) : knownOriginals(url);
-    if (!originals.length) return undefined;
-    this.originals++;
-    return originals;
+    return originals.length ? originals : undefined;
   }
 }
 
@@ -197,17 +193,18 @@ async function send(request: BackgroundRequest): Promise<Verdict> {
 }
 
 async function requestVerdict(url: string, element: Element, original?: string[]): Promise<Verdict> {
-  const verdict = url.startsWith('blob:') ? await classifyBlob(url) : await send({ type: 'classify', url, original });
+  const page = location.href;
+  const verdict = url.startsWith('blob:') ? await classifyBlob(url, page) : await send({ type: 'classify', url, page, original });
   if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
   const bytes = await pixelsOf(element);
-  return bytes ? send({ type: 'classify', url, bytes, original }) : verdict;
+  return bytes ? send({ type: 'classify', url, page, bytes, original }) : verdict;
 }
 
-async function classifyBlob(url: string): Promise<Verdict> {
+async function classifyBlob(url: string, page: string): Promise<Verdict> {
   const bytes = await fetch(url)
     .then((r) => r.arrayBuffer())
     .catch(() => null);
-  return bytes ? send({ type: 'classify', url, bytes }) : { ok: false, error: 'fetch' };
+  return bytes ? send({ type: 'classify', url, page, bytes }) : { ok: false, error: 'fetch' };
 }
 
 async function pixelsOf(image: HTMLImageElement): Promise<ArrayBuffer | null> {
