@@ -39,16 +39,23 @@ describe('fromStorage', () => {
 });
 
 describe('possibleFrom', () => {
-  it('starts the second badge tier at the lower bound from model.json by default', () => {
-    expect(model.possibleThreshold).toBeLessThan(model.threshold);
-    expect(possibleFrom(DEFAULT_SETTINGS)).toBe(model.possibleThreshold);
+  const switchedOn = { ...DEFAULT_SETTINGS, showPossible: true };
+
+  it('has no second badge tier by default', () => {
+    expect(possibleFrom(DEFAULT_SETTINGS)).toBeNull();
+    expect(possibleFrom(normalizeSettings({}))).toBeNull();
   });
 
-  it('has no second tier when it is switched off or the threshold is at or below the lower bound', () => {
-    expect(possibleFrom({ ...DEFAULT_SETTINGS, showPossible: false })).toBeNull();
-    expect(possibleFrom({ ...DEFAULT_SETTINGS, threshold: model.possibleThreshold })).toBeNull();
-    expect(possibleFrom({ ...DEFAULT_SETTINGS, threshold: 0.5 })).toBeNull();
-    expect(possibleFrom({ ...DEFAULT_SETTINGS, threshold: 0.81 })).toBe(model.possibleThreshold);
+  it('starts the second badge tier at the lower bound from model.json when it is switched on', () => {
+    expect(model.possibleThreshold).toBeLessThan(model.threshold);
+    expect(possibleFrom(switchedOn)).toBe(model.possibleThreshold);
+    expect(possibleFrom(normalizeSettings({ showPossible: true }))).toBe(model.possibleThreshold);
+  });
+
+  it('has no second tier when the threshold is at or below the lower bound', () => {
+    expect(possibleFrom({ ...switchedOn, threshold: model.possibleThreshold })).toBeNull();
+    expect(possibleFrom({ ...switchedOn, threshold: 0.5 })).toBeNull();
+    expect(possibleFrom({ ...switchedOn, threshold: 0.81 })).toBe(model.possibleThreshold);
   });
 });
 

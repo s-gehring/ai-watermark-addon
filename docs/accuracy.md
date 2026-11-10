@@ -28,13 +28,13 @@ At the default threshold of 95 %:
 
 Nearly all AI images of the measurement are large (1,085 of 1,088 have a shorter side of 440 px or more, the size the model looks at), but only 607 of the 1,453 measured photos are, so the rate for all photos is mostly a rate for small photos. The row for large photos compares like with like.
 
-Images that score from 80 % up to the threshold and have no metadata or watermark hit get the weaker "AI?" badge. At the default threshold it appears on:
+The weaker "AI?" badge is an option that is off by default. Switched on, it marks images that score from 80 % up to the threshold and have no metadata or watermark hit. At the default threshold these are:
 
 | | Original file | Web 1280 px | Web 800 px | Thumbnail 400 px | Thumbnail 300 px |
 |---|---|---|---|---|---|
 | AI images (OpenFake) | 4 % | 8 % | 12 % | 14 % | 16 % |
 | AI images (Reddit) | 7 % | 8 % | 12 % | 13 % | 11 % |
-| AI images (newer generators) | 0 % | 8 % | 15 % | 22 % | 18 % |
+| AI images (newer generators) | 0 % | 8 % | 13 % | 22 % | 18 % |
 | real photos (all) | 2.3 % | 2.3 % | 1.5 % | 1.1 % | 1.4 % |
 | real photos (shorter side of 440 px or more) | 4.0 % | 4.8 % | 2.5 % | 1.6 % | 2.5 % |
 | paintings (WikiArt) | 9.9 % | 12.6 % | 6.0 % | 4.0 % | 2.0 % |
@@ -79,8 +79,8 @@ The SigLIP detector often considers YouTube video thumbnails AI-generated, inclu
 
 ### Limitations
 
-- The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about 30 % of the AI images without metadata or watermark get no AI badge under web conditions. To catch more, lower the threshold in the settings and accept more false positives.
-- The "AI?" badge is a much weaker hint than the AI badge. At 1280 px it appears on 8 % of the measurement's AI images and on 4.8 % of the large photos, three times as many photos as the AI badge flags. Among the news images of WildAIGC-Bench it appears on 20 % of the AI images and on 8.9 % of the real photos.
+- The badge is a hint, not proof. The default threshold is tuned for few false positives; in exchange, about 30 % of the AI images without metadata or watermark stay unmarked under web conditions. To catch more, lower the threshold in the settings and accept more false positives.
+- The optional "AI?" badge is a much weaker hint than the AI badge and therefore off by default. At 1280 px it appears on 8 % of the measurement's AI images and on 4.8 % of the large photos, three times as many photos as the AI badge flags. Among the news images of WildAIGC-Bench it appears on 20 % of the AI images and on 8.9 % of the real photos. It suits pages where a large share of the images is AI-generated.
 - The model is weaker on the newest generators. Under web conditions (1280 px) it finds 69 of 78 FLUX.2 images, 53 of 70 GPT-Image 2 images, 32 of 73 Qwen-Image 2.1 images and 63 of 85 Gemini images; Community Forensics found 14 to 18 % of these, but only 1 to 3 of the Gemini images. As original files it detects 91 %, so compression costs particularly much here. Gemini images are additionally found by the SynthID check.
 - Heavily edited photos from photography subreddits are flagged at up to 3 %, camera photos from DOCCI at up to 4 % under web conditions and YouTube thumbnails at up to 1 %. 3D renderings are not in the test set.
 - The fine-tuning uses public domain artworks from the Met as negatives, mostly from before 1900. The paintings from the Cleveland Museum of Art are similar and are not flagged, WikiArt contains more modern and abstract art and is flagged at 3 to 6 % under web conditions. Detectra, the base model, was itself trained with WikiArt paintings.

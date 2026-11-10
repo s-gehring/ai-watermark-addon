@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   includeBackgrounds: true,
   showScore: true,
   showChecked: true,
-  showPossible: true,
+  showPossible: false,
   disabledHosts: [],
 };
 

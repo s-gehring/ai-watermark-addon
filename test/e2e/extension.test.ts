@@ -321,8 +321,6 @@ async function waitForBadges(expected: Record<string, string[]>): Promise<BadgeI
   return last;
 }
 
-const MODEL_KINDS = ['ai', 'possible', 'clean'];
-
 const kindOf = (badges: BadgeInfo[], owner: string) => badges.find((b) => b.owner === owner)?.kind;
 
 interface DetailsInfo {
@@ -382,7 +380,7 @@ async function saveOptions(values: Record<string, boolean | number>): Promise<{ 
   });
 }
 
-async function settledTabStats(url: string): Promise<TabStats | null> {
+async function settledTabStats(url: string, expected: Partial<TabStats>): Promise<TabStats | null> {
   return onOptionsPage(async () => {
     let stats: TabStats | null = null;
     await driver.wait(async () => {
@@ -396,7 +394,8 @@ async function settledTabStats(url: string): Promise<TabStats | null> {
           done(top ? { ...top, badgeText: await browser.action.getBadgeText({ tabId: tab.id }) } : null);
         })();
       }, url);
-      return stats !== null && stats.pending === 0;
+      const found = stats as TabStats | null;
+      return found !== null && found.pending === 0 && Object.entries(expected).every(([key, value]) => found[key as keyof TabStats] === value);
     }, 10_000).catch(() => {});
     return stats;
   });
@@ -416,12 +415,12 @@ async function classify(path: string): Promise<Record<string, unknown>> {
 describe('content script', () => {
   it('marks images with AI metadata, including CSS backgrounds and late additions', async () => {
     await driver.get(`${origin}/`);
-    const badges = await waitForBadges({ meta: ['ai'], bg: ['ai'], late: ['ai'], plain: MODEL_KINDS });
+    const badges = await waitForBadges({ meta: ['ai'], bg: ['ai'], late: ['ai'], plain: ['ai', 'clean'] });
     expect(kindOf(badges, 'meta')).toBe('ai');
     expect(kindOf(badges, 'bg')).toBe('ai');
     expect(kindOf(badges, 'late')).toBe('ai');
     expect(badges.find((b) => b.owner === 'meta')?.text).toMatch(/^AI/);
-    expect(MODEL_KINDS).toContain(kindOf(badges, 'plain'));
+    expect(['ai', 'clean']).toContain(kindOf(badges, 'plain'));
     expect(kindOf(badges, 'small')).toBeUndefined();
   }, 60_000);
 
@@ -429,7 +428,7 @@ describe('content script', () => {
     await driver.actions().move(await badgeCenter('plain')).perform();
     const plain = await openDetails();
     expect(plain?.rows.slice(0, 2)).toEqual(['clear', 'clear']);
-    expect(['hit', 'maybe', 'clear']).toContain(plain?.rows[2]);
+    expect(['hit', 'clear']).toContain(plain?.rows[2]);
     expect(plain?.models).toEqual(model.models.map((m) => m.label));
 
     await driver.actions().move(await badgeCenter('meta')).perform();
@@ -497,7 +496,7 @@ describe('background', () => {
           const all = await browser.storage.session.get(null);
           const entry = Object.entries(all).find(([key]) => key.startsWith('tab:'));
           if (!entry) return done(null);
-          const total = { flagged: 0, possible: 0, clean: 0, pending: 0, failed: 0 };
+          const total = { flagged: 0, clean: 0, pending: 0, failed: 0 };
           for (const frame of Object.values(entry[1] as Record<string, typeof total>)) {
             for (const key of Object.keys(total) as (keyof typeof total)[]) total[key] += frame[key];
           }
@@ -505,11 +504,11 @@ describe('background', () => {
           done({ ...total, badgeText });
         })();
       });
-      return stats !== null && stats.pending === 0 && stats.flagged + stats.possible + stats.clean === 9;
+      return stats !== null && stats.pending === 0 && stats.flagged + stats.clean === 9;
     }, 20_000).catch(() => {});
     expect(stats).toMatchObject({ pending: 0, failed: 0 });
     expect(stats!.flagged).toBeGreaterThanOrEqual(8);
-    expect(stats!.flagged + stats!.possible + stats!.clean).toBe(9);
+    expect(stats!.flagged + stats!.clean).toBe(9);
     expect(stats!.badgeText).toBe(String(stats!.flagged));
     await driver.close();
     await driver.switchTo().window(pageHandle);
@@ -573,7 +572,7 @@ describe('page with a strict content security policy', () => {
 describe('page that offers larger variants', () => {
   it('reads metadata from the largest variant of the same image on the same origin, not from other crops', async () => {
     await driver.get(`${origin}/variants`);
-    await waitForBadges({ srcset: MODEL_KINDS, link: MODEL_KINDS, cropped: MODEL_KINDS, foreign: MODEL_KINDS });
+    await waitForBadges({ srcset: ['ai', 'clean'], link: ['ai', 'clean'], cropped: ['ai', 'clean'], foreign: ['ai', 'clean'] });
     await openExtensionPage('options.html');
     await driver.wait(until.elementLocated({ css: 'form' }), 10_000);
     expect(await classify('/variant.jpg?srcset')).toMatchObject({ ok: true, source: 'metadata' });
@@ -584,25 +583,28 @@ describe('page that offers larger variants', () => {
 });
 
 describe('page with an image the model scores between the lower bound and the threshold', () => {
-  it('marks it with the weaker badge unless that tier is off or the threshold is at the lower bound', async () => {
+  it('marks it with the weaker badge only while that tier is switched on and the threshold is above the lower bound', async () => {
     const page = `${origin}/tiers`;
     const borderlineBadge = async (kind: string) => (await waitForBadges({ borderline: [kind] })).find((b) => b.owner === 'borderline');
     await driver.get(page);
     try {
-      const badges = await waitForBadges({ labeled: ['ai'], borderline: ['possible'] });
-      expect(badges.find((b) => b.owner === 'labeled')).toMatchObject({ kind: 'ai', text: expect.stringMatching(/^AI(?!\?)/) });
-      expect(badges.find((b) => b.owner === 'borderline')).toMatchObject({ kind: 'possible', text: expect.stringMatching(/^AI\?\d+ %$/) });
+      const byDefault = await waitForBadges({ labeled: ['ai'], borderline: ['clean'] });
+      expect(byDefault.find((b) => b.owner === 'labeled')).toMatchObject({ kind: 'ai', text: expect.stringMatching(/^AI(?!\?)/) });
+      expect(kindOf(byDefault, 'borderline')).toBe('clean');
+      const off = { flagged: 1, possible: 0, clean: 1, badgeText: '1' };
+      expect(await settledTabStats(page, off)).toMatchObject(off);
+
+      expect(await saveOptions({ showPossible: true })).toEqual({ possibleDisabled: false });
+      expect(await borderlineBadge('possible')).toMatchObject({ kind: 'possible', text: expect.stringMatching(/^AI\?\d+ %$/) });
       await driver.actions().move(await badgeCenter('borderline')).perform();
       expect((await openDetails())?.rows).toEqual(['clear', 'clear', 'maybe']);
-      expect(await settledTabStats(page)).toMatchObject({ flagged: 1, possible: 1, clean: 0, badgeText: '1' });
+      const on = { flagged: 1, possible: 1, clean: 0, badgeText: '1' };
+      expect(await settledTabStats(page, on)).toMatchObject(on);
 
-      expect(await saveOptions({ showPossible: false })).toEqual({ possibleDisabled: false });
-      expect(await borderlineBadge('clean')).toMatchObject({ kind: 'clean' });
-
-      expect(await saveOptions({ showPossible: true, threshold: model.possibleThreshold * 100 })).toEqual({ possibleDisabled: true });
+      expect(await saveOptions({ threshold: model.possibleThreshold * 100 })).toEqual({ possibleDisabled: true });
       expect(await borderlineBadge('ai')).toMatchObject({ kind: 'ai', text: expect.stringMatching(/^AI\d+ %$/) });
     } finally {
-      await saveOptions({ showPossible: true, threshold: model.threshold * 100 });
+      await saveOptions({ showPossible: false, threshold: model.threshold * 100 });
     }
   }, 120_000);
 });
