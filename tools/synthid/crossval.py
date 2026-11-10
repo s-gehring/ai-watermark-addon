@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from multiprocessing import Pool
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -12,6 +13,7 @@ from build_templates import (
     AMAZON_MIN_CHANNEL_STD,
     AMAZON_MIN_FREQUENCY,
     AMAZON_SIZE,
+    CACHE,
     CR,
     GOOGLE_SIZE,
     META,
@@ -46,20 +48,36 @@ def google_scores(args):
     return scores
 
 
-def google(transforms, thresholds):
+def save_fold(directory, fold, shipped, quantized, test):
+    templates = {}
+    for entry, (w, p, scale) in zip(shipped, quantized):
+        file = f"fold{fold}-{entry['file']}"
+        synthid.save(directory / file, w, p)
+        templates[entry["file"]] = {"file": file, "weightScale": scale}
+    return {"test": ["/".join(Path(path).parts[-2:]) for path in test], "templates": templates}
+
+
+def google(transforms, thresholds, save_folds):
     shipped = [t for t in json.loads(META.read_text())["templates"] if t["provider"] == "google"]
     images = google_images()
     paths = sorted(p for group in images.values() for p in group)
     dataset = {p: d for d, group in images.items() for p in group}
-    results = []
+    results, folds = [], []
+    directory = CACHE / "crossval" / "google"
     for fold in range(3):
         train, test = [p for i, p in enumerate(paths) if i % 3 != fold], [p for i, p in enumerate(paths) if i % 3 == fold]
         weights, phases, _ = synthid.build(train, GOOGLE_SIZE)
-        templates = [synthid.dequantize(*synthid.quantize(w, phases)) for w in (weights, weights * survival(train, GOOGLE_SIZE))]
+        quantized = [synthid.quantize(w, phases) for w in (weights, weights * survival(train, GOOGLE_SIZE))]
+        templates = [synthid.dequantize(*q) for q in quantized]
+        if save_folds:
+            directory.mkdir(parents=True, exist_ok=True)
+            folds.append(save_fold(directory, fold, shipped, quantized, test))
         with Pool() as pool:
             for path, scores in zip(test, pool.imap(google_scores, [(p, templates, list(transforms)) for p in test])):
                 results.append((dataset[path], scores))
         print(f"google fold {fold}: train {len(train)}, test {len(test)}", flush=True)
+    if save_folds:
+        (directory / "folds.json").write_text(json.dumps(folds))
     for source in images:
         for name in transforms:
             z = np.array([scores[name] for d, scores in results if d == source])
@@ -167,6 +185,7 @@ def main():
     )
     parser.add_argument("providers", nargs="*", choices=["google", "openai", "amazon"], default=["google", "openai", "amazon"])
     parser.add_argument("--transforms", action="store_true", help="also score re-encoded, rescaled and cropped copies")
+    parser.add_argument("--save-folds", action="store_true", help="Google: keep the templates of each fold for npm run eval")
     parser.add_argument("--thresholds", type=float, nargs="+", default=[8, 9, 10, 12])
     parser.add_argument("--leave-size-out", action="store_true", help="OpenAI: also build each template without the tested output size")
     parser.add_argument("--max-test", type=int, default=60, help="OpenAI: test images per output size")
@@ -175,7 +194,7 @@ def main():
 
     transforms = TRANSFORMS if args.transforms else {"original": TRANSFORMS["original"]}
     if "google" in args.providers:
-        google(transforms, args.thresholds)
+        google(transforms, args.thresholds, args.save_folds)
     if "openai" in args.providers:
         openai(transforms, args.thresholds, args.leave_size_out, args.max_test, args.workers)
     if "amazon" in args.providers:

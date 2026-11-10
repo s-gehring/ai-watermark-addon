@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { availableParallelism } from 'node:os';
+import { dirname, extname, join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 import sharp from 'sharp';
 import * as ort from 'onnxruntime-node';
 import {
@@ -10,6 +12,7 @@ import {
   RawImage,
   env,
 } from '@huggingface/transformers';
+import { isLossyWebp } from '../../src/background/format.ts';
 import { extraViews, inputShape, toModelInput } from '../../src/background/preprocess.ts';
 import { aiLogit, calibratedProbability } from '../../src/background/score.ts';
 
@@ -25,6 +28,8 @@ function mainCheckout() {
 
 const CACHE = join(mainCheckout(), 'tools', 'eval', '.cache');
 const SAMPLES = join(CACHE, 'samples');
+const HELDOUT = join(CACHE, 'heldout');
+const GOOGLE_FOLDS = join(mainCheckout(), 'tools', 'synthid', '.cache', 'crossval', 'google');
 const SCORES = join(CACHE, 'scores');
 const config = JSON.parse(await readFile(join(root, 'model.json'), 'utf8'));
 env.cacheDir = join(CACHE, 'models');
@@ -80,7 +85,12 @@ const CONDITIONS = {
   original: null,
   web1280: { size: 1280, quality: 80 },
   web800: { size: 800, quality: 75 },
+  short400: { size: 400, fit: 'outside', quality: 80 },
+  short300: { size: 300, fit: 'outside', quality: 80 },
 };
+const LARGE_SHORT_SIDE = 440;
+const RESEARCH_DATASET = 'bigdatamark/synthid-research';
+const WEBP_AS_JPEG_QUALITY = 89;
 const CALIBRATION_CONDITIONS = ['web1280', 'web800'];
 const PHOTO_GROUPS = ['core', 'reddit', 'coco', 'youtube'];
 const TARGET_FPR = 0.01;
@@ -88,32 +98,42 @@ const ART_LIMIT = 0.05;
 
 async function listSamples() {
   const out = [];
-  for (const group of await readdir(SAMPLES).catch(() => [])) {
-    for (const label of ['fake', 'real']) {
-      for (const file of await readdir(join(SAMPLES, group, label)).catch(() => [])) {
-        const key = `${group}/${label}/${file}`;
-        out.push({
-          key,
-          group,
-          fake: label === 'fake',
-          path: join(SAMPLES, key),
-          source: file.split('__')[1]?.replace(/\.\w+$/, ''),
-          split: createHash('sha1').update(key).digest()[0] & 1 ? 'test' : 'calibration',
-        });
+  for (const [dir, heldout] of [[SAMPLES, false], [HELDOUT, true]]) {
+    for (const group of await readdir(dir).catch(() => [])) {
+      for (const label of ['fake', 'real']) {
+        for (const file of await readdir(join(dir, group, label)).catch(() => [])) {
+          const name = `${group}/${label}/${file}`;
+          const key = heldout ? `heldout/${name}` : name;
+          const { width, height } = await sharp(join(dir, name)).metadata();
+          out.push({
+            key,
+            group,
+            file,
+            fake: label === 'fake',
+            path: join(dir, name),
+            source: file.split('__')[1]?.replace(/\.\w+$/, ''),
+            large: Math.min(width, height) >= LARGE_SHORT_SIDE,
+            split: heldout ? 'heldout' : createHash('sha1').update(key).digest()[0] & 1 ? 'test' : 'calibration',
+          });
+        }
       }
     }
   }
   return out;
 }
 
+async function loadBytes(path, condition) {
+  const input = await readFile(path);
+  if (!condition) return input;
+  return sharp(input)
+    .resize(condition.size, condition.size, { fit: condition.fit ?? 'inside', withoutEnlargement: true })
+    .jpeg({ quality: condition.quality })
+    .toBuffer();
+}
+
 async function loadPixels(path, condition) {
-  let input = await readFile(path);
-  if (condition) {
-    input = await sharp(input)
-      .resize(condition.size, condition.size, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: condition.quality })
-      .toBuffer();
-  }
+  let input = await loadBytes(path, condition);
+  if (isLossyWebp(input)) input = await sharp(input).jpeg({ quality: WEBP_AS_JPEG_QUALITY }).toBuffer();
   const { data, info } = await sharp(input).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   return { width: info.width, height: info.height, channels: 3, data };
 }
@@ -183,8 +203,7 @@ async function scoreMember(m, samples) {
   const file = join(SCORES, cacheName(m));
   const cached = JSON.parse(await readFile(file, 'utf8').catch(() => '{}'));
   const missing = samples.flatMap((s) => Object.keys(CONDITIONS).filter((k) => cached[`${s.key}|${k}`] === undefined).map((k) => [s, k]));
-  if (!missing.length) return { cached, ms: null };
-  if (m.precomputed) throw new Error(`${m.id} lacks ${missing.length} scores`);
+  if (!missing.length || m.precomputed) return { cached, ms: null };
   const scorer = m.local ? await localScorer(m) : m.file ? await onnxScorer(m) : await hubScorer(m);
   const t0 = performance.now();
   let done = 0;
@@ -240,11 +259,111 @@ async function scoreAll(c, samples) {
   for (const s of samples) {
     for (const condition of Object.keys(CONDITIONS)) {
       const zs = results.map((r) => r.cached[`${s.key}|${condition}`]);
-      if (!zs.includes(null)) scored.push({ ...s, condition, zs });
+      if (zs.every((z) => z != null)) scored.push({ ...s, condition, zs });
     }
   }
   const timed = results.filter((r) => r.ms !== null);
   return { scored, ms: timed.length === results.length ? timed.reduce((sum, r) => sum + r.ms, 0) : null };
+}
+
+async function loadChecks(samples) {
+  const { build } = await import('esbuild');
+  const { outputFiles } = await build({
+    entryPoints: [join(root, 'tools', 'eval', 'check-worker.ts')],
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    write: false,
+    logLevel: 'error',
+  });
+  const code = outputFiles[0].text;
+  const synthId = JSON.parse(await readFile(join(root, 'synthid.json'), 'utf8'));
+  const hash = createHash('sha1').update(code).update(JSON.stringify(synthId));
+  const load = async (entry, dir) => {
+    const bytes = new Uint8Array(await readFile(join(dir, entry.file)));
+    hash.update(bytes);
+    return { ...entry, weights: bytes.subarray(0, bytes.length / 2), phases: bytes.subarray(bytes.length / 2) };
+  };
+  const shipped = [];
+  for (const entry of synthId.templates) shipped.push(await load(entry, join(root, 'src', 'background', 'synthid-templates')));
+
+  const detectorSets = [shipped];
+  const outOfFold = new Map();
+  const folds = JSON.parse(await readFile(join(GOOGLE_FOLDS, 'folds.json'), 'utf8').catch(() => '[]'));
+  for (const fold of folds) {
+    const own = [];
+    for (const d of shipped) own.push(fold.templates[d.file] ? await load({ ...d, ...fold.templates[d.file] }, GOOGLE_FOLDS) : d);
+    for (const name of fold.test) outOfFold.set(name, detectorSets.length);
+    detectorSets.push(own);
+  }
+  const templateFolders = new Set(
+    synthId.templates.flatMap((t) => t.source?.datasets ?? []).filter((d) => d.dataset === RESEARCH_DATASET).flatMap((d) => d.folders),
+  );
+  const templateImage = (s) =>
+    s.group === 'research' && templateFolders.has(s.source) ? `${s.source}/${s.file.split('__')[0]}${extname(s.file)}` : null;
+  const inSample = samples.filter((s) => templateImage(s) && !outOfFold.has(templateImage(s))).length;
+  if (inSample) {
+    console.warn(`${inSample} images are part of the Google SynthID templates and are scored in-sample; build out-of-fold templates with tools/synthid/crossval.py google --save-folds`);
+  }
+  return {
+    id: hash.digest('hex').slice(0, 10),
+    detectorSet: (s) => outOfFold.get(templateImage(s)) ?? 0,
+    start: () => new Worker(new URL(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`), { workerData: { detectorSets, cropSearch: synthId.cropSearch } }),
+  };
+}
+
+function ask(worker, task) {
+  return new Promise((resolve, reject) => {
+    const settle = (done) => (value) => {
+      worker.off('message', onMessage);
+      worker.off('error', onError);
+      done(value);
+    };
+    const onMessage = settle(({ result, error }) => (error ? reject(new Error(error)) : resolve(result)));
+    const onError = settle(reject);
+    worker.on('message', onMessage);
+    worker.on('error', onError);
+    worker.postMessage(task);
+  });
+}
+
+async function scoreChecks(samples, scored, cropGate) {
+  const checks = await loadChecks(samples);
+  const file = join(SCORES, `checks-${checks.id}.json`);
+  const cached = JSON.parse(await readFile(file, 'utf8').catch(() => '{}'));
+  const keyOf = (s) => `${s.key}|${s.condition}`;
+  const searchCrop = (s) => s.p >= cropGate;
+  const todo = scored.filter((s) => !cached[keyOf(s)] || (searchCrop(s) && cached[keyOf(s)].hit === null && cached[keyOf(s)].crop === undefined));
+  const queue = todo[Symbol.iterator]();
+  let done = 0;
+  const lane = async () => {
+    const worker = checks.start();
+    for (const s of queue) {
+      try {
+        const bytes = await loadBytes(s.path, CONDITIONS[s.condition]);
+        const { data, info } = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        const image = { width: info.width, height: info.height, channels: 4, data };
+        cached[keyOf(s)] = await ask(worker, { bytes, image, detectorSet: checks.detectorSet(s), searchCrop: searchCrop(s), known: cached[keyOf(s)] });
+      } catch (e) {
+        console.warn(`skip checks ${keyOf(s)}: ${e.message}`);
+        cached[keyOf(s)] = { hit: null, crop: null };
+      }
+      if (++done % 1000 === 0) {
+        console.log(`  checks: ${done}/${todo.length}`);
+        await writeFile(file, JSON.stringify(cached));
+      }
+    }
+    await worker.terminate();
+  };
+  if (todo.length) {
+    await mkdir(SCORES, { recursive: true });
+    await Promise.all(Array.from({ length: Number(process.env.EVAL_THREADS) || Math.min(8, availableParallelism()) }, lane));
+    await writeFile(file, JSON.stringify(cached));
+  }
+  for (const s of scored) {
+    const { hit, crop } = cached[keyOf(s)];
+    s.check = hit?.[0] ?? (searchCrop(s) && crop ? 'synthid' : null);
+  }
 }
 
 function auc(pos, neg) {
@@ -379,56 +498,90 @@ function thresholdForFpr(realProbabilities, fpr) {
 const pct = (v) => `${(v * 100).toFixed(1)}%`;
 const cell = (s, width = 20) => String(s).padEnd(width);
 
-function report(test, threshold) {
+function report(rows, threshold) {
   const conditions = Object.keys(CONDITIONS);
-  const by = (filter) => Object.fromEntries(conditions.map((k) => [k, test.filter((s) => s.condition === k && filter(s))]));
-  const line = (name, values) => console.log(cell(name, 30) + values.map((v) => cell(v)).join(''));
+  const by = (filter) => Object.fromEntries(conditions.map((k) => [k, rows.filter((s) => s.condition === k && filter(s))]));
+  const line = (name, values) => console.log(cell(name, 34) + values.map((v) => cell(v)).join(''));
+  const each = (name, groups, value) => line(name, conditions.map((k) => (groups[k].length ? value(groups[k]) : '–')));
+  const count = (groups) => Math.max(...conditions.map((k) => groups[k].length));
+  const ps = (group, fake) => group.filter((s) => s.fake === fake).map((s) => s.p);
+  const withChecks = rows.some((s) => s.check !== undefined);
+  const rate = (hit) => (group) => {
+    const k = group.filter(hit).length;
+    const [lo, hi] = wilson(k, group.length);
+    return `${pct(k / group.length)} (${(lo * 100).toFixed(1)}–${(hi * 100).toFixed(1)})`;
+  };
+  const model = rate((s) => s.p >= threshold);
+  const addon = rate((s) => s.p >= threshold || s.check);
+  const largePhotos = `photos ≥ ${LARGE_SHORT_SIDE} px`;
   line('', conditions);
 
-  const photos = by(isRelevant);
-  const zs = (rows, fake) => rows.filter((s) => s.fake === fake).map((s) => s.p);
-  line('AUC (AI vs photos)', conditions.map((k) => auc(zs(photos[k], true), zs(photos[k], false)).toFixed(3)));
+  const test = by((s) => s.split === 'test');
+  const photos = by((s) => s.split === 'test' && isRelevant(s));
+  const large = by((s) => s.split === 'test' && isRelevant(s) && (s.fake || s.large));
+  each('AUC (AI vs photos)', photos, (g) => auc(ps(g, true), ps(g, false)).toFixed(3));
+  each(`AUC (AI vs ${largePhotos})`, large, (g) => auc(ps(g, true), ps(g, false)).toFixed(3));
   for (const fpr of [0.005, 0.01, 0.02]) {
-    line(`detected @ ${pct(fpr)} flagged`, conditions.map((k) => pct(tprAtFpr(zs(photos[k], true), zs(photos[k], false), fpr))));
+    each(`detected @ ${pct(fpr)} flagged`, photos, (g) => pct(tprAtFpr(ps(g, true), ps(g, false), fpr)));
   }
   for (const t of [...new Set([0.5, 0.7, 0.8, 0.9, threshold, 0.97])].sort()) {
-    const at = (rows, fake) => rows.filter((s) => s.fake === fake && s.p >= t).length / rows.filter((s) => s.fake === fake).length;
-    line(`detected / flagged @ ${t}`, conditions.map((k) => `${pct(at(photos[k], true))} / ${pct(at(photos[k], false))}`));
+    const at = (g, fake) => ps(g, fake).filter((p) => p >= t).length / ps(g, fake).length;
+    each(`detected / flagged @ ${t}`, photos, (g) => `${pct(at(g, true))} / ${pct(at(g, false))}`);
   }
 
   console.log(`at threshold ${threshold}:`);
-  const rate = (rows) => {
-    const k = rows.filter((s) => s.p >= threshold).length;
-    const [lo, hi] = wilson(k, rows.length);
-    return `${pct(k / rows.length)} (${(lo * 100).toFixed(1)}–${(hi * 100).toFixed(1)})`;
-  };
-  const fakeGroups = [...new Set(test.filter((s) => s.fake).map((s) => s.group))].sort();
-  for (const g of fakeGroups) {
-    const rows = by((s) => s.fake && s.group === g);
-    line(`  detected ${g} (n=${rows.original.length})`, conditions.map((k) => rate(rows[k])));
-  }
-  const realSources = [...new Set(test.filter((s) => !s.fake).map((s) => `${s.group}/${s.source}`))].sort();
+  const fakeGroups = [...new Set(rows.filter((s) => s.split === 'test' && s.fake).map((s) => s.group))].sort();
+  const fake = Object.fromEntries(fakeGroups.map((g) => [g, by((s) => s.split === 'test' && s.fake && s.group === g)]));
+  for (const g of fakeGroups) each(`  detected ${g} (n=${count(fake[g])})`, fake[g], model);
+  const realSources = [...new Set(rows.filter((s) => s.split === 'test' && !s.fake).map((s) => `${s.group}/${s.source}`))].sort();
   for (const source of realSources) {
-    const rows = by((s) => !s.fake && `${s.group}/${s.source}` === source);
-    line(`  flagged ${source.split('/')[1]} (n=${rows.original.length})`, conditions.map((k) => rate(rows[k])));
+    const group = by((s) => s.split === 'test' && !s.fake && `${s.group}/${s.source}` === source);
+    each(`  flagged ${source.split('/')[1]} (n=${count(group)})`, group, model);
   }
-  line('  flagged photos (pooled)', conditions.map((k) => rate(photos[k].filter((s) => !s.fake))));
+  const real = by((s) => s.split === 'test' && !s.fake && isRelevant(s));
+  const largeReal = by((s) => s.split === 'test' && !s.fake && isRelevant(s) && s.large);
+  each('  flagged photos (pooled)', real, model);
+  each(`  flagged ${largePhotos} (n=${count(largeReal)})`, largeReal, model);
+
+  if (withChecks) {
+    console.log(`with metadata and watermark checks, at threshold ${threshold}:`);
+    for (const g of fakeGroups) each(`  detected ${g}`, fake[g], addon);
+    each('  flagged photos (pooled)', real, addon);
+    each(`  flagged ${largePhotos}`, largeReal, addon);
+    each('  check hits on real images', by((s) => s.split === 'test' && !s.fake), (g) => `${g.filter((s) => s.check).length}/${g.length}`);
+  }
 
   if (perGenerator) {
     for (const g of fakeGroups) {
-      const generators = [...new Set(test.filter((s) => s.fake && s.group === g).map((s) => s.source))].sort();
+      const generators = [...new Set(rows.filter((s) => s.split === 'test' && s.fake && s.group === g).map((s) => s.source))].sort();
       for (const generator of generators) {
-        const rows = by((s) => s.fake && s.group === g && s.source === generator);
-        line(`    ${generator}`, conditions.map((k) => `${rows[k].filter((s) => s.p >= threshold).length}/${rows[k].length}`));
+        const group = by((s) => s.split === 'test' && s.fake && s.group === g && s.source === generator);
+        each(`    ${generator}`, group, (r) => `${r.filter((s) => s.p >= threshold).length}/${r.length}`);
       }
     }
+  }
+
+  for (const g of [...new Set(rows.filter((s) => s.split === 'heldout').map((s) => s.group))].sort()) {
+    const ai = by((s) => s.split === 'heldout' && s.group === g && s.fake);
+    const other = by((s) => s.split === 'heldout' && s.group === g && !s.fake);
+    const both = by((s) => s.split === 'heldout' && s.group === g);
+    console.log(`held out: ${g} (${count(ai)} AI / ${count(other)} real), never used for calibration, at threshold ${threshold}:`);
+    each('  AUC', both, (r) => auc(ps(r, true), ps(r, false)).toFixed(3));
+    each('  detected', ai, model);
+    each('  flagged', other, model);
+    each(`  flagged ≥ ${LARGE_SHORT_SIDE} px (n=${count(by((s) => s.split === 'heldout' && s.group === g && !s.fake && s.large))})`, by((s) => s.split === 'heldout' && s.group === g && !s.fake && s.large), model);
+    if (!withChecks) continue;
+    each('  detected with checks', ai, addon);
+    each('  flagged with checks', other, addon);
+    each('  AI: metadata/SynthID/watermark', ai, (r) => ['metadata', 'synthid', 'watermark'].map((kind) => r.filter((s) => s.check === kind).length).join('/'));
   }
 }
 
 const isRelevant = (s) => s.fake || PHOTO_GROUPS.includes(s.group);
 const samples = await listSamples();
 const count = (split, fake) => samples.filter((s) => s.split === split && s.fake === fake).length;
-console.log(`samples: ${samples.length} (calibration ${count('calibration', true)} AI / ${count('calibration', false)} real, test ${count('test', true)} AI / ${count('test', false)} real)`);
+const counts = ['calibration', 'test', 'heldout'].map((split) => `${split} ${count(split, true)} AI / ${count(split, false)} real`);
+console.log(`samples: ${samples.length} (${counts.join(', ')})`);
 
 for (const c of CANDIDATES) {
   if (only !== 'all' && c.id !== only && !c.id.startsWith(`${only}/`) && (only === 'bundled' || !c.id.includes(only))) continue;
@@ -440,9 +593,11 @@ for (const c of CANDIDATES) {
   for (const s of scored) s.p = calibratedProbability(s.zs, calibration);
   const photos = calibrationSet.filter((s) => !s.fake && s.group !== 'art');
   const threshold = fitted ? thresholdForFpr(photos.map((s) => s.p), TARGET_FPR) : c.config.threshold;
+  const reported = scored.filter((s) => s.split !== 'calibration');
+  if (c.id === 'bundled') await scoreChecks(samples, reported, c.config.cascade.band[0]);
 
   console.log(`\n${c.label}${ms === null ? '' : ` | ${ms.toFixed(0)} ms/img`}`);
   const target = `${pct(TARGET_FPR)} flagged photos${c.members.length > 1 ? ` and at most ${pct(ART_LIMIT)} flagged paintings` : ''} on ${CALIBRATION_CONDITIONS.join(', ')}`;
   console.log(`calibration ${JSON.stringify(calibration)} threshold ${threshold}${fitted ? ` (fitted for ${target})` : ' (model.json)'}`);
-  report(scored.filter((s) => s.split === 'test'), threshold);
+  report(reported, threshold);
 }
