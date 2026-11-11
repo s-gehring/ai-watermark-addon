@@ -91,9 +91,9 @@ let wasm: FakeOrt;
 let gpu: FakeOrt;
 let classifier: typeof import('../../src/background/classifier');
 
-async function setup({ hasGpu = true, hasJspi = true, url = 'moz-extension://x/worker.js' } = {}) {
+async function setup({ hasGpu = true, hasJspi = true, platform = 'MacIntel', url = 'moz-extension://x/worker.js' } = {}) {
   vi.stubGlobal('self', { location: { href: url } });
-  vi.stubGlobal('navigator', hasGpu ? { gpu: {} } : {});
+  vi.stubGlobal('navigator', hasGpu ? { platform, gpu: {} } : { platform });
   vi.stubGlobal('WebAssembly', hasJspi ? { Suspending: class {} } : {});
   classifier = await import('../../src/background/classifier');
 }
@@ -114,7 +114,7 @@ afterEach(() => {
 });
 
 describe('backend selection', () => {
-  it('runs on WebGPU when the self-test matches', async () => {
+  it('runs on WebGPU on a Mac when the self-test matches', async () => {
     await setup();
     const { score } = await classifier.scoreImage(image);
     expect(score).toBeCloseTo(scoreOf(GPU_LOGIT));
@@ -124,10 +124,13 @@ describe('backend selection', () => {
   });
 
   it.each([
-    ['WebGPU is missing', { hasGpu: false }],
-    ['JSPI is missing', { hasJspi: false }],
-    ['the worker was started for WASM', { url: 'moz-extension://x/worker.js?backend=wasm' }],
-  ])('stays on WASM when %s', async (_, options) => {
+    ['on Windows', { platform: 'Win32' }],
+    ['on Linux', { platform: 'Linux x86_64' }],
+    ['on Android', { platform: 'Linux armv81' }],
+    ['when WebGPU is missing', { hasGpu: false }],
+    ['when JSPI is missing', { hasJspi: false }],
+    ['when the worker was started for WASM', { url: 'moz-extension://x/worker.js?backend=wasm' }],
+  ])('stays on WASM %s', async (_, options) => {
     await setup(options);
     const { score } = await classifier.scoreImage(image);
     expect(score).toBeCloseTo(scoreOf(WASM_LOGIT));

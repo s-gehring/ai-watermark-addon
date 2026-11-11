@@ -19,6 +19,7 @@ interface Runtime {
   classifiers: Classifier[];
 }
 
+export const GPU_PLATFORMS = ['Mac'];
 export const GPU_INIT_TIMEOUT_MS = 15_000;
 export const SELF_TEST_TOLERANCE = 0.01;
 
@@ -53,6 +54,7 @@ function release(runtime: Runtime): void {
 function wantsGpu(): boolean {
   return (
     !gpuFailed &&
+    GPU_PLATFORMS.some((platform) => navigator.platform.startsWith(platform)) &&
     'gpu' in navigator &&
     'Suspending' in WebAssembly &&
     new URL(self.location.href).searchParams.get('backend') !== 'wasm'
