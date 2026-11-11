@@ -41,7 +41,7 @@ The release workflow tests and lints the build, uploads it together with the sou
 
 Firefox updates the add-on through AMO, also when it was installed from the `.xpi` of a GitHub release.
 
-The package is about 38 MB (model, WASM runtime and SynthID templates), below the AMO limit of 200 MB.
+The package is about 39 MB (model, the WASM runtimes for WASM and WebGPU and SynthID templates), below the AMO limit of 200 MB.
 
 ## Evaluate or swap the model
 
@@ -70,7 +70,7 @@ Needs a CUDA GPU with 12 GB (measured on an RTX 4070 Ti) and about 130 GB of dis
 
 The datasets are pinned to fixed revisions. The rows taken from the other OpenFake files are listed in [`openfake_rows.json`](../tools/train/openfake_rows.json); `fetch_data.py` reads only the pages of the image column that hold them (about 16 GB). Self-generated images are not downloaded; `train.py` adds Parquet files from `selfgen/` in the data folder when it exists. The last of the 16 OpenFake files is held out; `train.py` prints AUC and the detection rate at 1 % false positives on it after every epoch.
 
-Training is not bit-for-bit reproducible. After a new run, put the SHA-256 printed by `export_onnx.py` into `model.json`, upload the model together with [`tools/train/MODEL_CARD.md`](../tools/train/MODEL_CARD.md) as `README.md` to the Hugging Face repository, update `revision` in `model.json`, and run `npm run eval -- bundled --calibrate` for the new calibration.
+Training is not bit-for-bit reproducible. After a new run, put the SHA-256 printed by `export_onnx.py` into `model.json`, set `selfTestLogit` to the logit of the fixed WebGPU self-test input (`npm run test:e2e` reports it when it differs), check with `node tools/eval/webgpu-parity.mjs <image folder>` on a machine with WebGPU (opens a visible Firefox) that WebGPU and WASM flip no verdict, upload the model together with [`tools/train/MODEL_CARD.md`](../tools/train/MODEL_CARD.md) as `README.md` to the Hugging Face repository, update `revision` in `model.json`, and run `npm run eval -- bundled --calibrate` for the new calibration.
 
 The weights are trained on OpenFake, which is licensed under CC BY-NC 4.0, so they are published under the same license (see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)).
 
