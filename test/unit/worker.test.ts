@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PixelImage } from '../../src/background/preprocess';
 import type { WorkerRequest, WorkerResponse } from '../../src/background/worker';
 
-const classifier = vi.hoisted(() => ({ decodeImage: vi.fn(), reencodeAsJpeg: vi.fn(), scoreImage: vi.fn() }));
+const classifier = vi.hoisted(() => ({ activeBackend: () => 'wasm', decodeImage: vi.fn(), reencodeAsJpeg: vi.fn(), scoreImage: vi.fn() }));
 const synthid = vi.hoisted(() => ({ detectSynthId: vi.fn(), searchCroppedSynthId: vi.fn() }));
 const noMark = vi.hoisted(() => () => null);
 const invisible = vi.hoisted(() => ({ detectInvisibleWatermark: vi.fn() }));

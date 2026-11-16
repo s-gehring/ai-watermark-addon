@@ -9,7 +9,7 @@ class FakeWorker {
   readonly requests: WorkerRequest[] = [];
   terminated = false;
 
-  constructor() {
+  constructor(readonly url: string) {
     FakeWorker.created.push(this);
   }
 
@@ -22,7 +22,7 @@ class FakeWorker {
   }
 
   answer(index: number): void {
-    this.onmessage!({ data: { id: this.requests[index].id, verdict: CLEAN } });
+    this.onmessage!({ data: { id: this.requests[index].id, verdict: CLEAN, backend: 'webgpu' } });
   }
 }
 
@@ -69,6 +69,7 @@ describe('evaluate', () => {
 
     const retry = settled(evaluate(image(), null, CHECKS));
     expect(FakeWorker.created).toHaveLength(2);
+    expect(FakeWorker.created.map((worker) => worker.url)).toEqual(['worker.js', 'worker.js?backend=wasm']);
     FakeWorker.created[1].answer(0);
     await vi.advanceTimersByTimeAsync(0);
     expect(retry()).toEqual(CLEAN);
@@ -103,5 +104,7 @@ describe('evaluate', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(only()).toEqual(FAILED);
     expect(FakeWorker.created[0].terminated).toBe(true);
+    void evaluate(image(), null, CHECKS);
+    expect(FakeWorker.created[1].url).toBe('worker.js');
   });
 });

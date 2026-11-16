@@ -6,11 +6,17 @@ export const STALL_TIMEOUT_MS = 60_000;
 let worker: Worker | null = null;
 let nextId = 0;
 let stallTimer: ReturnType<typeof setTimeout> | undefined;
+let stalled = false;
 const pending = new Map<number, (verdict: Verdict) => void>();
 
 function watchForStall(): void {
   clearTimeout(stallTimer);
-  stallTimer = pending.size ? setTimeout(() => discardWorker('gave no answer in time'), STALL_TIMEOUT_MS) : undefined;
+  stallTimer = pending.size ? setTimeout(onStall, STALL_TIMEOUT_MS) : undefined;
+}
+
+function onStall(): void {
+  stalled = true;
+  discardWorker('gave no answer in time');
 }
 
 function discardWorker(reason: string): void {
@@ -24,7 +30,7 @@ function discardWorker(reason: string): void {
 
 function ensureWorker(): Worker {
   if (worker) return worker;
-  const created = new Worker(browser.runtime.getURL('worker.js'), { type: 'module' });
+  const created = new Worker(browser.runtime.getURL(stalled ? 'worker.js?backend=wasm' : 'worker.js'), { type: 'module' });
   created.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
     pending.get(data.id)?.(data.verdict);
     pending.delete(data.id);

@@ -214,3 +214,9 @@ export function extraViews(image: PixelImage, spec: InputSpec, shortestEdges: nu
   }
   return views;
 }
+
+export function selfTestInput(width: number, height: number): Float32Array {
+  const data = new Float32Array(3 * width * height);
+  for (let i = 0; i < data.length; i++) data[i] = Math.sin(i * 12.9898) * 2;
+  return data;
+}

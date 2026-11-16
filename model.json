@@ -15,6 +15,7 @@
         "mean": [0.485, 0.456, 0.406],
         "std": [0.229, 0.224, 0.225]
       },
+      "selfTestLogit": -3.22754,
       "files": {
         "model.onnx": "b5bd0fd699469b721b00f6a5626a2616b2b0a34283eece124d90451147ab7fc6"
       }

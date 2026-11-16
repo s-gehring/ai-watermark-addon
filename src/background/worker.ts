@@ -1,7 +1,7 @@
 import modelConfig from '../../model.json';
 import synthIdConfig from '../../synthid.json';
 import type { SynthIdProvider, Verdict } from '../shared/messages';
-import { decodeImage, reencodeAsJpeg, scoreImage } from './classifier';
+import { activeBackend, decodeImage, reencodeAsJpeg, scoreImage, type Backend } from './classifier';
 import { detectBytedanceWatermark } from './bytedance-watermark';
 import { detectInvisibleWatermark } from './invisible-watermark';
 import { isLossyWebp } from './format';
@@ -36,6 +36,7 @@ export interface WorkerRequest extends Checks, EncodedImage {
 export interface WorkerResponse {
   id: number;
   verdict: Verdict;
+  backend: Backend | null;
 }
 
 const scope = self as unknown as {
@@ -150,5 +151,5 @@ async function check(request: WorkerRequest): Promise<Verdict> {
 }
 
 scope.onmessage = ({ data }) => {
-  void check(data).then((verdict) => scope.postMessage({ id: data.id, verdict }));
+  void check(data).then((verdict) => scope.postMessage({ id: data.id, verdict, backend: activeBackend() }));
 };

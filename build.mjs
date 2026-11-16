@@ -21,6 +21,19 @@ for (const file of modelFiles) {
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 
+// Extension pages forbid eval, so ORT's one `new Function` (Embind method calls) can only throw; web-ext lint rejects it.
+const throwInsteadOfEval = {
+  name: 'throw-instead-of-eval',
+  setup(build) {
+    build.onLoad({ filter: /onnxruntime-web[\\/]dist[\\/]ort\.jspi\.bundle\.min\.mjs$/ }, async ({ path }) => {
+      const source = await readFile(path, 'utf8');
+      const parts = source.split('new Function(');
+      if (parts.length !== 2) throw new Error(`expected one new Function in ${path}, found ${parts.length - 1}`);
+      return { contents: parts.join('(() => { throw new EvalError("eval is blocked in extensions"); })('), loader: 'js' };
+    });
+  },
+};
+
 const common = {
   bundle: true,
   target: 'firefox140',
@@ -35,6 +48,7 @@ const configs = [
     entryPoints: { background: 'src/background/index.ts', worker: 'src/background/worker.ts' },
     format: 'esm',
     supported: { 'dynamic-import': false },
+    plugins: [throwInsteadOfEval],
     outdir: out,
   },
   {
@@ -65,6 +79,7 @@ const copies = [
   ['src/options/options.html', 'options.html'],
   ['src/options/options.css', 'options.css'],
   ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', 'ort/ort-wasm-simd-threaded.wasm'],
+  ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jspi.wasm', 'ort/ort-wasm-simd-threaded.jspi.wasm'],
 ];
 for (const [from, to] of copies) {
   await cp(join(root, from), join(out, to), { recursive: true });
