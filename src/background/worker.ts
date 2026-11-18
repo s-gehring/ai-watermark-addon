@@ -7,7 +7,6 @@ import { detectInvisibleWatermark } from './invisible-watermark';
 import { isLossyWebp } from './format';
 import { detectAiMetadata } from './metadata';
 import { couldBeSourceOf, fitWithin, isScorable, scoresVariant, VARIANT_SCORING, type PixelImage } from './preprocess';
-import { TaskQueue } from './queue';
 import {
   detectSynthId,
   searchCroppedSynthId,
@@ -33,19 +32,20 @@ export interface WorkerRequest extends Checks, EncodedImage {
   original: EncodedImage | null;
 }
 
-export interface WorkerResponse {
+export interface WorkerCommand {
   id: number;
-  verdict: Verdict;
-  backend: Backend | null;
+  command: 'score' | 'drop';
 }
+
+export type WorkerResponse = { id: number; verdict: Verdict; backend: Backend | null } | { id: number; held: true };
 
 const scope = self as unknown as {
   postMessage(message: WorkerResponse): void;
-  onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
+  onmessage: ((event: MessageEvent<WorkerRequest | WorkerCommand>) => void) | null;
 };
 // Firefox drops chroma subsampling from quality 0.9 on; scores only improve with 4:2:0.
 const WEBP_AS_JPEG_QUALITY = 0.89;
-const queue = new TaskQueue();
+const held = new Map<number, WorkerRequest>();
 let detectors: Promise<SynthIdDetector[]> | null = null;
 
 async function loadDetector(entry: (typeof synthIdConfig.templates)[number]): Promise<SynthIdDetector> {
@@ -139,17 +139,39 @@ async function score(displayed: EncodedImage, original: EncodedImage | null, che
   return { ok: true, ...scored, source: 'model', metadata, watermark: 'clear' };
 }
 
-async function check(request: WorkerRequest): Promise<Verdict> {
+function failed(error: unknown): Verdict {
+  console.error('[ai-watermark] check failed', error);
+  return { ok: false, error: 'model' };
+}
+
+function metadataVerdict(request: WorkerRequest): Verdict | null {
   try {
     const reason = request.checkMetadata ? detectAiMetadata(new Uint8Array(request.bytes)) : null;
-    if (reason) return { ok: true, score: 1, source: 'metadata', reason };
-    return await queue.run(() => score(request, request.original, request));
+    return reason && { ok: true, score: 1, source: 'metadata', reason };
   } catch (error) {
-    console.error('[ai-watermark] check failed', error);
-    return { ok: false, error: 'model' };
+    return failed(error);
   }
 }
 
+function accept(request: WorkerRequest): void {
+  const verdict = metadataVerdict(request);
+  if (verdict) {
+    scope.postMessage({ id: request.id, verdict, backend: activeBackend() });
+  } else {
+    held.set(request.id, request);
+    scope.postMessage({ id: request.id, held: true });
+  }
+}
+
+async function scoreHeld(id: number): Promise<void> {
+  const request = held.get(id);
+  held.delete(id);
+  const verdict: Verdict = request ? await score(request, request.original, request).catch(failed) : { ok: false, error: 'model' };
+  scope.postMessage({ id, verdict, backend: activeBackend() });
+}
+
 scope.onmessage = ({ data }) => {
-  void check(data).then((verdict) => scope.postMessage({ id: data.id, verdict, backend: activeBackend() }));
+  if (!('command' in data)) accept(data);
+  else if (data.command === 'score') void scoreHeld(data.id);
+  else held.delete(data.id);
 };
