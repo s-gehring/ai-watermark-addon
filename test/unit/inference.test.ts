@@ -39,6 +39,21 @@ const image = () => ({ bytes: new ArrayBuffer(4), type: 'image/png' });
 
 let prepare: typeof import('../../src/background/inference').prepare;
 let timeout: number;
+let keepAwake: number;
+let stored: Record<string, unknown>;
+const getPlatformInfo = vi.fn(async () => ({}));
+
+async function startBackground(): Promise<void> {
+  vi.resetModules();
+  FakeWorker.created = [];
+  ({ prepare, STALL_TIMEOUT_MS: timeout, KEEP_AWAKE_MS: keepAwake } = await import('../../src/background/inference'));
+}
+
+async function request(): Promise<{ prepared: Promise<Verdict | HeldImage> }> {
+  const prepared = prepare(image(), null, CHECKS);
+  await vi.advanceTimersByTimeAsync(0);
+  return { prepared };
+}
 
 function settled<T>(promise: Promise<T>): () => T | undefined {
   let result: T | undefined;
@@ -47,20 +62,28 @@ function settled<T>(promise: Promise<T>): () => T | undefined {
 }
 
 async function held(worker = 0): Promise<HeldImage> {
-  const prepared = prepare(image(), null, CHECKS);
+  const { prepared } = await request();
   const created = FakeWorker.created[worker];
   created.hold(created.requests.length - 1);
   return (await prepared) as HeldImage;
 }
 
 beforeEach(async () => {
-  vi.resetModules();
   vi.useFakeTimers();
   vi.stubGlobal('Worker', FakeWorker);
-  vi.stubGlobal('browser', { runtime: { getURL: (path: string) => path } });
+  stored = {};
+  getPlatformInfo.mockClear();
+  vi.stubGlobal('browser', {
+    runtime: { getURL: (path: string) => path, getPlatformInfo },
+    storage: {
+      session: {
+        get: async (key: string) => (key in stored ? { [key]: stored[key] } : {}),
+        set: async (items: Record<string, unknown>) => void Object.assign(stored, items),
+      },
+    },
+  });
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  FakeWorker.created = [];
-  ({ prepare, STALL_TIMEOUT_MS: timeout } = await import('../../src/background/inference'));
+  await startBackground();
 });
 
 afterEach(() => {
@@ -71,7 +94,7 @@ afterEach(() => {
 
 describe('prepare', () => {
   it('passes on the verdict when the worker answers at once', async () => {
-    const prepared = prepare(image(), null, CHECKS);
+    const { prepared } = await request();
     FakeWorker.created[0].answer(0, LABELED);
     expect(await prepared).toEqual(LABELED);
   });
@@ -93,7 +116,7 @@ describe('prepare', () => {
 
   it('fails every waiting request and replaces the worker when no answer arrives in time', async () => {
     const first = settled((await held()).score());
-    const second = settled(prepare(image(), null, CHECKS));
+    const second = settled((await request()).prepared);
     await vi.advanceTimersByTimeAsync(timeout - 1);
     expect(first()).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
@@ -112,7 +135,7 @@ describe('prepare', () => {
     const hanging = settled((await held()).score());
     await vi.advanceTimersByTimeAsync(timeout - 1);
     await held();
-    const labeled = prepare(image(), null, CHECKS);
+    const { prepared: labeled } = await request();
     FakeWorker.created[0].answer(3, LABELED);
     expect(await labeled).toEqual(LABELED);
     expect(FakeWorker.created[0].terminated).toBe(false);
@@ -137,7 +160,7 @@ describe('prepare', () => {
 
   it('keeps waiting requests alive while the worker keeps answering', async () => {
     const first = settled((await held()).score());
-    const second = settled(prepare(image(), null, CHECKS));
+    const second = settled((await request()).prepared);
     const [worker] = FakeWorker.created;
     await vi.advanceTimersByTimeAsync(timeout - 1);
     worker.answer(1);
@@ -148,6 +171,27 @@ describe('prepare', () => {
     worker.answer(2);
     await vi.advanceTimersByTimeAsync(0);
     expect(second()).toEqual(CLEAN);
+  });
+
+  it('keeps the background page awake with a call into the parent process for as long as a request is open', async () => {
+    const waiting = await held();
+    await vi.advanceTimersByTimeAsync(3 * keepAwake);
+    expect(getPlatformInfo).not.toHaveBeenCalled();
+    const scored = settled(waiting.score());
+    await vi.advanceTimersByTimeAsync(2 * keepAwake);
+    expect(getPlatformInfo).toHaveBeenCalledTimes(2);
+    FakeWorker.created[0].answer(1);
+    await vi.advanceTimersByTimeAsync(3 * keepAwake);
+    expect(scored()).toEqual(CLEAN);
+    expect(getPlatformInfo).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts on WASM when a model run hung before the background page was suspended', async () => {
+    void (await held()).score();
+    await vi.advanceTimersByTimeAsync(timeout);
+    await startBackground();
+    await request();
+    expect(FakeWorker.created.map((worker) => worker.url)).toEqual(['worker.js?backend=wasm']);
   });
 
   it('leaves a worker running that only holds images', async () => {
@@ -162,7 +206,7 @@ describe('prepare', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(only()).toEqual(FAILED);
     expect(FakeWorker.created[0].terminated).toBe(true);
-    void prepare(image(), null, CHECKS);
+    await request();
     expect(FakeWorker.created[1].url).toBe('worker.js');
   });
 

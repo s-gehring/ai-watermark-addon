@@ -1,6 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { download } from 'geckodriver';
 import sharp from 'sharp';
@@ -16,6 +18,8 @@ import { fft } from '../../src/background/synthid';
 const ADDON_ID = 'ai-watermark-addon@s-gehring.github.io';
 const ADDON_UUID = '6f0c3a52-9a51-4c1e-8f7e-2f6f5d1b7a10';
 const DIST = fileURLToPath(new URL('../../dist', import.meta.url));
+const IDLE_TIMEOUT_PREF = 'extensions.background.idle.timeout';
+const NO_SCORE_UNLESS_WASM = `if (!self.location.search.includes('backend=wasm')) self.addEventListener('message', (event) => { if (event.data.command === 'score') event.stopImmediatePropagation(); });\n`;
 
 const XMP_AI = `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/" Iptc4xmpExt:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"/></rdf:RDF></x:xmpmeta>`;
 
@@ -397,6 +401,42 @@ async function visibleBadges(): Promise<BadgeInfo[]> {
   });
 }
 
+async function setIdleTimeout(ms: number | null): Promise<void> {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    await driver.executeScript(
+      (pref: string, value: number | null) => {
+        const { prefs } = (globalThis as unknown as { Services: { prefs: { setIntPref(name: string, value: number): void; clearUserPref(name: string): void } } }).Services;
+        if (value === null) prefs.clearUserPref(pref);
+        else prefs.setIntPref(pref, value);
+      },
+      IDLE_TIMEOUT_PREF,
+      ms,
+    );
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+
+async function backgroundState(): Promise<string> {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return await driver.executeScript<string>((id: string) => {
+      const g = globalThis as unknown as { WebExtensionPolicy: { getByID(id: string): { extension: { backgroundState: string } } } };
+      return g.WebExtensionPolicy.getByID(id).extension.backgroundState;
+    }, ADDON_ID);
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+
+async function badgeCount(selector: string): Promise<number> {
+  return driver.executeScript<number>(
+    (css: string) => document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelectorAll(css).length ?? 0,
+    selector,
+  );
+}
+
 async function pendingCount(): Promise<number> {
   return driver.executeScript<number>(
     () => document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelectorAll('.badge.pending').length ?? 0,
@@ -690,11 +730,6 @@ describe('page that never goes idle', () => {
 });
 
 describe('page that is left while its images wait', () => {
-  const badgeCount = (selector: string) =>
-    driver.executeScript<number>(
-      (css: string) => document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelectorAll(css).length ?? 0,
-      selector,
-    );
   const checkedCount = () => badgeCount('.badge:not(.pending)');
   const cleanCount = () => badgeCount('.badge.clean');
 
@@ -795,5 +830,45 @@ describe('page with an image the model scores between the lower bound and the th
     } finally {
       await saveOptions({ showPossible: false, threshold: model.threshold * 100 });
     }
+  }, 120_000);
+});
+
+describe('add-on whose model runs get no answer until the worker runs on WASM', () => {
+  let hanging: string;
+
+  async function addImage(query: string): Promise<void> {
+    await driver.executeScript((src: string) => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.style.cssText = 'display:block;width:320px;height:240px';
+      document.body.append(img);
+    }, `/plain.jpg${query}`);
+  }
+
+  beforeAll(async () => {
+    hanging = mkdtempSync(join(tmpdir(), 'ai-watermark-hanging-'));
+    cpSync(DIST, hanging, { recursive: true });
+    writeFileSync(join(hanging, 'worker.js'), NO_SCORE_UNLESS_WASM + readFileSync(join(hanging, 'worker.js'), 'utf8'));
+    await setIdleTimeout(15_000);
+    await driver.installAddon(hanging, true);
+  }, 60_000);
+
+  afterAll(async () => {
+    await setIdleTimeout(null);
+    await driver.installAddon(DIST, true);
+    rmSync(hanging, { recursive: true, force: true });
+  });
+
+  it('stays awake until the hanging run is given up and checks the next image on WASM', async () => {
+    await driver.get(`${origin}/next?hanging=1`);
+    await driver.wait(async () => (await badgeCount('.badge.failed')) === 1, 90_000);
+    await addImage('?hanging=2');
+    await driver.wait(async () => (await badgeCount('.badge.clean')) === 1, 30_000);
+  }, 150_000);
+
+  it('goes straight to WASM after the background page was suspended', async () => {
+    await driver.wait(async () => (await backgroundState()) === 'stopped', 60_000);
+    await addImage('?hanging=3');
+    await driver.wait(async () => (await badgeCount('.badge.clean')) === 2, 30_000);
   }, 120_000);
 });
