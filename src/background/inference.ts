@@ -5,12 +5,17 @@ export const STALL_TIMEOUT_MS = 60_000;
 export const KEEP_AWAKE_MS = 10_000;
 const STALLED_KEY = 'modelStalled';
 
+export const WORKER_LOST = Symbol('worker lost');
+type Lost = typeof WORKER_LOST;
+
 export interface HeldImage {
-  score(): Promise<Verdict>;
+  score(): Promise<Verdict | Lost>;
   discard(): void;
 }
 
-type Answer = Verdict | 'held';
+type Answer = Verdict | 'held' | Lost;
+
+const FAILED: Verdict = { ok: false, error: 'model' };
 
 let worker: Worker | null = null;
 let nextId = 0;
@@ -19,6 +24,7 @@ let keepAwake: ReturnType<typeof setInterval> | undefined;
 let stalled = false;
 const pending = new Map<number, (answer: Answer) => void>();
 const scoring = new Set<number>();
+const lostWith = new WeakMap<Worker, Verdict | Lost>();
 const stalledBefore = browser.storage.session.get(STALLED_KEY).then(
   (stored) => {
     stalled ||= stored[STALLED_KEY] === true;
@@ -40,16 +46,18 @@ function watchForStall(): void {
 }
 
 function onStall(): void {
+  const onWasm = stalled;
   stalled = true;
   void browser.storage.session.set({ [STALLED_KEY]: true }).catch(() => {});
-  discardWorker('gave no answer in time');
+  discardWorker('gave no answer in time', onWasm ? FAILED : WORKER_LOST);
 }
 
-function discardWorker(reason: string): void {
+function discardWorker(reason: string, answer: Verdict | Lost): void {
   console.error('[ai-watermark] worker', reason);
+  if (worker) lostWith.set(worker, answer);
   worker?.terminate();
   worker = null;
-  for (const resolve of pending.values()) resolve({ ok: false, error: 'model' });
+  for (const resolve of pending.values()) resolve(answer);
   pending.clear();
   scoring.clear();
   watchForStall();
@@ -63,7 +71,7 @@ function ensureWorker(): Worker {
     pending.delete(data.id);
     if (scoring.delete(data.id) || !scoring.size) watchForStall();
   };
-  created.onerror = (event) => discardWorker(`failed: ${event.message}`);
+  created.onerror = (event) => discardWorker(`failed: ${event.message}`, WORKER_LOST);
   worker = created;
   return created;
 }
@@ -78,15 +86,18 @@ function ask(message: WorkerRequest | WorkerCommand, transfer: Transferable[] = 
   });
 }
 
-export async function prepare(image: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict | HeldImage> {
+export async function prepare(image: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict | HeldImage | Lost> {
   await stalledBefore;
   const id = nextId++;
+  const holder = ensureWorker();
   const answer = await ask({ id, ...image, original, ...checks }, original ? [image.bytes, original.bytes] : [image.bytes]);
   if (answer !== 'held') return answer;
   return {
     score: async () => {
+      const lost = lostWith.get(holder);
+      if (lost) return lost;
       const verdict = await ask({ id, command: 'score' });
-      return verdict === 'held' ? { ok: false, error: 'model' } : verdict;
+      return verdict === 'held' ? FAILED : verdict;
     },
     discard: () => worker?.postMessage({ id, command: 'drop' } satisfies WorkerCommand),
   };
