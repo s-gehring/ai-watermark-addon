@@ -859,16 +859,18 @@ describe('add-on whose model runs get no answer until the worker runs on WASM', 
     rmSync(hanging, { recursive: true, force: true });
   });
 
-  it('stays awake until the hanging run is given up and checks the next image on WASM', async () => {
+  it('stays awake until the hanging run is given up and checks its image and the waiting ones on WASM', async () => {
     await driver.get(`${origin}/next?hanging=1`);
-    await driver.wait(async () => (await badgeCount('.badge.failed')) === 1, 90_000);
     await addImage('?hanging=2');
-    await driver.wait(async () => (await badgeCount('.badge.clean')) === 1, 30_000);
+    await addImage('?hanging=3');
+    await driver.wait(async () => (await badgeCount('.badge.pending')) === 3, 30_000);
+    await driver.wait(async () => (await badgeCount('.badge.clean')) === 3, 90_000);
+    expect(await badgeCount('.badge.failed')).toBe(0);
   }, 150_000);
 
   it('goes straight to WASM after the background page was suspended', async () => {
     await driver.wait(async () => (await backgroundState()) === 'stopped', 60_000);
-    await addImage('?hanging=3');
-    await driver.wait(async () => (await badgeCount('.badge.clean')) === 2, 30_000);
+    await addImage('?hanging=4');
+    await driver.wait(async () => (await badgeCount('.badge.clean')) === 4, 30_000);
   }, 120_000);
 });

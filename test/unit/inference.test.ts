@@ -38,6 +38,7 @@ const CHECKS = { checkMetadata: false, checkWatermark: false };
 const image = () => ({ bytes: new ArrayBuffer(4), type: 'image/png' });
 
 let prepare: typeof import('../../src/background/inference').prepare;
+let LOST: typeof import('../../src/background/inference').WORKER_LOST;
 let timeout: number;
 let keepAwake: number;
 let stored: Record<string, unknown>;
@@ -46,10 +47,10 @@ const getPlatformInfo = vi.fn(async () => ({}));
 async function startBackground(): Promise<void> {
   vi.resetModules();
   FakeWorker.created = [];
-  ({ prepare, STALL_TIMEOUT_MS: timeout, KEEP_AWAKE_MS: keepAwake } = await import('../../src/background/inference'));
+  ({ prepare, WORKER_LOST: LOST, STALL_TIMEOUT_MS: timeout, KEEP_AWAKE_MS: keepAwake } = await import('../../src/background/inference'));
 }
 
-async function request(): Promise<{ prepared: Promise<Verdict | HeldImage> }> {
+async function request(): Promise<{ prepared: ReturnType<typeof prepare> }> {
   const prepared = prepare(image(), null, CHECKS);
   await vi.advanceTimersByTimeAsync(0);
   return { prepared };
@@ -114,14 +115,14 @@ describe('prepare', () => {
     expect(await scored).toEqual(CLEAN);
   });
 
-  it('fails every waiting request and replaces the worker when no answer arrives in time', async () => {
+  it('reports every waiting request as lost and replaces the worker when no answer arrives in time', async () => {
     const first = settled((await held()).score());
     const second = settled((await request()).prepared);
     await vi.advanceTimersByTimeAsync(timeout - 1);
     expect(first()).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
-    expect(first()).toEqual(FAILED);
-    expect(second()).toEqual(FAILED);
+    expect(first()).toBe(LOST);
+    expect(second()).toBe(LOST);
     expect(FakeWorker.created[0].terminated).toBe(true);
 
     const retry = settled((await held(1)).score());
@@ -140,8 +141,31 @@ describe('prepare', () => {
     expect(await labeled).toEqual(LABELED);
     expect(FakeWorker.created[0].terminated).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(hanging()).toEqual(FAILED);
+    expect(hanging()).toBe(LOST);
     expect(FakeWorker.created[0].terminated).toBe(true);
+  });
+
+  it('reports an image the replaced worker held as lost without starting a worker for it', async () => {
+    const hanging = await held();
+    const waiting = await held();
+    void hanging.score();
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(await waiting.score()).toBe(LOST);
+    expect(FakeWorker.created).toHaveLength(1);
+  });
+
+  it('fails the waiting requests and the held images for good when the worker on WASM gives no answer either', async () => {
+    void (await held()).score();
+    await vi.advanceTimersByTimeAsync(timeout);
+    const hanging = settled((await held(1)).score());
+    const waiting = await held(1);
+    const unanswered = settled((await request()).prepared);
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(FakeWorker.created[1].terminated).toBe(true);
+    expect(hanging()).toEqual(FAILED);
+    expect(unanswered()).toEqual(FAILED);
+    expect(await waiting.score()).toEqual(FAILED);
+    expect(FakeWorker.created).toHaveLength(2);
   });
 
   it('gives every model run the full time, also right after another one', async () => {
@@ -155,7 +179,7 @@ describe('prepare', () => {
     await vi.advanceTimersByTimeAsync(timeout - 1);
     expect(second()).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
-    expect(second()).toEqual(FAILED);
+    expect(second()).toBe(LOST);
   });
 
   it('keeps waiting requests alive while the worker keeps answering', async () => {
@@ -200,11 +224,13 @@ describe('prepare', () => {
     expect(FakeWorker.created[0].terminated).toBe(false);
   });
 
-  it('fails waiting requests when the worker reports an error', async () => {
-    const only = settled((await held()).score());
+  it('reports waiting requests and held images as lost when the worker reports an error', async () => {
+    const running = settled((await held()).score());
+    const waiting = await held();
     FakeWorker.created[0].onerror!({ message: 'out of memory' });
     await vi.advanceTimersByTimeAsync(0);
-    expect(only()).toEqual(FAILED);
+    expect(running()).toBe(LOST);
+    expect(await waiting.score()).toBe(LOST);
     expect(FakeWorker.created[0].terminated).toBe(true);
     await request();
     expect(FakeWorker.created[1].url).toBe('worker.js');

@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BackgroundRequest, Verdict } from '../../src/shared/messages';
 
 const prepare = vi.hoisted(() => vi.fn());
+const WORKER_LOST = vi.hoisted(() => Symbol('worker lost'));
 const settings = vi.hoisted(() => ({ changed: (_: { checkMetadata: boolean; checkWatermark: boolean }) => {} }));
 
-vi.mock('../../src/background/inference', () => ({ prepare }));
+vi.mock('../../src/background/inference', () => ({ prepare, WORKER_LOST }));
 vi.mock('../../src/background/tab-stats', () => ({ forgetTab: vi.fn(), updateTabStats: vi.fn(async () => {}) }));
 vi.mock('../../src/background/platform-lookup', () => ({ PlatformLookup: class {} }));
 vi.mock('../../src/shared/settings', () => ({
@@ -17,6 +18,7 @@ vi.mock('../../src/shared/settings', () => ({
 const CLEAN: Verdict = { ok: true, score: 0.1, models: [0.1], source: 'model', metadata: 'clear', watermark: 'clear' };
 const LABELED: Verdict = { ok: true, score: 1, source: 'metadata', reason: 'comfyui' };
 const CANCELLED: Verdict = { ok: false, error: 'cancelled' };
+const FAILED: Verdict = { ok: false, error: 'model' };
 const STATS = { flagged: 0, possible: 0, clean: 0, pending: 0, failed: 0 };
 
 type Sender = { tab: { id: number }; frameId: number };
@@ -161,6 +163,40 @@ describe('background', () => {
     expect(await before.answer).toEqual(CLEAN);
     expect(await classify('https://a.test/1.jpg', from(3))).toEqual(LABELED);
     expect(fetched).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads an image again and hands it to the worker once more when the worker was lost while it took the image', async () => {
+    prepare.mockResolvedValueOnce(WORKER_LOST).mockResolvedValueOnce(LABELED);
+    expect(await classify('https://a.test/1.jpg', from(1))).toEqual(LABELED);
+    expect(fetched).toHaveBeenCalledTimes(2);
+    expect(prepare.mock.calls[1][0].bytes.byteLength).toBe(3);
+  });
+
+  it('loads an image again when the worker was lost before it scored the image', async () => {
+    prepare.mockResolvedValueOnce({ score: async () => WORKER_LOST, discard: vi.fn() });
+    const again = heldImage();
+    prepare.mockResolvedValueOnce(again.image);
+    const answer = classify('https://a.test/1.jpg', from(1));
+    await vi.waitFor(() => expect(again.image.score).toHaveBeenCalled());
+    again.finish();
+    expect(await answer).toEqual(CLEAN);
+    expect(fetched).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails an image whose worker is lost a second time and asks again later', async () => {
+    prepare.mockResolvedValue({ score: async () => WORKER_LOST, discard: vi.fn() });
+    expect(await classify('https://a.test/1.jpg', from(1))).toEqual(FAILED);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    prepare.mockReset().mockResolvedValueOnce(LABELED);
+    expect(await classify('https://a.test/1.jpg', from(1))).toEqual(LABELED);
+  });
+
+  it('fails an image the page sent along when the worker is lost, because its bytes went with the worker', async () => {
+    prepare.mockResolvedValue(WORKER_LOST);
+    const sent = onMessage({ type: 'classify', id: nextId++, url: 'blob:1', page: 'https://page.test/', bytes: new ArrayBuffer(4) }, from(1))!;
+    expect(await sent).toEqual(FAILED);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(fetched).not.toHaveBeenCalled();
   });
 
   it('counts only the tab in front of the window that was focused last as the tab in front', async () => {

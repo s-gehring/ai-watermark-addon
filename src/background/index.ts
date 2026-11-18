@@ -1,7 +1,7 @@
 import { LruCache } from '../shared/lru';
 import { CANCELLED, type BackgroundRequest, type Verdict } from '../shared/messages';
 import { loadSettings, onSettingsChanged, type Settings } from '../shared/settings';
-import { prepare } from './inference';
+import { prepare, WORKER_LOST } from './inference';
 import { PageBudget } from './page-budget';
 import { PlatformLookup } from './platform-lookup';
 import { firstResult } from './queue';
@@ -64,8 +64,7 @@ function fetchOriginal(candidates: string[], job: Job): Promise<EncodedImage | n
   });
 }
 
-async function classify({ url, bytes, original }: ClassifyRequest, job: Job): Promise<Verdict> {
-  await settingsReady;
+async function attempt({ url, bytes, original }: ClassifyRequest, job: Job): Promise<Verdict | typeof WORKER_LOST> {
   const [fetched, larger] = await Promise.all([
     bytes ? { bytes, type: '' } : fetchBytes(url, job.signal),
     original ? fetchOriginal(original, job) : null,
@@ -75,11 +74,19 @@ async function classify({ url, bytes, original }: ClassifyRequest, job: Job): Pr
   if (fetched.type.includes('svg')) return { ok: false, error: 'unsupported' };
   const { checkMetadata, checkWatermark } = settings!;
   const prepared = await prepare(fetched, larger, { checkMetadata, checkWatermark });
-  if ('ok' in prepared) return prepared;
+  if (prepared === WORKER_LOST || 'ok' in prepared) return prepared;
   const verdict = await inference.run(job, prepared.score);
   if (verdict) return verdict;
   prepared.discard();
   return CANCELLED;
+}
+
+async function classify(request: ClassifyRequest, job: Job): Promise<Verdict> {
+  await settingsReady;
+  let outcome = await attempt(request, job);
+  const canLoadAgain = !request.bytes;
+  if (outcome === WORKER_LOST && canLoadAgain) outcome = await attempt(request, job);
+  return outcome === WORKER_LOST ? { ok: false, error: 'model' } : outcome;
 }
 
 function classifyCached(request: ClassifyRequest, asker: Asker): Promise<Verdict> {
