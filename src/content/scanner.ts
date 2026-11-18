@@ -239,10 +239,11 @@ export class Scanner {
     const id = this.requests++;
     const wanted = () => this.awaited.get(url) === id;
     const verdict = requestVerdict(id, url, element, this.originalFor(url, element), wanted).then((result) => {
-      if (this.awaited.get(url) === id) this.awaited.delete(url);
+      if (!wanted()) return CANCELLED;
+      this.awaited.delete(url);
       this.reported.delete(id);
       const final = result.ok || result.error === 'unsupported' || result.error === 'decode';
-      if (!final && this.verdicts.get(url) === verdict) this.verdicts.delete(url);
+      if (!final) this.verdicts.delete(url);
       return result;
     });
     this.verdicts.set(url, verdict);
