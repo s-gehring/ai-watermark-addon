@@ -3,5 +3,6 @@
 - Checks the uploaded file behind previews on Civitai and X and the 1024 px version on Flickr.
 - Finds Google's SynthID in more Gemini images that were recompressed or scaled down.
 - Runs the classifier on WebGPU on Apple Silicon Macs with Firefox 153 or newer, where a model run takes about a third of the time.
+- Shows results sooner after a page change and while scrolling: images in view on the tab in front are checked first, and a page that was left no longer holds up the others.
 - New option, off by default: a weaker "AI?" badge for images that score just below the threshold.
-- Fixes images that stayed without a result and slow scanning on busy pages.
+- Fixes images that stayed without a result, a grey "?" on placeholders that a page swaps later and slow scanning on busy pages.
