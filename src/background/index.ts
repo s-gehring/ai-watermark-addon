@@ -120,7 +120,8 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === 'page-stats' && sender.tab?.id !== undefined) {
     if (request.initial) {
-      board.leaveFrame(tabId, frameId);
+      if (frameId === 0) board.leaveTab(tabId);
+      else board.leaveFrame(tabId, frameId);
       originalBudget.reset(tabId, frameId);
       labelBudget.reset(tabId, frameId);
     }

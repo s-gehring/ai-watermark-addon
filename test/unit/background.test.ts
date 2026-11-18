@@ -71,17 +71,29 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('background', () => {
-  it('answers the waiting requests of a frame with cancelled when that frame starts a new page', async () => {
+  it('answers the waiting requests of every frame with cancelled when the top frame starts a new page', async () => {
     const first = await running('https://a.test/1.jpg', from(1));
     const second = await waiting('https://a.test/2.jpg', from(1));
     const inFrame = await waiting('https://a.test/3.jpg', from(1, 5));
+    const elsewhere = await waiting('https://a.test/4.jpg', from(2));
     void onMessage({ type: 'page-stats', stats: STATS, initial: true }, from(1));
     first.finish();
     expect(await first.answer).toEqual(CLEAN);
+    await vi.waitFor(() => expect(elsewhere.image.score).toHaveBeenCalled());
     expect(await second.answer).toEqual(CANCELLED);
+    expect(await inFrame.answer).toEqual(CANCELLED);
     expect(second.image.score).not.toHaveBeenCalled();
     expect(second.image.discard).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(inFrame.image.score).toHaveBeenCalled());
+  });
+
+  it('keeps the requests of the other frames when a subframe starts a new page', async () => {
+    const first = await running('https://a.test/1.jpg', from(1));
+    const inFrame = await waiting('https://a.test/2.jpg', from(1, 5));
+    const inTop = await waiting('https://a.test/3.jpg', from(1));
+    void onMessage({ type: 'page-stats', stats: STATS, initial: true }, from(1, 5));
+    first.finish();
+    expect(await inFrame.answer).toEqual(CANCELLED);
+    await vi.waitFor(() => expect(inTop.image.score).toHaveBeenCalled());
   });
 
   it('drops the waiting requests of a frame that asks for it and of a tab that is closed', async () => {

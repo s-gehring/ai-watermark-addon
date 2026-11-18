@@ -232,9 +232,9 @@ const framedPage = (foreignOrigin: string) => `<!doctype html>
   <iframe src="${foreignOrigin}/crowded" style="width:800px;height:400px;border:0"></iframe>
 </body></html>`;
 
-const NEXT_PAGE = `<!doctype html>
+const nextPage = (query: string) => `<!doctype html>
 <html><head><meta charset="utf-8"></head><body>
-  <img src="/plain.jpg?next" style="display:block;width:320px;height:240px">
+  <img src="/plain.jpg${query}" style="display:block;width:320px;height:240px">
 </body></html>`;
 
 const variantsPage = (foreignOrigin: string) => `<!doctype html>
@@ -263,7 +263,7 @@ beforeAll(async () => {
   const variantLarge = withXmp(await sharp(plain).resize(1280, 960).jpeg().toBuffer(), XMP_AI);
   const squareLarge = withXmp(await sharp(plain).resize(1280, 1280, { fit: 'fill' }).jpeg().toBuffer(), XMP_AI);
   server = createServer((req, res) => {
-    const path = new URL(req.url!, 'http://x').pathname;
+    const { pathname: path, search } = new URL(req.url!, 'http://x');
     if (path === '/') res.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
     else if (path === '/strict')
       res
@@ -279,7 +279,7 @@ beforeAll(async () => {
     else if (path === '/crowded') res.writeHead(200, { 'content-type': 'text/html' }).end(CROWDED_PAGE);
     else if (path === '/framed') res.writeHead(200, { 'content-type': 'text/html' }).end(framedPage(origin.replace('127.0.0.1', 'localhost')));
     else if (path === '/scrolled') res.writeHead(200, { 'content-type': 'text/html' }).end(SCROLLED_PAGE);
-    else if (path === '/next') res.writeHead(200, { 'content-type': 'text/html' }).end(NEXT_PAGE);
+    else if (path === '/next') res.writeHead(200, { 'content-type': 'text/html' }).end(nextPage(search));
     else if (path === '/tiers') res.writeHead(200, { 'content-type': 'text/html' }).end(TIERS_PAGE);
     else if (path === '/borderline.png') res.writeHead(200, { 'content-type': 'image/png' }).end(borderline);
     else if (path === '/variants') res.writeHead(200, { 'content-type': 'text/html' }).end(variantsPage(origin.replace('127.0.0.1', 'localhost')));
@@ -698,8 +698,10 @@ describe('page that is left while its images wait', () => {
   const checkedCount = () => badgeCount('.badge:not(.pending)');
   const cleanCount = () => badgeCount('.badge.clean');
 
+  let left = 0;
+
   async function leaveForNextPage(): Promise<void> {
-    await driver.get(`${origin}/next`);
+    await driver.get(`${origin}/next?after=${left++}`);
     await driver.wait(async () => (await checkedCount()) === 1, 25_000);
     expect(await badgeCount('.badge.clean')).toBe(1);
   }
