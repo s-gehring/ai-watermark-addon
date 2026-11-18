@@ -9,13 +9,26 @@ const WATCHED_ATTRIBUTES = ['src', 'srcset', 'style', 'class'];
 const OBSERVED: MutationObserverInit = { childList: true, subtree: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES };
 const DISCOVERY_CHUNK = 400;
 const LABEL_GRACE_MS = 800;
+const OUT_OF_VIEW_DELAY_MS = 100;
 
 export function mayContinue(deadline: IdleDeadline | undefined): boolean {
   return !deadline || deadline.didTimeout || deadline.timeRemaining() > 1;
 }
 
+export function outOfView(awaited: ReadonlyMap<string, number>, viewed: Iterable<string | undefined>): number[] {
+  const unseen = new Map(awaited);
+  for (const url of viewed) {
+    if (url !== undefined) unseen.delete(url);
+  }
+  return [...unseen.values()];
+}
+
 export class Scanner {
   private readonly verdicts = new Map<string, Promise<Verdict>>();
+  private readonly awaited = new Map<string, number>();
+  private reported = new Set<number>();
+  private requests = 0;
+  private reportTimer = 0;
   private checkedUrl = new WeakMap<Element, string>();
   private readonly inView = new Set<Element>();
   private shadowRoots = new WeakSet<ShadowRoot>();
@@ -50,6 +63,8 @@ export class Scanner {
     this.io.disconnect();
     document.removeEventListener('load', this.onLoad, true);
     removeEventListener('resize', this.onResize);
+    clearTimeout(this.reportTimer);
+    this.reportTimer = 0;
     this.inView.clear();
     this.pendingRoots = [];
     this.layer.clear();
@@ -63,6 +78,15 @@ export class Scanner {
     this.settings = settings;
     this.checkedUrl = new WeakMap();
     this.start();
+  }
+
+  leave(): void {
+    this.stop();
+    if (!this.awaited.size) return;
+    for (const url of this.awaited.keys()) this.verdicts.delete(url);
+    this.awaited.clear();
+    this.reported.clear();
+    notify({ type: 'page-gone' });
   }
 
   private readonly onLoad = (event: Event) => {
@@ -82,6 +106,21 @@ export class Scanner {
         this.inView.delete(entry.target);
       }
     }
+    this.scheduleReport();
+  }
+
+  private scheduleReport(): void {
+    if (this.reportTimer || !this.awaited.size) return;
+    this.reportTimer = window.setTimeout(() => {
+      this.reportTimer = 0;
+      const ids = outOfView(
+        this.awaited,
+        Array.from(this.inView, (element) => this.checkedUrl.get(element)),
+      );
+      if (ids.length === this.reported.size && ids.every((id) => this.reported.has(id))) return;
+      this.reported = new Set(ids);
+      notify({ type: 'out-of-view', ids });
+    }, OUT_OF_VIEW_DELAY_MS);
   }
 
   private onMutations(records: MutationRecord[]): void {
@@ -152,17 +191,20 @@ export class Scanner {
   private consider(element: Element): void {
     const url = imageUrlOf(element, this.settings.includeBackgrounds);
     if (!url || !isLargeEnough(element.getBoundingClientRect(), this.settings.minSize)) {
-      this.checkedUrl.delete(element);
-      this.layer.remove(element);
+      this.forget(element);
       return;
     }
     if (this.checkedUrl.get(element) === url) return;
     this.checkedUrl.set(element, url);
+    this.scheduleReport();
     this.layer.set(element, { kind: 'pending' });
     const label = this.settings.checkPlatform ? (this.platformLabels?.verdictFor(url) ?? null) : null;
     labelFirst(label, () => this.verdictFor(url, element), LABEL_GRACE_MS, (verdict) => {
       if (this.checkedUrl.get(element) !== url) return;
-      if (!verdict.ok) {
+      if (!verdict.ok && verdict.error === 'cancelled') {
+        this.forget(element);
+        if (this.inView.has(element)) this.consider(element);
+      } else if (!verdict.ok) {
         this.layer.set(element, { kind: 'failed', error: verdict.error });
       } else if (verdict.source === 'model' && !isFlagged(verdict, this.settings.threshold)) {
         const possible = isPossible(verdict, this.settings.threshold, possibleFrom(this.settings));
@@ -173,15 +215,26 @@ export class Scanner {
     });
   }
 
+  private forget(element: Element): void {
+    this.checkedUrl.delete(element);
+    this.layer.remove(element);
+    this.scheduleReport();
+  }
+
   private verdictFor(url: string, element: Element): Promise<Verdict> {
-    let verdict = this.verdicts.get(url);
-    if (!verdict) {
-      verdict = requestVerdict(url, element, this.originalFor(url, element)).then((result) => {
-        if (!result.ok && result.error !== 'unsupported' && result.error !== 'decode') this.verdicts.delete(url);
-        return result;
-      });
-      this.verdicts.set(url, verdict);
-    }
+    const known = this.verdicts.get(url);
+    if (known) return known;
+    const id = this.requests++;
+    const verdict = requestVerdict(id, url, element, this.originalFor(url, element)).then((result) => {
+      if (this.awaited.get(url) === id) this.awaited.delete(url);
+      this.reported.delete(id);
+      const final = result.ok || result.error === 'unsupported' || result.error === 'decode';
+      if (!final && this.verdicts.get(url) === verdict) this.verdicts.delete(url);
+      return result;
+    });
+    this.verdicts.set(url, verdict);
+    this.awaited.set(url, id);
+    this.scheduleReport();
     return verdict;
   }
 
@@ -201,19 +254,23 @@ async function send(request: BackgroundRequest): Promise<Verdict> {
   }
 }
 
-async function requestVerdict(url: string, element: Element, original?: string[]): Promise<Verdict> {
-  const page = location.href;
-  const verdict = url.startsWith('blob:') ? await classifyBlob(url, page) : await send({ type: 'classify', url, page, original });
-  if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
-  const bytes = await pixelsOf(element);
-  return bytes ? send({ type: 'classify', url, page, bytes, original }) : verdict;
+function notify(request: BackgroundRequest): void {
+  void browser.runtime.sendMessage(request).catch(() => {});
 }
 
-async function classifyBlob(url: string, page: string): Promise<Verdict> {
+async function requestVerdict(id: number, url: string, element: Element, original?: string[]): Promise<Verdict> {
+  const page = location.href;
+  const verdict = url.startsWith('blob:') ? await classifyBlob(id, url, page) : await send({ type: 'classify', id, url, page, original });
+  if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
+  const bytes = await pixelsOf(element);
+  return bytes ? send({ type: 'classify', id, url, page, bytes, original }) : verdict;
+}
+
+async function classifyBlob(id: number, url: string, page: string): Promise<Verdict> {
   const bytes = await fetch(url)
     .then((r) => r.arrayBuffer())
     .catch(() => null);
-  return bytes ? send({ type: 'classify', url, page, bytes }) : { ok: false, error: 'fetch' };
+  return bytes ? send({ type: 'classify', id, url, page, bytes }) : { ok: false, error: 'fetch' };
 }
 
 async function pixelsOf(image: HTMLImageElement): Promise<ArrayBuffer | null> {

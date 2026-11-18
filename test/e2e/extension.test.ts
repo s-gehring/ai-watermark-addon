@@ -213,6 +213,19 @@ const BUSY_PAGE = `<!doctype html>
   </script>
 </body></html>`;
 
+const CROWD = 120;
+
+const CROWDED_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+  ${Array.from({ length: CROWD }, (_, i) => `<img src="/plain.jpg?crowd=${i}" style="position:absolute;left:0;top:0;width:320px;height:240px">`).join('')}
+  <img src="/ai.jpg?crowd" style="position:absolute;left:400px;top:0;width:320px;height:240px">
+</body></html>`;
+
+const NEXT_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+  <img src="/plain.jpg?next" style="display:block;width:320px;height:240px">
+</body></html>`;
+
 const variantsPage = (foreignOrigin: string) => `<!doctype html>
 <html><head><meta charset="utf-8"><style>img { display: block; width: 320px; height: 240px; }</style></head><body>
   <img id="srcset" srcset="/variant.jpg?srcset 480w, /variant-large.jpg?srcset 1280w" sizes="320px">
@@ -252,6 +265,8 @@ beforeAll(async () => {
     else if (path === '/removed-frame') res.writeHead(200, { 'content-type': 'text/html' }).end(REMOVED_FRAME_PAGE);
     else if (path === '/frame') res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><body><div></div></body>');
     else if (path === '/busy') res.writeHead(200, { 'content-type': 'text/html' }).end(BUSY_PAGE);
+    else if (path === '/crowded') res.writeHead(200, { 'content-type': 'text/html' }).end(CROWDED_PAGE);
+    else if (path === '/next') res.writeHead(200, { 'content-type': 'text/html' }).end(NEXT_PAGE);
     else if (path === '/tiers') res.writeHead(200, { 'content-type': 'text/html' }).end(TIERS_PAGE);
     else if (path === '/borderline.png') res.writeHead(200, { 'content-type': 'image/png' }).end(borderline);
     else if (path === '/variants') res.writeHead(200, { 'content-type': 'text/html' }).end(variantsPage(origin.replace('127.0.0.1', 'localhost')));
@@ -659,6 +674,46 @@ describe('page that never goes idle', () => {
     }, 20_000);
     expect(state).toEqual({ badges: 1, calm: false });
   }, 60_000);
+});
+
+describe('page that is left while its images wait', () => {
+  const badgeCount = (selector: string) =>
+    driver.executeScript<number>(
+      (css: string) => document.querySelector('ai-watermark-layer')?.shadowRoot?.querySelectorAll(css).length ?? 0,
+      selector,
+    );
+  const checkedCount = () => badgeCount('.badge:not(.pending)');
+
+  async function leaveForNextPage(): Promise<void> {
+    await driver.get(`${origin}/next`);
+    await driver.wait(async () => (await checkedCount()) === 1, 25_000);
+    expect(await badgeCount('.badge.clean')).toBe(1);
+  }
+
+  it('marks an image with AI metadata while the images before it still wait', async () => {
+    await driver.get(`${origin}/crowded`);
+    await driver.wait(async () => (await badgeCount('.badge.ai')) === 1, 20_000);
+    expect(await pendingCount()).toBeGreaterThan(CROWD - 20);
+    await leaveForNextPage();
+  }, 60_000);
+
+  it('checks the next page without working off the images left behind', async () => {
+    await driver.get(`${origin}/crowded`);
+    await driver.wait(async () => (await pendingCount()) >= CROWD - 20, 10_000);
+    await leaveForNextPage();
+  }, 60_000);
+
+  it('checks its images again when it comes back from the history', async () => {
+    await driver.get(`${origin}/crowded`);
+    await driver.wait(async () => (await pendingCount()) >= CROWD - 20, 10_000);
+    await driver.executeScript(() => ((window as { kept?: boolean }).kept = true));
+    const checkedBefore = await checkedCount();
+    await driver.get(`${origin}/frame`);
+    await driver.navigate().back();
+    expect(await driver.executeScript(() => (window as { kept?: boolean }).kept)).toBe(true);
+    await driver.wait(async () => (await checkedCount()) > checkedBefore + 1, 30_000);
+    await leaveForNextPage();
+  }, 90_000);
 });
 
 describe('page with a strict content security policy', () => {

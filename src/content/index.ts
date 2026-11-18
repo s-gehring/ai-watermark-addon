@@ -38,8 +38,16 @@ browser.runtime.onMessage.addListener((message: unknown) => {
   return Promise.resolve(status);
 });
 
-if (document.documentElement instanceof HTMLHtmlElement) {
+function begin(): void {
   send(true);
   void loadSettings().then(apply);
+}
+
+if (document.documentElement instanceof HTMLHtmlElement) {
+  begin();
   onSettingsChanged(apply);
+  addEventListener('pagehide', () => scanner?.leave());
+  addEventListener('pageshow', (event) => {
+    if (event.persisted) begin();
+  });
 }

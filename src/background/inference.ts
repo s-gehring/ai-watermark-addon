@@ -1,13 +1,20 @@
 import type { Verdict } from '../shared/messages';
-import type { Checks, EncodedImage, WorkerRequest, WorkerResponse } from './worker';
+import type { Checks, EncodedImage, WorkerCommand, WorkerRequest, WorkerResponse } from './worker';
 
 export const STALL_TIMEOUT_MS = 60_000;
+
+export interface HeldImage {
+  score(): Promise<Verdict>;
+  discard(): void;
+}
+
+type Answer = Verdict | 'held';
 
 let worker: Worker | null = null;
 let nextId = 0;
 let stallTimer: ReturnType<typeof setTimeout> | undefined;
 let stalled = false;
-const pending = new Map<number, (verdict: Verdict) => void>();
+const pending = new Map<number, (answer: Answer) => void>();
 
 function watchForStall(): void {
   clearTimeout(stallTimer);
@@ -32,7 +39,7 @@ function ensureWorker(): Worker {
   if (worker) return worker;
   const created = new Worker(browser.runtime.getURL(stalled ? 'worker.js?backend=wasm' : 'worker.js'), { type: 'module' });
   created.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
-    pending.get(data.id)?.(data.verdict);
+    pending.get(data.id)?.('held' in data ? 'held' : data.verdict);
     pending.delete(data.id);
     watchForStall();
   };
@@ -41,12 +48,23 @@ function ensureWorker(): Worker {
   return created;
 }
 
-export function evaluate(image: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict> {
+function ask(message: WorkerRequest | WorkerCommand, transfer: Transferable[] = []): Promise<Answer> {
   return new Promise((resolve) => {
-    const id = nextId++;
-    pending.set(id, resolve);
+    pending.set(message.id, resolve);
     if (pending.size === 1) watchForStall();
-    const request: WorkerRequest = { id, ...image, original, ...checks };
-    ensureWorker().postMessage(request, original ? [image.bytes, original.bytes] : [image.bytes]);
+    ensureWorker().postMessage(message, transfer);
   });
+}
+
+export async function prepare(image: EncodedImage, original: EncodedImage | null, checks: Checks): Promise<Verdict | HeldImage> {
+  const id = nextId++;
+  const answer = await ask({ id, ...image, original, ...checks }, original ? [image.bytes, original.bytes] : [image.bytes]);
+  if (answer !== 'held') return answer;
+  return {
+    score: async () => {
+      const verdict = await ask({ id, command: 'score' });
+      return verdict === 'held' ? { ok: false, error: 'model' } : verdict;
+    },
+    discard: () => worker?.postMessage({ id, command: 'drop' } satisfies WorkerCommand),
+  };
 }
