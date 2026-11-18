@@ -1,6 +1,7 @@
-- Finds SynthID in cropped Gemini and ChatGPT images, in Gemini images after WebP and JPEG recompression and in ChatGPT images of every output size.
-- Checks the original image behind the WebP renditions on Google's blogs.
-- Recognizes the visible marks of Bing Image Creator, Meta AI and DALL·E 2.
-- Reads the EXIF tags of Civitai and Reve and recognizes more ComfyUI workflows.
-- Checks images inside web components.
-- Fewer false alarms on WebP photos: the classifier scores lossy WebP images as JPEG.
+- Finds more AI images among thumbnails: when a page shows only a small preview, the classifier scores the larger version of the image.
+- Reads the AI labels of pixiv, DeviantArt and Wikimedia Commons and shows them as "AI · pixiv", "AI · DeviantArt" or "AI · Commons". This can be switched off in the settings.
+- Checks the uploaded file behind previews on Civitai and X and the 1024 px version on Flickr.
+- Finds Google's SynthID in more Gemini images that were recompressed or scaled down.
+- Runs the classifier on WebGPU on Apple Silicon Macs with Firefox 153 or newer, where a model run takes about a third of the time.
+- New option, off by default: a weaker "AI?" badge for images that score just below the threshold.
+- Fixes images that stayed without a result and slow scanning on busy pages.
