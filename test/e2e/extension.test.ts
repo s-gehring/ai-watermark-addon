@@ -227,6 +227,11 @@ const SCROLLED_PAGE = `<!doctype html>
   ${Array.from({ length: 3 }, (_, i) => `<img src="/synthid.png?below=${i}" style="position:absolute;left:0;top:4000px;width:320px;height:240px">`).join('')}
 </body></html>`;
 
+const framedPage = (foreignOrigin: string) => `<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+  <iframe src="${foreignOrigin}/crowded" style="width:800px;height:400px;border:0"></iframe>
+</body></html>`;
+
 const NEXT_PAGE = `<!doctype html>
 <html><head><meta charset="utf-8"></head><body>
   <img src="/plain.jpg?next" style="display:block;width:320px;height:240px">
@@ -272,6 +277,7 @@ beforeAll(async () => {
     else if (path === '/frame') res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><body><div></div></body>');
     else if (path === '/busy') res.writeHead(200, { 'content-type': 'text/html' }).end(BUSY_PAGE);
     else if (path === '/crowded') res.writeHead(200, { 'content-type': 'text/html' }).end(CROWDED_PAGE);
+    else if (path === '/framed') res.writeHead(200, { 'content-type': 'text/html' }).end(framedPage(origin.replace('127.0.0.1', 'localhost')));
     else if (path === '/scrolled') res.writeHead(200, { 'content-type': 'text/html' }).end(SCROLLED_PAGE);
     else if (path === '/next') res.writeHead(200, { 'content-type': 'text/html' }).end(NEXT_PAGE);
     else if (path === '/tiers') res.writeHead(200, { 'content-type': 'text/html' }).end(TIERS_PAGE);
@@ -708,6 +714,14 @@ describe('page that is left while its images wait', () => {
   it('checks the next page without working off the images left behind', async () => {
     await driver.get(`${origin}/crowded`);
     await driver.wait(async () => (await pendingCount()) >= CROWD - 20, 10_000);
+    await leaveForNextPage();
+  }, 60_000);
+
+  it('checks the next page without working off the images a frame of another site left behind', async () => {
+    await driver.get(`${origin}/framed`);
+    await driver.switchTo().frame(0);
+    await driver.wait(async () => (await pendingCount()) >= CROWD - 20, 10_000);
+    await driver.switchTo().defaultContent();
     await leaveForNextPage();
   }, 60_000);
 

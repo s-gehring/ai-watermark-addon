@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BackgroundRequest, Verdict } from '../../src/shared/messages';
 
 const prepare = vi.hoisted(() => vi.fn());
+const settings = vi.hoisted(() => ({ changed: (_: { checkMetadata: boolean; checkWatermark: boolean }) => {} }));
 
 vi.mock('../../src/background/inference', () => ({ prepare }));
 vi.mock('../../src/background/tab-stats', () => ({ forgetTab: vi.fn(), updateTabStats: vi.fn(async () => {}) }));
 vi.mock('../../src/background/platform-lookup', () => ({ PlatformLookup: class {} }));
 vi.mock('../../src/shared/settings', () => ({
   loadSettings: async () => ({ checkMetadata: true, checkWatermark: true }),
-  onSettingsChanged: () => {},
+  onSettingsChanged: (listener: typeof settings.changed) => {
+    settings.changed = listener;
+  },
 }));
 
 const CLEAN: Verdict = { ok: true, score: 0.1, models: [0.1], source: 'model', metadata: 'clear', watermark: 'clear' };
@@ -21,6 +24,7 @@ type Sender = { tab: { id: number }; frameId: number };
 let onMessage: (message: BackgroundRequest, sender: Sender) => Promise<Verdict> | undefined;
 let onTabRemoved: (tabId: number) => void;
 let fetched: ReturnType<typeof vi.fn>;
+const tabsQuery = vi.fn(async (_: object) => [{ id: 1 }]);
 let nextId = 0;
 
 const from = (tabId: number, frameId = 0): Sender => ({ tab: { id: tabId }, frameId });
@@ -56,7 +60,7 @@ beforeEach(async () => {
   vi.stubGlobal('fetch', fetched);
   vi.stubGlobal('browser', {
     tabs: {
-      query: async () => [{ id: 1 }],
+      query: tabsQuery,
       onRemoved: { addListener: (listener: typeof onTabRemoved) => (onTabRemoved = listener) },
     },
     runtime: { onMessage: { addListener: (listener: typeof onMessage) => (onMessage = listener) } },
@@ -121,6 +125,35 @@ describe('background', () => {
     expect(fetched).toHaveBeenCalledTimes(2);
     expect(await classify('https://a.test/1.jpg', from(2))).toEqual(LABELED);
     expect(fetched).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops the download for a page that left', async () => {
+    let signal: AbortSignal | undefined;
+    fetched.mockImplementationOnce((_: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise<Response>((_, reject) => signal!.addEventListener('abort', () => reject(new Error('aborted'))));
+    });
+    const left = classify('https://a.test/1.jpg', from(1));
+    await vi.waitFor(() => expect(signal?.aborted).toBe(false));
+    onTabRemoved(1);
+    expect(signal!.aborted).toBe(true);
+    expect(await left).toEqual(CANCELLED);
+  });
+
+  it('neither caches nor shares a verdict that was started before the checks were toggled', async () => {
+    const before = await running('https://a.test/1.jpg', from(1));
+    settings.changed({ checkMetadata: false, checkWatermark: true });
+    prepare.mockResolvedValueOnce(LABELED);
+    expect(await classify('https://a.test/1.jpg', from(2))).toEqual(LABELED);
+    before.finish();
+    expect(await before.answer).toEqual(CLEAN);
+    expect(await classify('https://a.test/1.jpg', from(3))).toEqual(LABELED);
+    expect(fetched).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts only the tab in front of the window that was focused last as the tab in front', async () => {
+    await running('https://a.test/1.jpg', from(1));
+    expect(tabsQuery).toHaveBeenCalledWith({ active: true, lastFocusedWindow: true });
   });
 
   it('checks what a frame reported as out of view after the images it still shows', async () => {

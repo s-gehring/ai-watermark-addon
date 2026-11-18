@@ -237,7 +237,8 @@ export class Scanner {
     const known = this.verdicts.get(url);
     if (known) return known;
     const id = this.requests++;
-    const verdict = requestVerdict(id, url, element, this.originalFor(url, element)).then((result) => {
+    const wanted = () => this.awaited.get(url) === id;
+    const verdict = requestVerdict(id, url, element, this.originalFor(url, element), wanted).then((result) => {
       if (this.awaited.get(url) === id) this.awaited.delete(url);
       this.reported.delete(id);
       const final = result.ok || result.error === 'unsupported' || result.error === 'decode';
@@ -270,18 +271,20 @@ function notify(request: BackgroundRequest): void {
   void browser.runtime.sendMessage(request).catch(() => {});
 }
 
-async function requestVerdict(id: number, url: string, element: Element, original?: string[]): Promise<Verdict> {
+async function requestVerdict(id: number, url: string, element: Element, original: string[] | undefined, wanted: () => boolean): Promise<Verdict> {
   const page = location.href;
-  const verdict = url.startsWith('blob:') ? await classifyBlob(id, url, page) : await send({ type: 'classify', id, url, page, original });
+  const verdict = url.startsWith('blob:') ? await classifyBlob(id, url, page, wanted) : await send({ type: 'classify', id, url, page, original });
   if (verdict.ok || verdict.error !== 'fetch' || !(element instanceof HTMLImageElement)) return verdict;
   const bytes = await pixelsOf(element);
+  if (!wanted()) return CANCELLED;
   return bytes ? send({ type: 'classify', id, url, page, bytes, original }) : verdict;
 }
 
-async function classifyBlob(id: number, url: string, page: string): Promise<Verdict> {
+async function classifyBlob(id: number, url: string, page: string, wanted: () => boolean): Promise<Verdict> {
   const bytes = await fetch(url)
     .then((r) => r.arrayBuffer())
     .catch(() => null);
+  if (!wanted()) return CANCELLED;
   return bytes ? send({ type: 'classify', id, url, page, bytes }) : { ok: false, error: 'fetch' };
 }
 

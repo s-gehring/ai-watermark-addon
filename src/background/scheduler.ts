@@ -13,9 +13,21 @@ export type ActiveTabs = () => Promise<ReadonlySet<number>>;
 
 export class Job {
   readonly requesters: Requester[] = [];
-  dropped = false;
+  private readonly dropping = new AbortController();
 
   constructor(readonly order: number) {}
+
+  get dropped(): boolean {
+    return this.dropping.signal.aborted;
+  }
+
+  get signal(): AbortSignal {
+    return this.dropping.signal;
+  }
+
+  drop(): void {
+    this.dropping.abort();
+  }
 
   rank(activeTabs: ReadonlySet<number>): number {
     let best = Infinity;
@@ -65,7 +77,7 @@ export class JobBoard<T> {
       if (kept.length === job.requesters.length) continue;
       job.requesters.splice(0, job.requesters.length, ...kept);
       if (kept.length) continue;
-      job.dropped = true;
+      job.drop();
       this.jobs.delete(key);
     }
   }

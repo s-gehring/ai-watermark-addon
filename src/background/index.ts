@@ -23,21 +23,25 @@ const labelBudget = new PageBudget(MAX_LABEL_REQUESTS_PER_PAGE);
 const platformLookup = new PlatformLookup();
 
 let settings: Settings | null = null;
+let checksVersion = 0;
 const settingsReady = loadSettings().then((s) => (settings = s));
 onSettingsChanged((s) => {
   const checksToggled = settings && (settings.checkMetadata !== s.checkMetadata || settings.checkWatermark !== s.checkWatermark);
   settings = s;
-  if (checksToggled) cache.clear();
+  if (!checksToggled) return;
+  cache.clear();
+  checksVersion++;
 });
 
 async function activeTabs(): Promise<ReadonlySet<number>> {
-  const tabs = await browser.tabs.query({ active: true }).catch(() => []);
+  const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
   return new Set(tabs.map((tab) => tab.id ?? -1));
 }
 
-async function fetchBytes(url: string, maxBytes = MAX_BYTES): Promise<EncodedImage | null> {
+async function fetchBytes(url: string, dropped: AbortSignal, maxBytes = MAX_BYTES): Promise<EncodedImage | null> {
   try {
-    const res = await fetch(url, { credentials: 'include', cache: 'force-cache', signal: AbortSignal.timeout(20_000) });
+    const signal = AbortSignal.any([dropped, AbortSignal.timeout(20_000)]);
+    const res = await fetch(url, { credentials: 'include', cache: 'force-cache', signal });
     if (!res.ok || Number(res.headers.get('content-length')) > maxBytes) {
       void res.body?.cancel();
       return null;
@@ -53,7 +57,7 @@ async function fetchBytes(url: string, maxBytes = MAX_BYTES): Promise<EncodedIma
 type ClassifyRequest = Extract<BackgroundRequest, { type: 'classify' }>;
 
 function fetchOriginal(candidates: string[], job: Job): Promise<EncodedImage | null> {
-  const load = () => firstResult(candidates, (candidate) => fetchBytes(candidate, MAX_ORIGINAL_BYTES));
+  const load = () => firstResult(candidates, (candidate) => fetchBytes(candidate, job.signal, MAX_ORIGINAL_BYTES));
   return originals.run(job, () => {
     const [{ tabId, frameId, page }] = job.requesters;
     return originalBudget.load(tabId, frameId, page, load);
@@ -62,7 +66,10 @@ function fetchOriginal(candidates: string[], job: Job): Promise<EncodedImage | n
 
 async function classify({ url, bytes, original }: ClassifyRequest, job: Job): Promise<Verdict> {
   await settingsReady;
-  const [fetched, larger] = await Promise.all([bytes ? { bytes, type: '' } : fetchBytes(url), original ? fetchOriginal(original, job) : null]);
+  const [fetched, larger] = await Promise.all([
+    bytes ? { bytes, type: '' } : fetchBytes(url, job.signal),
+    original ? fetchOriginal(original, job) : null,
+  ]);
   if (job.dropped) return CANCELLED;
   if (!fetched) return { ok: false, error: 'fetch' };
   if (fetched.type.includes('svg')) return { ok: false, error: 'unsupported' };
@@ -78,9 +85,11 @@ async function classify({ url, bytes, original }: ClassifyRequest, job: Job): Pr
 function classifyCached(request: ClassifyRequest, asker: Asker): Promise<Verdict> {
   const hit = cache.get(request.url);
   if (hit) return Promise.resolve(hit);
-  return board.join(request.url, asker, async (job) => {
+  const version = checksVersion;
+  return board.join(`${version} ${request.url}`, asker, async (job) => {
     const verdict = await classify(request, job);
-    if (verdict.ok || verdict.error === 'unsupported' || verdict.error === 'decode') cache.set(request.url, verdict);
+    const final = verdict.ok || verdict.error === 'unsupported' || verdict.error === 'decode';
+    if (final && version === checksVersion) cache.set(request.url, verdict);
     return verdict;
   });
 }

@@ -170,7 +170,7 @@ describe('Lane', () => {
     const dropped = jobFor(1, requester(1));
     let ran = false;
     const result = queue.run(dropped, async () => (ran = true));
-    dropped.dropped = true;
+    dropped.drop();
     first.open();
     await blocker;
     expect(await result).toBeNull();
@@ -179,7 +179,7 @@ describe('Lane', () => {
 
   it('does not start a task for a job that was dropped before it arrived', async () => {
     const dropped = jobFor(0);
-    dropped.dropped = true;
+    dropped.drop();
     let ran = false;
     expect(await lane([]).run(dropped, async () => (ran = true))).toBeNull();
     expect(ran).toBe(false);
