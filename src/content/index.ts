@@ -28,7 +28,7 @@ function apply(settings: Settings): void {
     scanner ??= new Scanner(settings, report);
     scanner.restart(settings);
   } else {
-    scanner?.stop();
+    scanner?.leave();
   }
 }
 

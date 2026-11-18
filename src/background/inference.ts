@@ -15,6 +15,7 @@ let nextId = 0;
 let stallTimer: ReturnType<typeof setTimeout> | undefined;
 let stalled = false;
 const pending = new Map<number, (answer: Answer) => void>();
+const scoring = new Set<number>();
 
 function watchForStall(): void {
   clearTimeout(stallTimer);
@@ -32,6 +33,7 @@ function discardWorker(reason: string): void {
   worker = null;
   for (const resolve of pending.values()) resolve({ ok: false, error: 'model' });
   pending.clear();
+  scoring.clear();
   watchForStall();
 }
 
@@ -41,7 +43,7 @@ function ensureWorker(): Worker {
   created.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
     pending.get(data.id)?.('held' in data ? 'held' : data.verdict);
     pending.delete(data.id);
-    watchForStall();
+    if (scoring.delete(data.id) || !scoring.size) watchForStall();
   };
   created.onerror = (event) => discardWorker(`failed: ${event.message}`);
   worker = created;
@@ -51,7 +53,9 @@ function ensureWorker(): Worker {
 function ask(message: WorkerRequest | WorkerCommand, transfer: Transferable[] = []): Promise<Answer> {
   return new Promise((resolve) => {
     pending.set(message.id, resolve);
-    if (pending.size === 1) watchForStall();
+    const scores = 'command' in message;
+    if (scores) scoring.add(message.id);
+    if (scores || pending.size === 1) watchForStall();
     ensureWorker().postMessage(message, transfer);
   });
 }

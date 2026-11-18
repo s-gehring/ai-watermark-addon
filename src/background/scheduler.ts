@@ -1,7 +1,11 @@
-export interface Requester {
+export interface Asker {
   tabId: number;
   frameId: number;
   id: number;
+  page: string;
+}
+
+export interface Requester extends Asker {
   inView: boolean;
 }
 
@@ -24,9 +28,11 @@ export class Job {
 
 export class JobBoard<T> {
   private readonly jobs = new Map<string, { job: Job; result: Promise<T> }>();
+  private readonly outOfView = new Map<number, Map<number, ReadonlySet<number>>>();
   private created = 0;
 
-  join(key: string, requester: Requester, start: (job: Job) => Promise<T>): Promise<T> {
+  join(key: string, asker: Asker, start: (job: Job) => Promise<T>): Promise<T> {
+    const requester = { ...asker, inView: !this.outOfView.get(asker.tabId)?.get(asker.frameId)?.has(asker.id) };
     const existing = this.jobs.get(key);
     if (existing) {
       existing.job.requesters.push(requester);
@@ -43,7 +49,17 @@ export class JobBoard<T> {
     return entry.result;
   }
 
-  leave(gone: (requester: Requester) => boolean): void {
+  leaveFrame(tabId: number, frameId: number): void {
+    this.outOfView.get(tabId)?.delete(frameId);
+    this.leave((requester) => requester.tabId === tabId && requester.frameId === frameId);
+  }
+
+  leaveTab(tabId: number): void {
+    this.outOfView.delete(tabId);
+    this.leave((requester) => requester.tabId === tabId);
+  }
+
+  private leave(gone: (requester: Requester) => boolean): void {
     for (const [key, { job }] of this.jobs) {
       const kept = job.requesters.filter((requester) => !gone(requester));
       if (kept.length === job.requesters.length) continue;
@@ -55,6 +71,9 @@ export class JobBoard<T> {
   }
 
   setOutOfView(tabId: number, frameId: number, ids: ReadonlySet<number>): void {
+    let frames = this.outOfView.get(tabId);
+    if (!frames) this.outOfView.set(tabId, (frames = new Map()));
+    frames.set(frameId, ids);
     for (const { job } of this.jobs.values()) {
       for (const requester of job.requesters) {
         if (requester.tabId === tabId && requester.frameId === frameId) requester.inView = !ids.has(requester.id);

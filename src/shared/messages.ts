@@ -56,7 +56,7 @@ export interface FrameStats {
 export type BackgroundRequest =
   | { type: 'classify'; id: number; url: string; page: string; bytes?: ArrayBuffer; original?: string[] }
   | { type: 'out-of-view'; ids: number[] }
-  | { type: 'page-gone' }
+  | { type: 'drop-requests' }
   | { type: 'platform-labels'; platform: 'pixiv' | 'commons'; keys: string[]; page: string }
   | { type: 'page-stats'; stats: FrameStats; initial: boolean };
 

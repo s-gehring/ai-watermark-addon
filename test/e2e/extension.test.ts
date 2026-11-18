@@ -221,6 +221,12 @@ const CROWDED_PAGE = `<!doctype html>
   <img src="/ai.jpg?crowd" style="position:absolute;left:400px;top:0;width:320px;height:240px">
 </body></html>`;
 
+const SCROLLED_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"></head><body style="margin:0;height:6000px">
+  ${Array.from({ length: 8 }, (_, i) => `<img src="/plain.jpg?top=${i}" style="position:absolute;left:0;top:0;width:320px;height:240px">`).join('')}
+  ${Array.from({ length: 3 }, (_, i) => `<img src="/synthid.png?below=${i}" style="position:absolute;left:0;top:4000px;width:320px;height:240px">`).join('')}
+</body></html>`;
+
 const NEXT_PAGE = `<!doctype html>
 <html><head><meta charset="utf-8"></head><body>
   <img src="/plain.jpg?next" style="display:block;width:320px;height:240px">
@@ -266,6 +272,7 @@ beforeAll(async () => {
     else if (path === '/frame') res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><body><div></div></body>');
     else if (path === '/busy') res.writeHead(200, { 'content-type': 'text/html' }).end(BUSY_PAGE);
     else if (path === '/crowded') res.writeHead(200, { 'content-type': 'text/html' }).end(CROWDED_PAGE);
+    else if (path === '/scrolled') res.writeHead(200, { 'content-type': 'text/html' }).end(SCROLLED_PAGE);
     else if (path === '/next') res.writeHead(200, { 'content-type': 'text/html' }).end(NEXT_PAGE);
     else if (path === '/tiers') res.writeHead(200, { 'content-type': 'text/html' }).end(TIERS_PAGE);
     else if (path === '/borderline.png') res.writeHead(200, { 'content-type': 'image/png' }).end(borderline);
@@ -683,6 +690,7 @@ describe('page that is left while its images wait', () => {
       selector,
     );
   const checkedCount = () => badgeCount('.badge:not(.pending)');
+  const cleanCount = () => badgeCount('.badge.clean');
 
   async function leaveForNextPage(): Promise<void> {
     await driver.get(`${origin}/next`);
@@ -707,13 +715,23 @@ describe('page that is left while its images wait', () => {
     await driver.get(`${origin}/crowded`);
     await driver.wait(async () => (await pendingCount()) >= CROWD - 20, 10_000);
     await driver.executeScript(() => ((window as { kept?: boolean }).kept = true));
-    const checkedBefore = await checkedCount();
+    const cleanBefore = await cleanCount();
     await driver.get(`${origin}/frame`);
     await driver.navigate().back();
     expect(await driver.executeScript(() => (window as { kept?: boolean }).kept)).toBe(true);
-    await driver.wait(async () => (await checkedCount()) > checkedBefore + 1, 30_000);
+    await driver.wait(async () => (await cleanCount()) > cleanBefore + 1, 30_000);
+    expect(await badgeCount('.badge.failed')).toBe(0);
     await leaveForNextPage();
   }, 90_000);
+
+  it('checks what is in view before the images that were scrolled past', async () => {
+    await driver.get(`${origin}/scrolled`);
+    await driver.wait(async () => (await pendingCount()) >= 6, 10_000);
+    await driver.executeScript(() => window.scrollTo(0, 4000));
+    await driver.wait(async () => (await badgeCount('.badge.ai')) === 3, 60_000);
+    expect(await cleanCount()).toBeLessThan(5);
+    await leaveForNextPage();
+  }, 120_000);
 });
 
 describe('page with a strict content security policy', () => {

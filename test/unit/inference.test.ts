@@ -108,6 +108,33 @@ describe('prepare', () => {
     expect(retry()).toEqual(CLEAN);
   });
 
+  it('replaces a worker whose model run hangs, however many new images it accepts meanwhile', async () => {
+    const hanging = settled((await held()).score());
+    await vi.advanceTimersByTimeAsync(timeout - 1);
+    await held();
+    const labeled = prepare(image(), null, CHECKS);
+    FakeWorker.created[0].answer(3, LABELED);
+    expect(await labeled).toEqual(LABELED);
+    expect(FakeWorker.created[0].terminated).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(hanging()).toEqual(FAILED);
+    expect(FakeWorker.created[0].terminated).toBe(true);
+  });
+
+  it('gives every model run the full time, also right after another one', async () => {
+    const first = settled((await held()).score());
+    const next = await held();
+    await vi.advanceTimersByTimeAsync(timeout - 1);
+    FakeWorker.created[0].answer(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first()).toEqual(CLEAN);
+    const second = settled(next.score());
+    await vi.advanceTimersByTimeAsync(timeout - 1);
+    expect(second()).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(second()).toEqual(FAILED);
+  });
+
   it('keeps waiting requests alive while the worker keeps answering', async () => {
     const first = settled((await held()).score());
     const second = settled(prepare(image(), null, CHECKS));

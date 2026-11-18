@@ -7,7 +7,6 @@ import { detectInvisibleWatermark } from './invisible-watermark';
 import { isLossyWebp } from './format';
 import { detectAiMetadata } from './metadata';
 import { couldBeSourceOf, fitWithin, isScorable, scoresVariant, VARIANT_SCORING, type PixelImage } from './preprocess';
-import { TaskQueue } from './queue';
 import {
   detectSynthId,
   searchCroppedSynthId,
@@ -46,7 +45,6 @@ const scope = self as unknown as {
 };
 // Firefox drops chroma subsampling from quality 0.9 on; scores only improve with 4:2:0.
 const WEBP_AS_JPEG_QUALITY = 0.89;
-const queue = new TaskQueue();
 const held = new Map<number, WorkerRequest>();
 let detectors: Promise<SynthIdDetector[]> | null = null;
 
@@ -168,7 +166,7 @@ function accept(request: WorkerRequest): void {
 async function scoreHeld(id: number): Promise<void> {
   const request = held.get(id);
   held.delete(id);
-  const verdict: Verdict = request ? await queue.run(() => score(request, request.original, request)).catch(failed) : { ok: false, error: 'model' };
+  const verdict: Verdict = request ? await score(request, request.original, request).catch(failed) : { ok: false, error: 'model' };
   scope.postMessage({ id, verdict, backend: activeBackend() });
 }
 

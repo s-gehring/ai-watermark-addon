@@ -5,7 +5,7 @@ import { prepare } from './inference';
 import { PageBudget } from './page-budget';
 import { PlatformLookup } from './platform-lookup';
 import { firstResult } from './queue';
-import { JobBoard, Lane, type Job, type Requester } from './scheduler';
+import { JobBoard, Lane, type Asker, type Job } from './scheduler';
 import { forgetTab, updateTabStats } from './tab-stats';
 import type { EncodedImage } from './worker';
 
@@ -50,48 +50,43 @@ async function fetchBytes(url: string, maxBytes = MAX_BYTES): Promise<EncodedIma
   }
 }
 
-interface Request {
-  url: string;
-  page: string;
-  bytes?: ArrayBuffer;
-  original?: string[];
-}
+type ClassifyRequest = Extract<BackgroundRequest, { type: 'classify' }>;
 
-function fetchOriginal(candidates: string[], page: string, { tabId, frameId }: Requester, job: Job): Promise<EncodedImage | null> {
+function fetchOriginal(candidates: string[], job: Job): Promise<EncodedImage | null> {
   const load = () => firstResult(candidates, (candidate) => fetchBytes(candidate, MAX_ORIGINAL_BYTES));
-  return originals.run(job, () => originalBudget.load(tabId, frameId, page, load));
+  return originals.run(job, () => {
+    const [{ tabId, frameId, page }] = job.requesters;
+    return originalBudget.load(tabId, frameId, page, load);
+  });
 }
 
-async function classify({ url, page, bytes, original }: Request, requester: Requester, job: Job): Promise<Verdict> {
+async function classify({ url, bytes, original }: ClassifyRequest, job: Job): Promise<Verdict> {
   await settingsReady;
-  const [fetched, larger] = await Promise.all([
-    bytes ? { bytes, type: '' } : fetchBytes(url),
-    original ? fetchOriginal(original, page, requester, job) : null,
-  ]);
+  const [fetched, larger] = await Promise.all([bytes ? { bytes, type: '' } : fetchBytes(url), original ? fetchOriginal(original, job) : null]);
   if (job.dropped) return CANCELLED;
   if (!fetched) return { ok: false, error: 'fetch' };
   if (fetched.type.includes('svg')) return { ok: false, error: 'unsupported' };
   const { checkMetadata, checkWatermark } = settings!;
-  const held = await prepare(fetched, larger, { checkMetadata, checkWatermark });
-  if ('ok' in held) return held;
-  const verdict = await inference.run(job, held.score);
+  const prepared = await prepare(fetched, larger, { checkMetadata, checkWatermark });
+  if ('ok' in prepared) return prepared;
+  const verdict = await inference.run(job, prepared.score);
   if (verdict) return verdict;
-  held.discard();
+  prepared.discard();
   return CANCELLED;
 }
 
-function classifyCached(request: Request, requester: Requester): Promise<Verdict> {
+function classifyCached(request: ClassifyRequest, asker: Asker): Promise<Verdict> {
   const hit = cache.get(request.url);
   if (hit) return Promise.resolve(hit);
-  return board.join(request.url, requester, async (job) => {
-    const verdict = await classify(request, requester, job);
+  return board.join(request.url, asker, async (job) => {
+    const verdict = await classify(request, job);
     if (verdict.ok || verdict.error === 'unsupported' || verdict.error === 'decode') cache.set(request.url, verdict);
     return verdict;
   });
 }
 
 browser.tabs.onRemoved.addListener((tabId) => {
-  board.leave((requester) => requester.tabId === tabId);
+  board.leaveTab(tabId);
   forgetTab(tabId);
   originalBudget.forgetTab(tabId);
   labelBudget.forgetTab(tabId);
@@ -100,16 +95,15 @@ browser.tabs.onRemoved.addListener((tabId) => {
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as BackgroundRequest;
   const [tabId, frameId] = [sender.tab?.id ?? -1, sender.frameId ?? 0];
-  const sameFrame = (requester: Requester) => requester.tabId === tabId && requester.frameId === frameId;
   if (request?.type === 'classify') {
-    return classifyCached(request, { tabId, frameId, id: request.id, inView: true });
+    return classifyCached(request, { tabId, frameId, id: request.id, page: request.page });
   }
   if (request?.type === 'out-of-view') {
     board.setOutOfView(tabId, frameId, new Set(request.ids));
     return undefined;
   }
-  if (request?.type === 'page-gone') {
-    board.leave(sameFrame);
+  if (request?.type === 'drop-requests') {
+    board.leaveFrame(tabId, frameId);
     return undefined;
   }
   if (request?.type === 'platform-labels') {
@@ -117,7 +111,7 @@ browser.runtime.onMessage.addListener((message: unknown, sender) => {
   }
   if (request?.type === 'page-stats' && sender.tab?.id !== undefined) {
     if (request.initial) {
-      board.leave(sameFrame);
+      board.leaveFrame(tabId, frameId);
       originalBudget.reset(tabId, frameId);
       labelBudget.reset(tabId, frameId);
     }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Job, JobBoard, Lane, type Requester } from '../../src/background/scheduler';
+import { Job, JobBoard, Lane, type Asker, type Requester } from '../../src/background/scheduler';
 
-const requester = (tabId: number, id = 0, frameId = 0, inView = true): Requester => ({ tabId, frameId, id, inView });
+const asker = (tabId: number, id = 0, frameId = 0): Asker => ({ tabId, frameId, id, page: 'https://a.test/' });
+const requester = (tabId: number, id = 0, frameId = 0, inView = true): Requester => ({ ...asker(tabId, id, frameId), inView });
 const tick = () => new Promise((resolve) => setTimeout(resolve));
 
 function jobFor(order: number, ...requesters: Requester[]): Job {
@@ -36,7 +37,7 @@ describe('JobBoard', () => {
       await tick();
       return 'verdict';
     };
-    const results = [board.join('a', requester(1), start), board.join('a', requester(2), start)];
+    const results = [board.join('a', asker(1), start), board.join('a', asker(2), start)];
     expect(await Promise.all(results)).toEqual(['verdict', 'verdict']);
     expect(started).toHaveLength(1);
     expect(started[0].requesters.map((r) => r.tabId)).toEqual([1, 2]);
@@ -46,8 +47,8 @@ describe('JobBoard', () => {
     const board = new JobBoard<number>();
     let runs = 0;
     const start = async () => ++runs;
-    expect(await board.join('a', requester(1), start)).toBe(1);
-    expect(await board.join('a', requester(1), start)).toBe(2);
+    expect(await board.join('a', asker(1), start)).toBe(1);
+    expect(await board.join('a', asker(1), start)).toBe(2);
   });
 
   it('drops a job when its last requester leaves and keeps it while one remains', () => {
@@ -57,12 +58,15 @@ describe('JobBoard', () => {
       jobs.push(job);
       return new Promise<void>(() => {});
     };
-    void board.join('shared', requester(1), start);
-    void board.join('shared', requester(2), start);
-    void board.join('own', requester(1), start);
-    board.leave((r) => r.tabId === 1);
-    expect(jobs.map((job) => job.dropped)).toEqual([false, true]);
+    void board.join('shared', asker(1), start);
+    void board.join('shared', asker(2), start);
+    void board.join('own', asker(1), start);
+    void board.join('frame', asker(1, 0, 3), start);
+    board.leaveFrame(1, 0);
+    expect(jobs.map((job) => job.dropped)).toEqual([false, true, false]);
     expect(jobs[0].requesters.map((r) => r.tabId)).toEqual([2]);
+    board.leaveTab(1);
+    expect(jobs.map((job) => job.dropped)).toEqual([false, true, true]);
   });
 
   it('starts a new job for a key whose job was dropped', () => {
@@ -72,9 +76,9 @@ describe('JobBoard', () => {
       jobs.push(job);
       return new Promise<void>(() => {});
     };
-    void board.join('a', requester(1), start);
-    board.leave(() => true);
-    void board.join('a', requester(1), start);
+    void board.join('a', asker(1), start);
+    board.leaveTab(1);
+    void board.join('a', asker(1), start);
     expect(jobs.map((job) => job.dropped)).toEqual([true, false]);
   });
 
@@ -85,13 +89,31 @@ describe('JobBoard', () => {
       jobs.push(job);
       return new Promise<void>(() => {});
     };
-    void board.join('a', requester(1, 7), start);
-    void board.join('b', requester(1, 8), start);
-    void board.join('c', requester(1, 7, 3), start);
+    void board.join('a', asker(1, 7), start);
+    void board.join('b', asker(1, 8), start);
+    void board.join('c', asker(1, 7, 3), start);
     board.setOutOfView(1, 0, new Set([7]));
     expect(jobs.map((job) => job.requesters[0].inView)).toEqual([false, true, true]);
     board.setOutOfView(1, 0, new Set());
     expect(jobs.map((job) => job.requesters[0].inView)).toEqual([true, true, true]);
+  });
+
+  it('applies what a frame reported to a request that arrives later, until the frame leaves', () => {
+    const board = new JobBoard<void>();
+    const inView: boolean[] = [];
+    const start = (job: Job) => {
+      inView.push(job.requesters[0].inView);
+      return new Promise<void>(() => {});
+    };
+    board.setOutOfView(1, 0, new Set([7]));
+    void board.join('late', asker(1, 7), start);
+    void board.join('other frame', asker(1, 7, 3), start);
+    board.leaveFrame(1, 0);
+    void board.join('next page', asker(1, 7), start);
+    board.setOutOfView(2, 0, new Set([7]));
+    board.leaveTab(2);
+    void board.join('reopened tab', asker(2, 7), start);
+    expect(inView).toEqual([false, true, true, true]);
   });
 });
 

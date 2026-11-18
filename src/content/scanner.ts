@@ -1,4 +1,4 @@
-import { isFlagged, isPossible, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
+import { CANCELLED, isFlagged, isPossible, type BackgroundRequest, type FrameStats, type Verdict } from '../shared/messages';
 import { possibleFrom, type Settings } from '../shared/settings';
 import { hasBackgroundImage, imageUrlOf, isLargeEnough, knownOriginals, largerVariantsOf } from './candidates';
 import { shadowRootOf } from './dom';
@@ -65,6 +65,7 @@ export class Scanner {
     removeEventListener('resize', this.onResize);
     clearTimeout(this.reportTimer);
     this.reportTimer = 0;
+    this.checkedUrl = new WeakMap();
     this.inView.clear();
     this.pendingRoots = [];
     this.layer.clear();
@@ -74,19 +75,23 @@ export class Scanner {
     this.stop();
     if (settings.checkMetadata !== this.settings.checkMetadata || settings.checkWatermark !== this.settings.checkWatermark) {
       this.verdicts.clear();
+      this.dropRequests();
     }
     this.settings = settings;
-    this.checkedUrl = new WeakMap();
     this.start();
   }
 
   leave(): void {
     this.stop();
+    this.dropRequests();
+  }
+
+  private dropRequests(): void {
     if (!this.awaited.size) return;
     for (const url of this.awaited.keys()) this.verdicts.delete(url);
     this.awaited.clear();
     this.reported.clear();
-    notify({ type: 'page-gone' });
+    notify({ type: 'drop-requests' });
   }
 
   private readonly onLoad = (event: Event) => {
@@ -113,6 +118,10 @@ export class Scanner {
     if (this.reportTimer || !this.awaited.size) return;
     this.reportTimer = window.setTimeout(() => {
       this.reportTimer = 0;
+      if (this.discovering) {
+        this.scheduleReport();
+        return;
+      }
       const ids = outOfView(
         this.awaited,
         Array.from(this.inView, (element) => this.checkedUrl.get(element)),
@@ -199,13 +208,16 @@ export class Scanner {
     this.scheduleReport();
     this.layer.set(element, { kind: 'pending' });
     const label = this.settings.checkPlatform ? (this.platformLabels?.verdictFor(url) ?? null) : null;
-    labelFirst(label, () => this.verdictFor(url, element), LABEL_GRACE_MS, (verdict) => {
+    const check = () => (this.checkedUrl.get(element) === url ? this.verdictFor(url, element) : Promise.resolve(CANCELLED));
+    labelFirst(label, check, LABEL_GRACE_MS, (verdict) => {
       if (this.checkedUrl.get(element) !== url) return;
-      if (!verdict.ok && verdict.error === 'cancelled') {
-        this.forget(element);
-        if (this.inView.has(element)) this.consider(element);
-      } else if (!verdict.ok) {
-        this.layer.set(element, { kind: 'failed', error: verdict.error });
+      if (!verdict.ok) {
+        if (verdict.error === 'cancelled') {
+          this.forget(element);
+          if (this.inView.has(element)) this.consider(element);
+        } else {
+          this.layer.set(element, { kind: 'failed', error: verdict.error });
+        }
       } else if (verdict.source === 'model' && !isFlagged(verdict, this.settings.threshold)) {
         const possible = isPossible(verdict, this.settings.threshold, possibleFrom(this.settings));
         this.layer.set(element, { kind: possible ? 'possible' : 'clean', verdict });
