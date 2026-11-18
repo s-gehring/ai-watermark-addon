@@ -194,6 +194,37 @@ describe('couldBeSourceOf', () => {
   });
 });
 
+describe('imageUrlOf', () => {
+  class FakeImage {
+    complete = true;
+    currentSrc = 'https://a.test/photo.jpg';
+    src = '';
+    constructor(
+      readonly naturalWidth: number,
+      readonly naturalHeight: number,
+    ) {}
+  }
+  const image = (width: number, height: number, change: Partial<FakeImage> = {}) =>
+    Object.assign(new FakeImage(width, height), change) as unknown as Element;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads the address of a loaded image and waits for one that still loads', () => {
+    vi.stubGlobal('HTMLImageElement', FakeImage);
+    expect(imageUrlOf(image(800, 600), false)).toBe('https://a.test/photo.jpg');
+    expect(imageUrlOf(image(800, 600, { complete: false }), false)).toBeNull();
+    expect(imageUrlOf(image(0, 0), false)).toBeNull();
+  });
+
+  it('skips placeholders of a few pixels that a page swaps for the image later', () => {
+    vi.stubGlobal('HTMLImageElement', FakeImage);
+    expect(imageUrlOf(image(1, 1), false)).toBeNull();
+    expect(imageUrlOf(image(20, 13), false)).toBeNull();
+    expect(imageUrlOf(image(400, 20), false)).toBe('https://a.test/photo.jpg');
+    expect(imageUrlOf(image(32, 32), false)).toBe('https://a.test/photo.jpg');
+  });
+});
+
 describe('background images', () => {
   const element = {} as Element;
   const styled = (backgroundImage: string) => vi.stubGlobal('getComputedStyle', () => ({ backgroundImage }));

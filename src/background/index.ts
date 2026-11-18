@@ -1,10 +1,11 @@
 import { LruCache } from '../shared/lru';
-import type { BackgroundRequest, Verdict } from '../shared/messages';
+import { CANCELLED, type BackgroundRequest, type Verdict } from '../shared/messages';
 import { loadSettings, onSettingsChanged, type Settings } from '../shared/settings';
-import { evaluate } from './inference';
+import { prepare } from './inference';
 import { PageBudget } from './page-budget';
 import { PlatformLookup } from './platform-lookup';
-import { firstResult, TaskQueue } from './queue';
+import { firstResult } from './queue';
+import { JobBoard, Lane, type Asker, type Job } from './scheduler';
 import { forgetTab, updateTabStats } from './tab-stats';
 import type { EncodedImage } from './worker';
 
@@ -14,23 +15,33 @@ const MAX_ORIGINAL_BYTES_PER_PAGE = 64 * 1024 * 1024;
 const MAX_LABEL_REQUESTS_PER_PAGE = 10;
 
 const cache = new LruCache<string, Verdict>(2000);
-const inflight = new Map<string, Promise<Verdict>>();
-const originals = new TaskQueue(2);
+const board = new JobBoard<Verdict>();
+const inference = new Lane(activeTabs);
+const originals = new Lane(activeTabs, 2);
 const originalBudget = new PageBudget(MAX_ORIGINAL_BYTES_PER_PAGE);
 const labelBudget = new PageBudget(MAX_LABEL_REQUESTS_PER_PAGE);
 const platformLookup = new PlatformLookup();
 
 let settings: Settings | null = null;
+let checksVersion = 0;
 const settingsReady = loadSettings().then((s) => (settings = s));
 onSettingsChanged((s) => {
   const checksToggled = settings && (settings.checkMetadata !== s.checkMetadata || settings.checkWatermark !== s.checkWatermark);
   settings = s;
-  if (checksToggled) cache.clear();
+  if (!checksToggled) return;
+  cache.clear();
+  checksVersion++;
 });
 
-async function fetchBytes(url: string, maxBytes = MAX_BYTES): Promise<EncodedImage | null> {
+async function activeTabs(): Promise<ReadonlySet<number>> {
+  const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
+  return new Set(tabs.map((tab) => tab.id ?? -1));
+}
+
+async function fetchBytes(url: string, dropped: AbortSignal, maxBytes = MAX_BYTES): Promise<EncodedImage | null> {
   try {
-    const res = await fetch(url, { credentials: 'include', cache: 'force-cache', signal: AbortSignal.timeout(20_000) });
+    const signal = AbortSignal.any([dropped, AbortSignal.timeout(20_000)]);
+    const res = await fetch(url, { credentials: 'include', cache: 'force-cache', signal });
     if (!res.ok || Number(res.headers.get('content-length')) > maxBytes) {
       void res.body?.cancel();
       return null;
@@ -43,46 +54,48 @@ async function fetchBytes(url: string, maxBytes = MAX_BYTES): Promise<EncodedIma
   }
 }
 
-interface PageView {
-  tabId: number;
-  frameId: number;
-  page: string;
+type ClassifyRequest = Extract<BackgroundRequest, { type: 'classify' }>;
+
+function fetchOriginal(candidates: string[], job: Job): Promise<EncodedImage | null> {
+  const load = () => firstResult(candidates, (candidate) => fetchBytes(candidate, job.signal, MAX_ORIGINAL_BYTES));
+  return originals.run(job, () => {
+    const [{ tabId, frameId, page }] = job.requesters;
+    return originalBudget.load(tabId, frameId, page, load);
+  });
 }
 
-function fetchOriginal(candidates: string[], { tabId, frameId, page }: PageView): Promise<EncodedImage | null> {
-  const load = () => firstResult(candidates, (candidate) => fetchBytes(candidate, MAX_ORIGINAL_BYTES));
-  return originals.run(() => originalBudget.load(tabId, frameId, page, load));
-}
-
-async function classify(url: string, view: PageView, provided?: ArrayBuffer, original?: string[]): Promise<Verdict> {
+async function classify({ url, bytes, original }: ClassifyRequest, job: Job): Promise<Verdict> {
   await settingsReady;
   const [fetched, larger] = await Promise.all([
-    provided ? { bytes: provided, type: '' } : fetchBytes(url),
-    original ? fetchOriginal(original, view) : null,
+    bytes ? { bytes, type: '' } : fetchBytes(url, job.signal),
+    original ? fetchOriginal(original, job) : null,
   ]);
+  if (job.dropped) return CANCELLED;
   if (!fetched) return { ok: false, error: 'fetch' };
   if (fetched.type.includes('svg')) return { ok: false, error: 'unsupported' };
   const { checkMetadata, checkWatermark } = settings!;
-  return evaluate(fetched, larger, { checkMetadata, checkWatermark });
+  const prepared = await prepare(fetched, larger, { checkMetadata, checkWatermark });
+  if ('ok' in prepared) return prepared;
+  const verdict = await inference.run(job, prepared.score);
+  if (verdict) return verdict;
+  prepared.discard();
+  return CANCELLED;
 }
 
-function classifyCached(url: string, view: PageView, bytes?: ArrayBuffer, original?: string[]): Promise<Verdict> {
-  const hit = cache.get(url);
+function classifyCached(request: ClassifyRequest, asker: Asker): Promise<Verdict> {
+  const hit = cache.get(request.url);
   if (hit) return Promise.resolve(hit);
-  let pending = inflight.get(url);
-  if (!pending) {
-    pending = classify(url, view, bytes, original)
-      .then((verdict) => {
-        if (verdict.ok || verdict.error === 'unsupported' || verdict.error === 'decode') cache.set(url, verdict);
-        return verdict;
-      })
-      .finally(() => inflight.delete(url));
-    inflight.set(url, pending);
-  }
-  return pending;
+  const version = checksVersion;
+  return board.join(`${version} ${request.url}`, asker, async (job) => {
+    const verdict = await classify(request, job);
+    const final = verdict.ok || verdict.error === 'unsupported' || verdict.error === 'decode';
+    if (final && version === checksVersion) cache.set(request.url, verdict);
+    return verdict;
+  });
 }
 
 browser.tabs.onRemoved.addListener((tabId) => {
+  board.leaveTab(tabId);
   forgetTab(tabId);
   originalBudget.forgetTab(tabId);
   labelBudget.forgetTab(tabId);
@@ -90,20 +103,29 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 browser.runtime.onMessage.addListener((message: unknown, sender) => {
   const request = message as BackgroundRequest;
+  const [tabId, frameId] = [sender.tab?.id ?? -1, sender.frameId ?? 0];
   if (request?.type === 'classify') {
-    const view = { tabId: sender.tab?.id ?? -1, frameId: sender.frameId ?? 0, page: request.page };
-    return classifyCached(request.url, view, request.bytes, request.original);
+    return classifyCached(request, { tabId, frameId, id: request.id, page: request.page });
+  }
+  if (request?.type === 'out-of-view') {
+    board.setOutOfView(tabId, frameId, new Set(request.ids));
+    return undefined;
+  }
+  if (request?.type === 'drop-requests') {
+    board.leaveFrame(tabId, frameId);
+    return undefined;
   }
   if (request?.type === 'platform-labels') {
-    const [tabId, frameId] = [sender.tab?.id ?? -1, sender.frameId ?? 0];
     return platformLookup.labels(request.platform, request.keys, () => labelBudget.take(tabId, frameId, request.page));
   }
   if (request?.type === 'page-stats' && sender.tab?.id !== undefined) {
     if (request.initial) {
-      originalBudget.reset(sender.tab.id, sender.frameId ?? 0);
-      labelBudget.reset(sender.tab.id, sender.frameId ?? 0);
+      if (frameId === 0) board.leaveTab(tabId);
+      else board.leaveFrame(tabId, frameId);
+      originalBudget.reset(tabId, frameId);
+      labelBudget.reset(tabId, frameId);
     }
-    void updateTabStats(sender.tab.id, sender.frameId ?? 0, request.stats, request.initial).catch((error) =>
+    void updateTabStats(tabId, frameId, request.stats, request.initial).catch((error) =>
       console.error('[ai-watermark] stats update failed', error),
     );
   }

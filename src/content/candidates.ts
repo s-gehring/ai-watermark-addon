@@ -17,10 +17,12 @@ export function isLargeEnough(rect: { width: number; height: number }, minSize: 
   return Math.min(rect.width, rect.height) >= minSize;
 }
 
+const MIN_NATURAL_SIDE = 32;
+
 export function imageUrlOf(element: Element, includeBackgrounds: boolean): string | null {
   let url: string | null = null;
   if (element instanceof HTMLImageElement) {
-    if (!element.complete || element.naturalWidth === 0) return null;
+    if (!element.complete || Math.max(element.naturalWidth, element.naturalHeight) < MIN_NATURAL_SIDE) return null;
     url = element.currentSrc || element.src;
   } else if (includeBackgrounds) {
     const background = styleOf(element)?.backgroundImage;

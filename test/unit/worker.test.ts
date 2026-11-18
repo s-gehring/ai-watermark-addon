@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PixelImage } from '../../src/background/preprocess';
-import type { WorkerRequest, WorkerResponse } from '../../src/background/worker';
+import type { WorkerCommand, WorkerRequest, WorkerResponse } from '../../src/background/worker';
 
 const classifier = vi.hoisted(() => ({ activeBackend: () => 'wasm', decodeImage: vi.fn(), reencodeAsJpeg: vi.fn(), scoreImage: vi.fn() }));
 const synthid = vi.hoisted(() => ({ detectSynthId: vi.fn(), searchCroppedSynthId: vi.fn() }));
@@ -16,20 +16,36 @@ vi.mock('../../src/background/bytedance-watermark', () => ({ detectBytedanceWate
 vi.mock('../../src/background/visible-watermark', () => ({ detectVisibleWatermark: noMark }));
 
 const REENCODED = { width: 1, height: 1, channels: 4, data: [0, 0, 0, 255] } satisfies PixelImage;
-const scope = { postMessage: vi.fn(), onmessage: null as ((event: { data: WorkerRequest }) => void) | null, location: { href: 'https://worker.test/worker.js' } };
+type Scored = Extract<WorkerResponse, { verdict: unknown }>;
+
+const scope = {
+  postMessage: vi.fn(),
+  onmessage: null as ((event: { data: WorkerRequest | WorkerCommand }) => void) | null,
+  location: { href: 'https://worker.test/worker.js' },
+};
 let nextId = 0;
 
 const encoded = (width: number, height: number) => ({ bytes: new Uint16Array([width, height]).buffer as ArrayBuffer, type: 'image/png' });
 
-function run(displayed: [number, number], original: [number, number] | null, checkWatermark = false, checkMetadata = false): Promise<WorkerResponse> {
+function send(displayed: [number, number], original: [number, number] | null, checkWatermark = false, checkMetadata = false): number {
   const id = nextId++;
+  scope.onmessage!({
+    data: { id, ...encoded(...displayed), original: original && encoded(...original), checkMetadata, checkWatermark },
+  });
+  return id;
+}
+
+function run(...image: Parameters<typeof send>): Promise<Scored> {
   return new Promise((resolve) => {
-    scope.postMessage.mockImplementation((response: WorkerResponse) => response.id === id && resolve(response));
-    scope.onmessage!({
-      data: { id, ...encoded(...displayed), original: original && encoded(...original), checkMetadata, checkWatermark },
+    scope.postMessage.mockImplementation((response: WorkerResponse) => {
+      if ('held' in response) scope.onmessage!({ data: { id: response.id, command: 'score' } });
+      else resolve(response);
     });
+    send(...image);
   });
 }
+
+const answers = () => scope.postMessage.mock.calls.map(([response]) => response as WorkerResponse);
 
 const sizeOf = ({ width, height }: PixelImage) => [width, height];
 
@@ -41,6 +57,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  scope.postMessage.mockReset();
   classifier.decodeImage.mockImplementation(async (blob: Blob): Promise<PixelImage> => {
     const [width, height] = new Uint16Array(await blob.arrayBuffer());
     return { width, height, channels: 4, data: new Uint8ClampedArray(width * height * 4) };
@@ -78,6 +95,30 @@ describe('worker', () => {
     await run([...displayed], original && [...original]);
     expect(classifier.reencodeAsJpeg).not.toHaveBeenCalled();
     expect(sizeOf(classifier.scoreImage.mock.calls[0][0])).toEqual([...displayed]);
+  });
+
+  it('answers an image with AI metadata at once and holds every other image until it is told to score', async () => {
+    metadata.detectAiMetadata.mockReturnValueOnce('comfyui');
+    const labeled = send([400, 300], null, false, true);
+    const plain = send([400, 300], null, false, true);
+    expect(answers()).toEqual([
+      { id: labeled, verdict: { ok: true, score: 1, source: 'metadata', reason: 'comfyui' }, backend: 'wasm' },
+      { id: plain, held: true },
+    ]);
+    await Promise.resolve();
+    expect(classifier.scoreImage).not.toHaveBeenCalled();
+    scope.onmessage!({ data: { id: plain, command: 'score' } });
+    await vi.waitFor(() => expect(answers()).toHaveLength(3));
+    expect(answers()[2]).toMatchObject({ id: plain, verdict: { ok: true, source: 'model' } });
+  });
+
+  it('forgets a held image that is dropped', async () => {
+    const dropped = send([400, 300], null);
+    scope.onmessage!({ data: { id: dropped, command: 'drop' } });
+    scope.onmessage!({ data: { id: dropped, command: 'score' } });
+    await vi.waitFor(() => expect(answers()).toHaveLength(2));
+    expect(answers()[1]).toMatchObject({ id: dropped, verdict: { ok: false, error: 'model' } });
+    expect(classifier.decodeImage).not.toHaveBeenCalled();
   });
 
   it('answers with a model error when a check throws, and keeps answering afterwards', async () => {

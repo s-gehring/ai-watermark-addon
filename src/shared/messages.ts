@@ -35,7 +35,7 @@ export type Platform = 'pixiv' | 'deviantart' | 'commons';
 
 export type CheckStatus = 'clear' | 'off';
 
-export type VerdictError = 'fetch' | 'decode' | 'model' | 'unsupported';
+export type VerdictError = 'fetch' | 'decode' | 'model' | 'unsupported' | 'cancelled';
 
 export type Verdict =
   | { ok: true; score: number; source: 'model'; models: number[]; metadata: CheckStatus; watermark: CheckStatus }
@@ -54,7 +54,9 @@ export interface FrameStats {
 }
 
 export type BackgroundRequest =
-  | { type: 'classify'; url: string; page: string; bytes?: ArrayBuffer; original?: string[] }
+  | { type: 'classify'; id: number; url: string; page: string; bytes?: ArrayBuffer; original?: string[] }
+  | { type: 'out-of-view'; ids: number[] }
+  | { type: 'drop-requests' }
   | { type: 'platform-labels'; platform: 'pixiv' | 'commons'; keys: string[]; page: string }
   | { type: 'page-stats'; stats: FrameStats; initial: boolean };
 
@@ -63,6 +65,8 @@ export type ContentRequest = { type: 'get-status' };
 export interface PageStatus {
   active: boolean;
 }
+
+export const CANCELLED: Verdict = { ok: false, error: 'cancelled' };
 
 export const EMPTY_STATS: Readonly<FrameStats> = { flagged: 0, possible: 0, clean: 0, pending: 0, failed: 0 };
 

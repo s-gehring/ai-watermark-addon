@@ -78,7 +78,7 @@ export type BadgeState =
   | { kind: 'ai'; verdict: OkVerdict }
   | { kind: 'possible'; verdict: ModelVerdict }
   | { kind: 'clean'; verdict: ModelVerdict }
-  | { kind: 'failed'; error: VerdictError };
+  | { kind: 'failed'; error: Exclude<VerdictError, 'cancelled'> };
 
 export interface DisplayOptions {
   showScore: boolean;
