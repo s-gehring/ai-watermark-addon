@@ -14,6 +14,7 @@ export interface HeldImage {
 }
 
 type Answer = Verdict | 'held' | Lost;
+type Backend = WorkerResponse['backend'];
 
 const FAILED: Verdict = { ok: false, error: 'model' };
 
@@ -22,9 +23,15 @@ let nextId = 0;
 let stallTimer: ReturnType<typeof setTimeout> | undefined;
 let keepAwake: ReturnType<typeof setInterval> | undefined;
 let stalled = false;
-const pending = new Map<number, (answer: Answer) => void>();
+let backend: Backend | null = null;
+interface Open {
+  resolve(answer: Answer): void;
+  reported: Backend | null;
+}
+
+const pending = new Map<number, Open>();
 const scoring = new Set<number>();
-const lostWith = new WeakMap<Worker, Verdict | Lost>();
+const lost = new WeakSet<Worker>();
 const stalledBefore = browser.storage.session.get(STALLED_KEY).then(
   (stored) => {
     stalled ||= stored[STALLED_KEY] === true;
@@ -45,19 +52,26 @@ function watchForStall(): void {
   keepAwake = setInterval(stayAwake, KEEP_AWAKE_MS);
 }
 
-function onStall(): void {
-  const onWasm = stalled;
-  stalled = true;
-  void browser.storage.session.set({ [STALLED_KEY]: true }).catch(() => {});
-  discardWorker('gave no answer in time', onWasm ? FAILED : WORKER_LOST);
+function settle(id: number, answer: Answer): void {
+  pending.get(id)?.resolve(answer);
+  pending.delete(id);
 }
 
-function discardWorker(reason: string, answer: Verdict | Lost): void {
+function onStall(): void {
+  stalled = true;
+  void browser.storage.session.set({ [STALLED_KEY]: true }).catch(() => {});
+  const [id, hanging] = pending.entries().next().value ?? [];
+  if (id !== undefined && hanging?.reported !== 'webgpu') settle(id, FAILED);
+  discardWorker('gave no answer in time');
+}
+
+function discardWorker(reason: string): void {
   console.error('[ai-watermark] worker', reason);
-  if (worker) lostWith.set(worker, answer);
+  if (worker) lost.add(worker);
   worker?.terminate();
   worker = null;
-  for (const resolve of pending.values()) resolve(answer);
+  backend = null;
+  for (const { resolve } of pending.values()) resolve(WORKER_LOST);
   pending.clear();
   scoring.clear();
   watchForStall();
@@ -67,18 +81,18 @@ function ensureWorker(): Worker {
   if (worker) return worker;
   const created = new Worker(browser.runtime.getURL(stalled ? 'worker.js?backend=wasm' : 'worker.js'), { type: 'module' });
   created.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
-    pending.get(data.id)?.('held' in data ? 'held' : data.verdict);
-    pending.delete(data.id);
+    backend = data.backend;
+    settle(data.id, 'held' in data ? 'held' : data.verdict);
     if (scoring.delete(data.id) || !scoring.size) watchForStall();
   };
-  created.onerror = (event) => discardWorker(`failed: ${event.message}`, WORKER_LOST);
+  created.onerror = (event) => discardWorker(`failed: ${event.message}`);
   worker = created;
   return created;
 }
 
 function ask(message: WorkerRequest | WorkerCommand, transfer: Transferable[] = []): Promise<Answer> {
   return new Promise((resolve) => {
-    pending.set(message.id, resolve);
+    pending.set(message.id, { resolve, reported: backend });
     const scores = 'command' in message;
     if (scores) scoring.add(message.id);
     if (scores || pending.size === 1) watchForStall();
@@ -94,8 +108,7 @@ export async function prepare(image: EncodedImage, original: EncodedImage | null
   if (answer !== 'held') return answer;
   return {
     score: async () => {
-      const lost = lostWith.get(holder);
-      if (lost) return lost;
+      if (lost.has(holder)) return WORKER_LOST;
       const verdict = await ask({ id, command: 'score' });
       return verdict === 'held' ? FAILED : verdict;
     },

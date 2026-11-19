@@ -19,7 +19,12 @@ const ADDON_ID = 'ai-watermark-addon@s-gehring.github.io';
 const ADDON_UUID = '6f0c3a52-9a51-4c1e-8f7e-2f6f5d1b7a10';
 const DIST = fileURLToPath(new URL('../../dist', import.meta.url));
 const IDLE_TIMEOUT_PREF = 'extensions.background.idle.timeout';
-const NO_SCORE_UNLESS_WASM = `if (!self.location.search.includes('backend=wasm')) self.addEventListener('message', (event) => { if (event.data.command === 'score') event.stopImmediatePropagation(); });\n`;
+const HANGS_ON_WEBGPU = `if (!self.location.search.includes('backend=wasm')) {
+  self.addEventListener('message', (event) => { if (event.data.command === 'score') event.stopImmediatePropagation(); });
+  const post = self.postMessage.bind(self);
+  self.postMessage = (message) => post({ ...message, backend: 'webgpu' });
+}
+`;
 
 const XMP_AI = `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/" Iptc4xmpExt:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"/></rdf:RDF></x:xmpmeta>`;
 
@@ -845,10 +850,14 @@ describe('add-on whose model runs get no answer until the worker runs on WASM', 
     }, `/plain.jpg${query}`);
   }
 
+  async function results(): Promise<{ clean: number; failed: number }> {
+    return { clean: await badgeCount('.badge.clean'), failed: await badgeCount('.badge.failed') };
+  }
+
   beforeAll(async () => {
     hanging = mkdtempSync(join(tmpdir(), 'ai-watermark-hanging-'));
     cpSync(DIST, hanging, { recursive: true });
-    writeFileSync(join(hanging, 'worker.js'), NO_SCORE_UNLESS_WASM + readFileSync(join(hanging, 'worker.js'), 'utf8'));
+    writeFileSync(join(hanging, 'worker.js'), HANGS_ON_WEBGPU + readFileSync(join(hanging, 'worker.js'), 'utf8'));
     await setIdleTimeout(15_000);
     await driver.installAddon(hanging, true);
   }, 60_000);
@@ -864,13 +873,14 @@ describe('add-on whose model runs get no answer until the worker runs on WASM', 
     await addImage('?hanging=2');
     await addImage('?hanging=3');
     await driver.wait(async () => (await badgeCount('.badge.pending')) === 3, 30_000);
-    await driver.wait(async () => (await badgeCount('.badge.clean')) === 3, 90_000);
-    expect(await badgeCount('.badge.failed')).toBe(0);
+    await driver.wait(async () => (await badgeCount('.badge.pending')) === 0, 90_000);
+    expect(await results()).toEqual({ clean: 3, failed: 0 });
   }, 150_000);
 
   it('goes straight to WASM after the background page was suspended', async () => {
     await driver.wait(async () => (await backgroundState()) === 'stopped', 60_000);
     await addImage('?hanging=4');
-    await driver.wait(async () => (await badgeCount('.badge.clean')) === 4, 30_000);
+    await driver.wait(async () => Object.values(await results()).reduce((sum, count) => sum + count) === 4, 30_000);
+    expect(await results()).toEqual({ clean: 4, failed: 0 });
   }, 120_000);
 });

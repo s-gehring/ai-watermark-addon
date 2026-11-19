@@ -130,8 +130,8 @@ function load(): Promise<Runtime> {
   return loading;
 }
 
-export function activeBackend(): Backend | null {
-  return active?.backend ?? null;
+export function activeBackend(): Backend {
+  return active?.backend ?? (wantsGpu() ? 'webgpu' : 'wasm');
 }
 
 export async function decodeImage(blob: Blob): Promise<PixelImage> {

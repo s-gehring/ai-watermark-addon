@@ -37,7 +37,7 @@ export interface WorkerCommand {
   command: 'score' | 'drop';
 }
 
-export type WorkerResponse = { id: number; verdict: Verdict; backend: Backend | null } | { id: number; held: true };
+export type WorkerResponse = { id: number; backend: Backend } & ({ verdict: Verdict } | { held: true });
 
 const scope = self as unknown as {
   postMessage(message: WorkerResponse): void;
@@ -159,7 +159,7 @@ function accept(request: WorkerRequest): void {
     scope.postMessage({ id: request.id, verdict, backend: activeBackend() });
   } else {
     held.set(request.id, request);
-    scope.postMessage({ id: request.id, held: true });
+    scope.postMessage({ id: request.id, held: true, backend: activeBackend() });
   }
 }
 
