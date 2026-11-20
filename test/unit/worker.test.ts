@@ -103,7 +103,7 @@ describe('worker', () => {
     const plain = send([400, 300], null, false, true);
     expect(answers()).toEqual([
       { id: labeled, verdict: { ok: true, score: 1, source: 'metadata', reason: 'comfyui' }, backend: 'wasm' },
-      { id: plain, held: true },
+      { id: plain, held: true, backend: 'wasm' },
     ]);
     await Promise.resolve();
     expect(classifier.scoreImage).not.toHaveBeenCalled();

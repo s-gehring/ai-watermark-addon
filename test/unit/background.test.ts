@@ -38,6 +38,17 @@ function heldImage(): { image: { score: ReturnType<typeof vi.fn>; discard: Retur
   return { image: { score: vi.fn(() => scored), discard: vi.fn() }, finish };
 }
 
+function serveOriginals(size: () => number): void {
+  const displayed = () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/jpeg' } });
+  const original = () => ({ ok: true, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => new ArrayBuffer(size()) });
+  fetched.mockImplementation(async (url: string) => (url.includes('/full/') ? original() : displayed()));
+}
+
+function withOriginal(name: string): Promise<Verdict> {
+  const [url, original] = [`https://a.test/${name}.jpg`, [`https://a.test/full/${name}.jpg`]];
+  return onMessage({ type: 'classify', id: nextId++, url, page: 'https://page.test/', original }, from(1))!;
+}
+
 async function running(url: string, sender: Sender): Promise<{ answer: Promise<Verdict>; finish: () => void }> {
   const { image, finish } = heldImage();
   prepare.mockResolvedValueOnce(image);
@@ -197,6 +208,28 @@ describe('background', () => {
     expect(await sent).toEqual(FAILED);
     expect(prepare).toHaveBeenCalledTimes(1);
     expect(fetched).not.toHaveBeenCalled();
+  });
+
+  it('loads an original again without counting it when its image is checked again, but not one the page had no bytes left for', async () => {
+    serveOriginals(() => 16 * 1024 * 1024);
+    const sizes = () => prepare.mock.calls.map(([, original]) => original?.bytes.byteLength ?? 0);
+    const lostOnce = () => prepare.mockReset().mockResolvedValueOnce(WORKER_LOST).mockResolvedValue(LABELED);
+    lostOnce();
+    for (const name of ['1', '2', '3']) await withOriginal(name);
+    lostOnce();
+    await withOriginal('4');
+    expect(sizes()).toEqual([16 * 1024 * 1024, 16 * 1024 * 1024]);
+    lostOnce();
+    await withOriginal('5');
+    expect(sizes()).toEqual([0, 0]);
+  });
+
+  it('loads no more for an original again than it took the first time', async () => {
+    let loads = 0;
+    serveOriginals(() => (loads++ ? 2048 : 1024));
+    prepare.mockResolvedValueOnce(WORKER_LOST).mockResolvedValue(LABELED);
+    expect(await withOriginal('1')).toEqual(LABELED);
+    expect(prepare.mock.calls.map(([, original]) => original?.bytes.byteLength ?? 0)).toEqual([1024, 0]);
   });
 
   it('counts only the tab in front of the window that was focused last as the tab in front', async () => {

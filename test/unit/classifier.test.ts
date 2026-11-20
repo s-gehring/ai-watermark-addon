@@ -139,6 +139,15 @@ describe('backend selection', () => {
     expect(wasm.env.wasm.wasmPaths).toEqual({ wasm: 'moz-extension://x/ort/ort-wasm-simd-threaded.wasm' });
   });
 
+  it('reports the backend the first run will start on before a model is loaded', async () => {
+    await setup();
+    expect(classifier.activeBackend()).toBe('webgpu');
+    await setup({ platform: 'Win32' });
+    expect(classifier.activeBackend()).toBe('wasm');
+    await setup({ url: 'moz-extension://x/worker.js?backend=wasm' });
+    expect(classifier.activeBackend()).toBe('wasm');
+  });
+
   it('falls back to WASM when the WebGPU session cannot be created', async () => {
     gpu.createError = new Error('no adapter');
     await setup();
@@ -189,7 +198,7 @@ describe('fallback while running', () => {
     await setup();
     await classifier.scoreImage(image);
     gpu.lose({ message: 'driver reset' });
-    await vi.waitFor(() => expect(classifier.activeBackend()).toBeNull());
+    await vi.waitFor(() => expect(classifier.activeBackend()).toBe('wasm'));
     expect((await classifier.scoreImage(image)).score).toBeCloseTo(scoreOf(WASM_LOGIT));
     expect(classifier.activeBackend()).toBe('wasm');
   });

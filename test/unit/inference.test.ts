@@ -5,12 +5,15 @@ import type { WorkerCommand, WorkerRequest, WorkerResponse } from '../../src/bac
 
 class FakeWorker {
   static created: FakeWorker[] = [];
+  static gpu = true;
+  backend: WorkerResponse['backend'];
   onmessage: ((event: { data: WorkerResponse }) => void) | null = null;
   onerror: ((event: { message: string }) => void) | null = null;
   readonly requests: (WorkerRequest | WorkerCommand)[] = [];
   terminated = false;
 
   constructor(readonly url: string) {
+    this.backend = FakeWorker.gpu && !url.includes('backend=wasm') ? 'webgpu' : 'wasm';
     FakeWorker.created.push(this);
   }
 
@@ -23,11 +26,11 @@ class FakeWorker {
   }
 
   answer(index: number, verdict = CLEAN): void {
-    this.onmessage!({ data: { id: this.requests[index].id, verdict, backend: 'webgpu' } });
+    this.onmessage!({ data: { id: this.requests[index].id, verdict, backend: this.backend } });
   }
 
   hold(index: number): void {
-    this.onmessage!({ data: { id: this.requests[index].id, held: true } });
+    this.onmessage!({ data: { id: this.requests[index].id, held: true, backend: this.backend } });
   }
 }
 
@@ -47,6 +50,7 @@ const getPlatformInfo = vi.fn(async () => ({}));
 async function startBackground(): Promise<void> {
   vi.resetModules();
   FakeWorker.created = [];
+  FakeWorker.gpu = true;
   ({ prepare, WORKER_LOST: LOST, STALL_TIMEOUT_MS: timeout, KEEP_AWAKE_MS: keepAwake } = await import('../../src/background/inference'));
 }
 
@@ -150,11 +154,68 @@ describe('prepare', () => {
     const waiting = await held();
     void hanging.score();
     await vi.advanceTimersByTimeAsync(timeout);
-    expect(await waiting.score()).toBe(LOST);
+    const lost = settled(waiting.score());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lost()).toBe(LOST);
     expect(FakeWorker.created).toHaveLength(1);
   });
 
-  it('fails the waiting requests and the held images for good when the worker on WASM gives no answer either', async () => {
+  it('fails only the image whose run hangs on WASM and reports the others as lost', async () => {
+    FakeWorker.gpu = false;
+    const hanging = settled((await held()).score());
+    const waiting = await held();
+    const unanswered = settled((await request()).prepared);
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(hanging()).toEqual(FAILED);
+    expect(unanswered()).toBe(LOST);
+    const lost = settled(waiting.score());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lost()).toBe(LOST);
+    await request();
+    expect(FakeWorker.created.map((worker) => worker.url)).toEqual(['worker.js', 'worker.js?backend=wasm']);
+  });
+
+  it('fails the image whose run hangs after the worker switched to WASM by itself', async () => {
+    const first = (await held()).score();
+    await vi.advanceTimersByTimeAsync(0);
+    FakeWorker.created[0].backend = 'wasm';
+    FakeWorker.created[0].answer(1);
+    expect(await first).toEqual(CLEAN);
+    const hanging = settled((await held()).score());
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(hanging()).toEqual(FAILED);
+  });
+
+  it('checks an image again whose run started on WebGPU, whatever the worker reports while it hangs', async () => {
+    const hanging = settled((await held()).score());
+    FakeWorker.created[0].backend = 'wasm';
+    await held();
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(hanging()).toBe(LOST);
+  });
+
+  it('takes the oldest request without an answer for the one the worker hangs on', async () => {
+    FakeWorker.gpu = false;
+    const waiting = await held();
+    const oldest = settled((await request()).prepared);
+    const scored = settled(waiting.score());
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(oldest()).toEqual(FAILED);
+    expect(scored()).toBe(LOST);
+  });
+
+  it('fails the oldest request of a worker that never gave an answer, whatever the worker before it ran on', async () => {
+    await held();
+    FakeWorker.created[0].onerror!({ message: 'out of memory' });
+    const oldest = settled((await request()).prepared);
+    const next = settled((await request()).prepared);
+    await vi.advanceTimersByTimeAsync(timeout);
+    expect(FakeWorker.created[1].terminated).toBe(true);
+    expect(oldest()).toEqual(FAILED);
+    expect(next()).toBe(LOST);
+  });
+
+  it('fails the image whose run hangs on the replacement on WASM too, and reports the others as lost again', async () => {
     void (await held()).score();
     await vi.advanceTimersByTimeAsync(timeout);
     const hanging = settled((await held(1)).score());
@@ -163,8 +224,10 @@ describe('prepare', () => {
     await vi.advanceTimersByTimeAsync(timeout);
     expect(FakeWorker.created[1].terminated).toBe(true);
     expect(hanging()).toEqual(FAILED);
-    expect(unanswered()).toEqual(FAILED);
-    expect(await waiting.score()).toEqual(FAILED);
+    expect(unanswered()).toBe(LOST);
+    const lost = settled(waiting.score());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lost()).toBe(LOST);
     expect(FakeWorker.created).toHaveLength(2);
   });
 
@@ -230,7 +293,9 @@ describe('prepare', () => {
     FakeWorker.created[0].onerror!({ message: 'out of memory' });
     await vi.advanceTimersByTimeAsync(0);
     expect(running()).toBe(LOST);
-    expect(await waiting.score()).toBe(LOST);
+    const lost = settled(waiting.score());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lost()).toBe(LOST);
     expect(FakeWorker.created[0].terminated).toBe(true);
     await request();
     expect(FakeWorker.created[1].url).toBe('worker.js');

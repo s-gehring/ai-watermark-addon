@@ -20,6 +20,7 @@ const inference = new Lane(activeTabs);
 const originals = new Lane(activeTabs, 2);
 const originalBudget = new PageBudget(MAX_ORIGINAL_BYTES_PER_PAGE);
 const labelBudget = new PageBudget(MAX_LABEL_REQUESTS_PER_PAGE);
+const paidForOriginal = new WeakMap<Job, number>();
 const platformLookup = new PlatformLookup();
 
 let settings: Settings | null = null;
@@ -57,10 +58,14 @@ async function fetchBytes(url: string, dropped: AbortSignal, maxBytes = MAX_BYTE
 type ClassifyRequest = Extract<BackgroundRequest, { type: 'classify' }>;
 
 function fetchOriginal(candidates: string[], job: Job): Promise<EncodedImage | null> {
-  const load = () => firstResult(candidates, (candidate) => fetchBytes(candidate, job.signal, MAX_ORIGINAL_BYTES));
-  return originals.run(job, () => {
+  const load = (maxBytes: number) => firstResult(candidates, (candidate) => fetchBytes(candidate, job.signal, maxBytes));
+  return originals.run(job, async () => {
+    const paid = paidForOriginal.get(job);
+    if (paid) return load(paid);
     const [{ tabId, frameId, page }] = job.requesters;
-    return originalBudget.load(tabId, frameId, page, load);
+    const loaded = await originalBudget.load(tabId, frameId, page, () => load(MAX_ORIGINAL_BYTES));
+    if (loaded) paidForOriginal.set(job, loaded.bytes.byteLength);
+    return loaded;
   });
 }
 
