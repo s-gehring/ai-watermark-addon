@@ -121,4 +121,34 @@ describe('detectAiMetadata', () => {
   it('does not treat ordinary prose about sampling as generator parameters', () => {
     expect(detectAiMetadata(pngWith('Description', 'Steps to take when sampling soil'))).toBeNull();
   });
+
+  it('detects a ComfyUI node whose key shares a quote with the value before it', () => {
+    expect(detectAiMetadata(pngWith('prompt', '{"class_type":""class_type":"KSampler"}'))).toBe('comfyui');
+    expect(detectAiMetadata(pngWith('prompt', '{"class_type":"class_type":"KSampler"}'))).toBe('comfyui');
+  });
+
+  it('does not treat a class_type value without a closing quote as a ComfyUI graph', () => {
+    expect(detectAiMetadata(latin1('....tEXtprompt\x00{"class_type": "KSampler'))).toBeNull();
+  });
+
+  it('detects Stable Diffusion parameters beyond the EXIF region only within 16384 bytes of the PNG keyword', () => {
+    const chunk = (text: string) => latin1(`${'x'.repeat(600_000)}parameters\x00${text}Steps: 30, Sampler: Euler`);
+    expect(detectAiMetadata(chunk('x'.repeat(16384)))).toBe('stable-diffusion');
+    expect(detectAiMetadata(chunk('x'.repeat(16385)))).toBeNull();
+    expect(detectAiMetadata(chunk(`${'x'.repeat(16385)}parameters\x00`))).toBe('stable-diffusion');
+  });
+
+  const KB = 1024;
+  const filled = (prefix: string, unit: string, length: number) => latin1(prefix + unit.repeat(Math.ceil(length / unit.length)));
+  const utf16 = (s: string) => Buffer.from(s, 'utf16le').toString('latin1');
+
+  it.each([
+    ['an unterminated ComfyUI node name', filled('"class_type":"', 'Sampler', 512 * KB)],
+    ['an unterminated ComfyUI node name after a UTF-16 key', filled(utf16('"class_type":"'), 'Sampler', 512 * KB)],
+    ['repeated PNG parameters keywords', filled('', 'parameters\x00', 4096 * KB)],
+  ])('scans %s in under a second', (_, bytes) => {
+    const started = performance.now();
+    expect(detectAiMetadata(bytes)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
