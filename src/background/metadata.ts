@@ -8,14 +8,47 @@ const EXIF_REGION = 512 * 1024;
 const QUOTE = '(?:"|&quot;)';
 const AIGC_LABEL = new RegExp(`AIGC[\\s\\S]{0,256}?${QUOTE}Label${QUOTE}\\s*:\\s*${QUOTE}?[123]\\b`);
 
-const COMFYUI = /"class_type"\s*:\s*"(?:[^"]*Sampler[^"]*|CLIPTextEncode|CheckpointLoader\w*|UNETLoader|VAEDecode)"/;
+interface Matcher {
+  test(text: string): boolean;
+}
+
+const COMFYUI_NODE = /"class_type"\s*:\s*(?="([^"]*)")/g;
+const COMFYUI_NODE_NAME = /Sampler|^(?:CLIPTextEncode|CheckpointLoader\w*|UNETLoader|VAEDecode)$/;
+const COMFYUI: Matcher = {
+  test(text) {
+    for (const [, name] of text.matchAll(COMFYUI_NODE)) {
+      if (COMFYUI_NODE_NAME.test(name)) return true;
+    }
+    return false;
+  },
+};
 const COMFYUI_WORKFLOW = /"last_node_id"\s*:\s*\d+\s*,\s*"last_link_id"\s*:\s*\d+/;
 
-const PATTERNS: ReadonlyArray<[MetadataReason, RegExp]> = [
+const SD_SETTINGS = /Steps: \d+,\s*Sampler: /;
+const SD_SETTINGS_ALL = new RegExp(SD_SETTINGS, 'g');
+const SD_PNG_KEYWORD = 'parameters\x00';
+const SD_PNG_WINDOW = 16384;
+const SD_PNG: Matcher = {
+  test(text) {
+    let keyword = -1;
+    let next = text.indexOf(SD_PNG_KEYWORD);
+    if (next < 0) return false;
+    for (const { index } of text.matchAll(SD_SETTINGS_ALL)) {
+      while (next >= 0 && next + SD_PNG_KEYWORD.length <= index) {
+        keyword = next;
+        next = text.indexOf(SD_PNG_KEYWORD, next + SD_PNG_KEYWORD.length);
+      }
+      if (keyword >= 0 && index - keyword - SD_PNG_KEYWORD.length <= SD_PNG_WINDOW) return true;
+    }
+    return false;
+  },
+};
+
+const PATTERNS: ReadonlyArray<[MetadataReason, Matcher]> = [
   ['synthid', /c2pa\.\w+[\s\S]{0,80}?\bSynthID\b/],
   ['ai-edited', /compositeWithTrainedAlgorithmicMedia/],
   ['ai-generated', /\btrainedAlgorithmicMedia/],
-  ['stable-diffusion', /parameters\x00[\s\S]{0,16384}?Steps: \d+,\s*Sampler: /],
+  ['stable-diffusion', SD_PNG],
   ['comfyui', COMFYUI],
   ['comfyui', COMFYUI_WORKFLOW],
   ['novelai', /Software\x00NovelAI/],
@@ -43,7 +76,7 @@ export function detectAiMetadata(bytes: Uint8Array): MetadataReason | null {
     if (pattern.test(text)) return reason;
   }
   const exifText = text.slice(0, EXIF_REGION).replaceAll('\x00', '');
-  if (/Steps: \d+,\s*Sampler: /.test(exifText)) return 'stable-diffusion';
+  if (SD_SETTINGS.test(exifText)) return 'stable-diffusion';
   if (AIGC_LABEL.test(exifText)) return 'aigc-label';
   if (COMFYUI.test(exifText)) return 'comfyui';
   return null;
